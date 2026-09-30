@@ -58,12 +58,75 @@ export class Sound {
     }
   }
 
-  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted'): void {
+  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff'): void {
     if (!this.context || this.muted) return
     const context = this.context
+    const now = context.currentTime
+
+    if (kind === 'explosion') {
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(140, now)
+      osc.frequency.exponentialRampToValueAtTime(20, now + 0.7)
+
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(600, now)
+      filter.frequency.exponentialRampToValueAtTime(80, now + 0.7)
+
+      gain.gain.setValueAtTime(0.48, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75)
+
+      osc.connect(filter).connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.75)
+      return
+    }
+
+    if (kind === 'ring') {
+      // Pleasant double harmonic chime for passing through aerial rings
+      const osc1 = context.createOscillator()
+      const osc2 = context.createOscillator()
+      const gain1 = context.createGain()
+      const gain2 = context.createGain()
+
+      osc1.type = 'sine'
+      osc1.frequency.setValueAtTime(880, now)
+      osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.22)
+      gain1.gain.setValueAtTime(0.24, now)
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.25)
+      osc1.connect(gain1).connect(this.master!)
+      osc1.start(now)
+      osc1.stop(now + 0.25)
+
+      osc2.type = 'triangle'
+      osc2.frequency.setValueAtTime(1320, now + 0.05)
+      osc2.frequency.exponentialRampToValueAtTime(2640, now + 0.28)
+      gain2.gain.setValueAtTime(0.18, now + 0.05)
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.3)
+      osc2.connect(gain2).connect(this.master!)
+      osc2.start(now + 0.05)
+      osc2.stop(now + 0.3)
+      return
+    }
+
+    if (kind === 'takeoff') {
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(120, now)
+      osc.frequency.exponentialRampToValueAtTime(420, now + 0.8)
+      gain.gain.setValueAtTime(0.25, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.85)
+      osc.connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.85)
+      return
+    }
+
     const oscillator = context.createOscillator()
     const gain = context.createGain()
-    const now = context.currentTime
     const presets = {
       coin: [720, 1180, 0.09],
       crash: [125, 48, 0.18],

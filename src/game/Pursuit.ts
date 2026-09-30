@@ -10,6 +10,10 @@ export type PursuitResult = {
   vehicleCollisions: number
   caught: boolean
   collisionPoints: THREE.Vector3[]
+  isColliding: boolean
+  explosions: THREE.Vector3[]
+  smokingPositions: THREE.Vector3[]
+  destroyedPoliceCount: number
 }
 
 export class Pursuit {
@@ -34,6 +38,34 @@ export class Pursuit {
     this.bust = 0
   }
 
+  getCars(): Car[] {
+    return this.units.map((unit) => unit.car)
+  }
+
+  findNearbyCar(position: THREE.Vector3, maxDistance: number): { car: Car; distance: number } | null {
+    let nearest: { car: Car; distance: number } | null = null
+    let minDistance = maxDistance
+
+    for (const unit of this.units) {
+      const dist = unit.car.root.position.distanceTo(position)
+      if (dist <= minDistance) {
+        minDistance = dist
+        nearest = { car: unit.car, distance: dist }
+      }
+    }
+
+    return nearest
+  }
+
+  removeCar(car: Car): boolean {
+    const index = this.units.findIndex((unit) => unit.car === car)
+    if (index !== -1) {
+      this.units.splice(index, 1)
+      return true
+    }
+    return false
+  }
+
   update(
     dt: number,
     player: Car,
@@ -45,7 +77,7 @@ export class Pursuit {
     if (level === 0) {
       this.removeAll()
       this.bust = Math.max(0, this.bust - dt * 0.42)
-      return { busted: false, closeCalls: 0, vehicleCollisions: 0, caught: false, collisionPoints: [] }
+      return { busted: false, closeCalls: 0, vehicleCollisions: 0, caught: false, collisionPoints: [], isColliding: false, explosions: [], smokingPositions: [], destroyedPoliceCount: 0 }
     }
 
     const playerPosition = targetPosition
@@ -57,7 +89,12 @@ export class Pursuit {
     }
     let closeCalls = 0
     let vehicleCollisions = 0
+    let isColliding = false
+    let destroyedPoliceCount = 0
     const collisionPoints: THREE.Vector3[] = []
+    const explosions: THREE.Vector3[] = []
+    const smokingPositions: THREE.Vector3[] = []
+
     for (let index = this.units.length - 1; index >= 0; index -= 1) {
       const unit = this.units[index]
       const car = unit.car
@@ -65,9 +102,21 @@ export class Pursuit {
       const dz = playerPosition.z - car.root.position.z
       const distance = Math.hypot(dx, dz)
 
-      if (distance > 235 || car.root.position.z > playerPosition.z + 225) {
+      if (distance > 235 || car.root.position.z > playerPosition.z + 225 || (car.exploded && car.hitCooldown <= 0)) {
         car.dispose()
         this.units.splice(index, 1)
+        continue
+      }
+
+      if (car.isSmoking) {
+        car.smokeTimer += dt
+        if (car.smokeTimer >= 0.09) {
+          car.smokeTimer = 0
+          smokingPositions.push(car.getHoodPosition())
+        }
+      }
+
+      if (car.exploded) {
         continue
       }
 
@@ -85,6 +134,7 @@ export class Pursuit {
       }
 
       const vehicleCollision = player.collideWith(car, dt)
+      if (vehicleCollision) isColliding = true
       unit.sparkCooldown = Math.max(0, unit.sparkCooldown - dt)
       if (vehicleCollision && unit.sparkCooldown === 0) {
         collisionPoints.push(new THREE.Vector3(
@@ -103,11 +153,14 @@ export class Pursuit {
         if (!onFoot) vehicleCollisions += 1
         unit.stunned = Math.max(unit.stunned, 0.55)
         unit.hitCooldown = 1.3
-        if (!onFoot) this.wanted.addHeat(4 + level * 0.4)
+        const hitRes = car.registerHit('vehicle', 0.45)
+        if (hitRes.isNewExplosion) {
+          explosions.push(car.root.position.clone())
+          destroyedPoliceCount += 1
+        }
       } else if (!onFoot && currentDistance < 3.1 && unit.hitCooldown === 0 && Math.abs(targetSpeed) > 8) {
         unit.stunned = 1.3
         unit.hitCooldown = 2.3
-        this.wanted.addHeat(5 + level * 0.5)
       }
 
       if (!onFoot && currentDistance < 5.5 && currentDistance > 2.8 && Math.abs(targetSpeed) > 17 && !unit.countedPass) {
@@ -118,12 +171,49 @@ export class Pursuit {
       }
     }
 
+    let collidingPoliceCount = 0
+    for (const unit of this.units) {
+      const d = unit.car.root.position.distanceTo(playerPosition)
+      if (d < 4.4) collidingPoliceCount += 1
+    }
+
+    // Se houver apenas 1 carro de policia colidindo com o jogador em veiculo:
+    // Ele nao deve conseguir prender o carro do jogador na parede.
+    if (collidingPoliceCount === 1 && !onFoot) {
+      for (const unit of this.units) {
+        const d = unit.car.root.position.distanceTo(playerPosition)
+        if (d < 4.4) {
+          unit.stunned = Math.max(unit.stunned, 0.45)
+          unit.car.speed = Math.min(unit.car.speed, 6)
+          const pushX = unit.car.root.position.x - playerPosition.x
+          const pushZ = unit.car.root.position.z - playerPosition.z
+          const pushDist = Math.hypot(pushX, pushZ)
+          if (pushDist > 0.01) {
+            unit.car.root.position.x += (pushX / pushDist) * 0.18
+            unit.car.root.position.z += (pushZ / pushDist) * 0.18
+          }
+        }
+      }
+    }
+
     const nearest = this.units.reduce((best, unit) => Math.min(best, unit.car.root.position.distanceTo(playerPosition)), Infinity)
     const captureDistance = onFoot ? 1.5 : 4.2
-    if (nearest < captureDistance) this.bust = Math.min(1, this.bust + dt * (0.08 + level * 0.014))
-    else this.bust = Math.max(0, this.bust - dt * (nearest < 10 ? 0.035 : 0.12))
+    // O carro do jogador somente deve ser imprensado quando tiver dois ou mais carros da policia batendo no carro
+    const isImprensado = onFoot ? (nearest < captureDistance) : (collidingPoliceCount >= 2 && nearest < captureDistance)
+    if (isImprensado) this.bust = Math.min(1, this.bust + dt * (0.08 + level * 0.014))
+    else this.bust = Math.max(0, this.bust - dt * 0.14)
 
-    return { busted: this.bust >= 1, closeCalls, vehicleCollisions, caught: nearest < captureDistance, collisionPoints }
+    return {
+      busted: this.bust >= 1,
+      closeCalls,
+      vehicleCollisions,
+      caught: isImprensado,
+      collisionPoints,
+      isColliding,
+      explosions,
+      smokingPositions,
+      destroyedPoliceCount,
+    }
   }
 
   private spawnPolice(player: THREE.Vector3, level: number): void {

@@ -18,12 +18,25 @@ export class WantedSystem {
     return this.level > before
   }
 
+  addLevels(count = 1): boolean {
+    const before = this.level
+    const targetLevel = Math.min(10, this.level + count)
+    this.heat = LEVEL_THRESHOLDS[targetLevel]
+    this.refreshLevel()
+    return this.level > before
+  }
+
+  removeLevels(count = 1): boolean {
+    const before = this.level
+    const targetLevel = Math.max(0, this.level - count)
+    this.heat = LEVEL_THRESHOLDS[targetLevel]
+    this.refreshLevel()
+    return this.level < before
+  }
+
   update(dt: number, speed: number): boolean {
     const before = this.level
-    if (speed > 28) {
-      this.heat += dt * 0.52 * Math.min(1.5, (speed - 26) / 10)
-      this.calmTime = 0
-    } else if (this.level > 0 && speed < 4) {
+    if (this.level > 0 && speed < 4) {
       this.calmTime += dt
       if (this.calmTime > 7) this.heat = Math.max(0, this.heat - dt * 1.25)
     } else {

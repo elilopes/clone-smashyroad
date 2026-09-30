@@ -4,6 +4,7 @@ import type { DriveInput } from './Car'
 type Segment = THREE.Mesh<THREE.CylinderGeometry, THREE.MeshStandardMaterial>
 
 export class StickPerson {
+  readonly scene: THREE.Scene
   readonly root = new THREE.Group()
   yaw = 0
   speed = 0
@@ -12,6 +13,7 @@ export class StickPerson {
   private readonly limbs: Segment[]
 
   constructor(scene: THREE.Scene) {
+    this.scene = scene
     const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x293432, roughness: 0.76 })
     const accentMaterial = new THREE.MeshStandardMaterial({ color: 0xff7849, roughness: 0.64 })
     const skinMaterial = new THREE.MeshStandardMaterial({ color: 0xe4b28c, roughness: 0.82 })
@@ -40,21 +42,27 @@ export class StickPerson {
     this.animateLimbs(0)
   }
 
+  isSwimming = false
+
   setPosition(x: number, z: number, yaw = 0): void {
-    this.root.position.set(x, 0, z)
+    this.root.position.set(x, this.isSwimming ? -0.52 : 0, z)
     this.yaw = yaw
     this.root.rotation.y = yaw
+    this.root.rotation.x = this.isSwimming ? 0.42 : 0
     this.speed = 0
     this.walkPhase = 0
     this.animateLimbs(0)
   }
 
-  update(dt: number, input: DriveInput, collides: (x: number, z: number, radius: number) => boolean): boolean {
-    const desiredSpeed = input.throttle * 7.5
+  update(dt: number, input: DriveInput, collides: (x: number, z: number, radius: number) => boolean, isSwimming = false): boolean {
+    this.isSwimming = isSwimming
+    const targetMaxSpeed = this.isSwimming ? 5.2 : 7.5
+    const desiredSpeed = input.throttle * targetMaxSpeed
     this.speed += (desiredSpeed - this.speed) * Math.min(1, dt * 5)
     if (Math.abs(this.speed) < 0.08) this.speed = 0
     this.yaw += input.steer * dt * 2.35 * Math.sign(this.speed || 1)
     this.root.rotation.y = this.yaw
+    this.root.rotation.x = this.isSwimming ? 0.42 : 0
 
     const oldX = this.root.position.x
     const oldZ = this.root.position.z
@@ -67,10 +75,55 @@ export class StickPerson {
       this.speed *= -0.12
     }
 
+    this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : 0
+
     if (Math.abs(this.speed) > 0.35) this.walkPhase += dt * (5 + Math.abs(this.speed) * 0.72)
     else this.walkPhase *= Math.max(0, 1 - dt * 7)
     this.animateLimbs(Math.sin(this.walkPhase) * Math.min(1, Math.abs(this.speed) / 2.2))
     return collided
+  }
+
+  stepTowards(
+    targetX: number,
+    targetZ: number,
+    dt: number,
+    targetSpeed = 7.5,
+    collides: (x: number, z: number, radius: number) => boolean,
+  ): { distance: number; arrived: boolean } {
+    const dx = targetX - this.root.position.x
+    const dz = targetZ - this.root.position.z
+    const dist = Math.hypot(dx, dz)
+    if (dist < 0.1) {
+      this.speed = 0
+      this.walkPhase = 0
+      this.animateLimbs(0)
+      return { distance: dist, arrived: true }
+    }
+
+    this.yaw = Math.atan2(-dx, -dz)
+    this.root.rotation.y = this.yaw
+    this.root.rotation.x = this.isSwimming ? 0.42 : 0
+    this.speed = targetSpeed
+
+    const oldX = this.root.position.x
+    const oldZ = this.root.position.z
+    const step = Math.min(dist, targetSpeed * dt)
+    this.root.position.x += -Math.sin(this.yaw) * step
+    this.root.position.z += -Math.cos(this.yaw) * step
+
+    const collided = collides(this.root.position.x, this.root.position.z, 0.34)
+    if (collided) {
+      this.root.position.x = oldX
+      this.root.position.z = oldZ
+    }
+
+    this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : 0
+
+    this.walkPhase += dt * (5 + Math.abs(this.speed) * 0.72)
+    this.animateLimbs(Math.sin(this.walkPhase) * Math.min(1, Math.abs(this.speed) / 2.2))
+
+    const newDist = Math.hypot(targetX - this.root.position.x, targetZ - this.root.position.z)
+    return { distance: newDist, arrived: newDist <= 2.2 }
   }
 
   private animateLimbs(stride: number): void {
@@ -110,5 +163,9 @@ export class StickPerson {
     segment.position.copy(start).add(end).multiplyScalar(0.5)
     segment.scale.y = direction.length()
     segment.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize())
+  }
+
+  dispose(): void {
+    this.scene.remove(this.root)
   }
 }

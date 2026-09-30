@@ -1,4 +1,4 @@
-export type MissionType = 'distance' | 'coins' | 'time' | 'wanted' | 'close'
+export type MissionType = 'distance' | 'coins' | 'time' | 'wanted' | 'close' | 'rings'
 
 export type MissionEvent = {
   distance: number
@@ -6,6 +6,7 @@ export type MissionEvent = {
   time: number
   wanted: number
   closeCalls: number
+  rings?: number
 }
 
 type MissionDefinition = {
@@ -24,6 +25,7 @@ export type MissionState = MissionDefinition & {
 }
 
 const CONTRACTS: MissionDefinition[] = [
+  { id: 'aerial-ace', type: 'rings', title: 'Passe por 7 círculos flutuantes', target: 7, reward: 1000, unit: 'x' },
   { id: 'stretch', type: 'distance', title: 'Percorra 350 metros', target: 350, reward: 180, unit: 'm' },
   { id: 'cash', type: 'coins', title: 'Recolha 4 fichas', target: 4, reward: 240, unit: 'x' },
   { id: 'survivor', type: 'time', title: 'Sobreviva por 45 segundos', target: 45, reward: 220, unit: 's' },
@@ -66,6 +68,7 @@ export class Missions {
       if (mission.type === 'time') mission.progress += event.time
       if (mission.type === 'wanted') mission.progress = Math.max(mission.progress, event.wanted)
       if (mission.type === 'close') mission.progress += event.closeCalls
+      if (mission.type === 'rings' && event.rings !== undefined) mission.progress = Math.max(mission.progress, event.rings)
 
       if (mission.progress >= mission.target) {
         mission.progress = mission.target

@@ -165,21 +165,21 @@ export class Pedestrians {
     const random = randomFrom((index + 13271) * 94631)
     const zStart = index * CHUNK_DEPTH
 
-    for (let slot = 0; slot < 16; slot += 1) {
+    for (let slot = 0; slot < 24; slot += 1) {
       const axis: Pedestrian['axis'] = random() < 0.52 ? 'z' : 'x'
       let x = 0
       let z = 0
       let min = 0
       let max = 0
       if (axis === 'z') {
-        const street = Math.floor(random() * 9) - 4
+        const street = Math.floor(random() * 15) - 7
         const side = random() < 0.5 ? -1 : 1
         x = street * STREET + side * SIDEWALK_OFFSET
         z = zStart + 9 + random() * (CHUNK_DEPTH - 18)
         min = zStart + 3
         max = zStart + CHUNK_DEPTH - 3
       } else {
-        const street = Math.floor(random() * 9) - 4
+        const street = Math.floor(random() * 15) - 7
         const crossing = Math.floor(random() * 4)
         const side = random() < 0.5 ? -1 : 1
         z = zStart + crossing * STREET + side * SIDEWALK_OFFSET
