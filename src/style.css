@@ -233,7 +233,7 @@ button { font: inherit; }
 .minimap-shell {
   position: absolute;
   z-index: 4;
-  top: 96px;
+  top: 215px;
   right: 4.1vw;
   width: 148px;
   height: 148px;
@@ -366,7 +366,7 @@ button { font: inherit; }
 .minimap-shell.expanded .minimap-label {
   display: none;
 }
-.corner-label { position: absolute; z-index: 3; right: 4.2vw; top: 254px; color: rgba(245,242,233,.64); font: 8px/1 var(--mono); letter-spacing: .12em; }
+.corner-label { position: absolute; z-index: 3; right: 4.2vw; top: 372px; color: rgba(245,242,233,.64); font: 8px/1 var(--mono); letter-spacing: .12em; }
 .corner-label span { padding: 0 5px; color: var(--orange); }
 .toast { position: absolute; z-index: 6; top: 92px; left: 50%; padding: 10px 16px; transform: translate(-50%,-12px); opacity: 0; color: #151713; background: #f7bf4a; font: 10px/1 var(--mono); letter-spacing: .06em; pointer-events: none; transition: opacity .2s, transform .2s; }
 .toast.visible { transform: translate(-50%,0); opacity: 1; }
@@ -658,6 +658,306 @@ button { font: inherit; }
 .bus-mission-panel.completed .bus-timer-fill {
   background: linear-gradient(90deg, #16a34a, #3ddc84);
 }
+
+/* King Kong Mission Panel - Compact Tactical Top-Right HUD */
+.kingkong-mission-panel {
+  position: absolute;
+  z-index: 4;
+  top: 96px;
+  right: 4.1vw;
+  width: min(290px, calc(100vw - 32px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.75);
+  background: rgba(18, 16, 14, 0.84);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 14px rgba(245, 158, 11, 0.2);
+  animation: tankerPanelSlide .25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+.kingkong-mission-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(245, 242, 233, 0.1);
+  padding-bottom: 5px;
+}
+.kingkong-mission-badge {
+  padding: 2px 6px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  font: 800 8.5px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+}
+.kingkong-mission-stage {
+  color: #f5f2e9;
+  font: 700 9px/1 var(--mono);
+  letter-spacing: .04em;
+}
+.kingkong-mission-body {
+  margin-top: 6px;
+  display: grid;
+  gap: 5px;
+}
+.kingkong-timer-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.kingkong-timer-label {
+  color: var(--muted);
+  font: 700 8px/1 var(--mono);
+  letter-spacing: .06em;
+}
+.kingkong-timer-val {
+  color: #f59e0b;
+  font: 800 15px/1 var(--mono);
+  letter-spacing: -.02em;
+}
+.kingkong-timer-track {
+  height: 4px;
+  background: rgba(245, 242, 233, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.kingkong-timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d97706, #ef4444);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+  transition: width 0.25s ease-out;
+}
+.kingkong-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 7.5px/1 var(--mono);
+  color: var(--muted);
+  margin-top: 1px;
+}
+.kingkong-instruction {
+  color: #f59e0b;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+/* Monster Truck Mission Panel - Compact Tactical Top-Right HUD */
+.monster-mission-panel {
+  position: absolute;
+  z-index: 4;
+  top: 96px;
+  right: 4.1vw;
+  width: min(290px, calc(100vw - 32px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(14, 165, 233, 0.75);
+  background: rgba(10, 18, 26, 0.84);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 14px rgba(14, 165, 233, 0.25);
+  animation: tankerPanelSlide .25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+.monster-mission-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(245, 242, 233, 0.1);
+  padding-bottom: 5px;
+}
+.monster-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.monster-mission-badge {
+  padding: 2px 6px;
+  background: rgba(14, 165, 233, 0.18);
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  color: #38bdf8;
+  font: 800 8.5px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+}
+.monster-mode-label {
+  padding: 2px 5px;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  font: 800 7.5px/1 var(--mono);
+  border-radius: 3px;
+  letter-spacing: .04em;
+}
+.monster-mode-label.robot {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #60a5fa;
+}
+.monster-quick-transform-btn {
+  padding: 3px 7px;
+  border: 1px solid #0ea5e9;
+  border-radius: 4px;
+  background: rgba(14, 165, 233, 0.2);
+  color: #f5f2e9;
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.monster-quick-transform-btn:hover {
+  background: #0ea5e9;
+  color: #0b1120;
+  transform: scale(1.03);
+}
+.monster-mission-body {
+  margin-top: 6px;
+  display: grid;
+  gap: 5px;
+}
+.monster-mission-item {
+  display: grid;
+  gap: 3px;
+}
+.monster-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.monster-label {
+  color: #cbd5e1;
+  font: 700 7.5px/1 var(--mono);
+  letter-spacing: .04em;
+}
+.monster-val {
+  color: #38bdf8;
+  font: 800 11px/1 var(--mono);
+  letter-spacing: -.02em;
+}
+.monster-track {
+  height: 4px;
+  background: rgba(245, 242, 233, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.monster-fill {
+  height: 100%;
+  transition: width 0.25s ease-out;
+}
+.monster-fill.crush {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+.monster-fill.kong {
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+}
+.monster-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 7.5px/1 var(--mono);
+  color: var(--muted);
+  margin-top: 1px;
+}
+.monster-instruction {
+  color: #facc15;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+/* Action & Attack Buttons */
+.plane-shoot-btn,
+.monster-shoot-btn {
+  position: absolute;
+  z-index: 5;
+  right: 4.2vw;
+  bottom: 61px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1.5px solid #00f0ff;
+  color: #ffffff;
+  background: rgba(14, 116, 144, 0.82);
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .06em;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.45);
+  transition: all .16s ease;
+  user-select: none;
+}
+.plane-shoot-btn:hover,
+.monster-shoot-btn:hover {
+  background: #00f0ff;
+  color: #082f49;
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.85);
+}
+.plane-shoot-btn:active,
+.monster-shoot-btn:active {
+  transform: scale(0.96);
+}
+
+.monster-thrust-btn {
+  position: absolute;
+  z-index: 5;
+  right: 4.2vw;
+  bottom: 106px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1.5px solid #38bdf8;
+  color: #ffffff;
+  background: rgba(2, 132, 199, 0.82);
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .06em;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+  transition: all .16s ease;
+  user-select: none;
+}
+.monster-thrust-btn:hover {
+  background: #38bdf8;
+  color: #082f49;
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.85);
+}
+.monster-thrust-btn:active,
+.monster-thrust-btn.pressed {
+  transform: scale(0.96);
+  background: #0284c7;
+}
+
+.monster-transform-btn {
+  position: absolute;
+  z-index: 5;
+  left: 4.2vw;
+  bottom: 104px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1.5px solid #38bdf8;
+  color: #f5f2e9;
+  background: rgba(15, 23, 42, 0.85);
+  font: 800 9.5px/1 var(--mono);
+  letter-spacing: .05em;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+  transition: all .16s ease;
+  user-select: none;
+}
+.monster-transform-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+.monster-transform-btn:active {
+  transform: scale(0.96);
+}
 .mobile-controls { display: none; }
 .vehicle-button { position: absolute; z-index: 4; left: 4.2vw; bottom: 61px; min-height: 35px; padding: 0 12px; border: 1px solid rgba(255,93,49,.68); color: var(--paper); background: rgba(17,20,18,.78); font: 9px/1 var(--mono); letter-spacing: .04em; cursor: pointer; backdrop-filter: blur(10px); transition: color .18s, background .18s, transform .18s; }
 .vehicle-button:hover { transform: translateY(-2px); color: #111412; background: var(--orange); }
@@ -676,6 +976,7 @@ button { font: inherit; }
   .wanted-panel { top: 80px; left: 15px; width: 205px; padding: 12px; }
   .tanker-mission-panel { top: 72px; width: min(310px, calc(100vw - 24px)); padding: 9px 12px; }
   .bus-mission-panel { top: 72px; width: min(310px, calc(100vw - 24px)); padding: 9px 12px; }
+  .kingkong-mission-panel, .monster-mission-panel { top: 72px; right: 15px; width: min(240px, calc(100vw - 30px)); padding: 6px 10px; }
   .tanker-timer-val, .bus-timer-val { font-size: 18px; }
   .wanted-heading { font-size: 9px; }
   .wanted-meter { margin-top: 11px; }
@@ -693,10 +994,10 @@ button { font: inherit; }
   .intro-copy { font-size: 11px; }
   .start-details { justify-content: space-between; gap: 8px; font-size: 7px; }
   .controls-hint { display: none; }
-  .minimap-shell:not(.expanded) { top: 76px; right: 15px; width: 104px; height: 104px; }
+  .minimap-shell:not(.expanded) { top: 178px; right: 15px; width: 104px; height: 104px; }
   .minimap-compass { font-size: 8px; top: 3px; }
   .minimap-label { font-size: 6px; bottom: 4px; }
-  .corner-label { top: 186px; right: 15px; font-size: 7px; }
+  .corner-label { top: 286px; right: 15px; font-size: 7px; }
   .mobile-controls { position: absolute; z-index: 4; inset: auto 15px 15px; height: 70px; display: flex; align-items: end; justify-content: space-between; pointer-events: none; }
   .vehicle-button { z-index: 5; left: 15px; bottom: 96px; min-height: 34px; padding: 0 9px; font-size: 8px; }
   .mobile-control { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid rgba(245,242,233,.35); border-radius: 50%; color: var(--paper); background: rgba(17,20,18,.52); font: 24px/1 var(--display); pointer-events: auto; touch-action: none; user-select: none; }

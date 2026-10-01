@@ -41,7 +41,10 @@ export class Input {
     const pressed = (...keys: string[]) => keys.some((key) => this.keys.has(key) || this.buttons.has(key))
     const throttle = Number(pressed('w', 'arrowup', 'accelerate')) - Number(pressed('s', 'arrowdown', 'reverse'))
     const steer = Number(pressed('a', 'arrowleft', 'left')) - Number(pressed('d', 'arrowright', 'right'))
-    return { throttle, steer, handbrake: pressed(' ', 'space', 'handbrake') }
+    const handbrake = pressed('handbrake')
+    const thrust = pressed('shift', 'shiftleft', 'shiftright', 'q', 'thrust', 'boost', ' ', 'space')
+    const shoot = pressed('f', 'j', 'enter', 'shoot', 'x', 'control')
+    return { throttle, steer, handbrake, shoot, thrust }
   }
 
   clear = (): void => {

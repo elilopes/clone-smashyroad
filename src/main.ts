@@ -125,6 +125,71 @@ app.innerHTML = `
       </div>
     </div>
 
+    <div id="kingkong-mission-panel" class="kingkong-mission-panel hidden" aria-label="Missões do Avião Bimotor">
+      <div class="kingkong-mission-header">
+        <span class="kingkong-mission-badge">🛩️ AVIÃO BIMOTOR</span>
+        <span id="kingkong-mission-stage" class="kingkong-mission-stage">NO ARRANHA-CÉU</span>
+      </div>
+      <div class="kingkong-mission-body">
+        <div class="kingkong-mission-item">
+          <div class="kingkong-timer-row">
+            <span class="kingkong-timer-label">⭕ MISSÃO 1: CÍRCULOS FLUTUANTES (CÉUS)</span>
+            <strong id="plane-rings-val" class="kingkong-timer-val" style="color: #38bdf8; font-size: 13px;">0 / 7</strong>
+          </div>
+          <div class="kingkong-timer-track">
+            <div id="plane-rings-fill" class="kingkong-timer-fill" style="width: 0%; background: linear-gradient(90deg, #0284c7, #38bdf8); box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);"></div>
+          </div>
+        </div>
+        <div class="kingkong-mission-item">
+          <div class="kingkong-timer-row">
+            <span class="kingkong-timer-label">🦍 MISSÃO 2: CHEFÃO KING KONG (PRÉDIO)</span>
+            <strong id="kingkong-hp-val" class="kingkong-timer-val" style="font-size: 13px;">50 / 50 HP</strong>
+          </div>
+          <div class="kingkong-timer-track">
+            <div id="kingkong-timer-fill" class="kingkong-timer-fill" style="width: 100%;"></div>
+          </div>
+        </div>
+        <div class="kingkong-info-row">
+          <span id="kingkong-dist-info">DISTÂNCIA KONG: -- m</span>
+          <span id="kingkong-instruction" class="kingkong-instruction">PASSE PELOS CÍRCULOS OU ATIRE NO KONG! [F]</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="monster-mission-panel" class="monster-mission-panel hidden" aria-label="Missões do Monster Truck Cyber">
+      <div class="monster-mission-header">
+        <div class="monster-header-left">
+          <span class="monster-mission-badge">🛻 MONSTER TRUCK</span>
+          <span id="monster-mode-label" class="monster-mode-label">MODO 4X4</span>
+        </div>
+        <button id="monster-panel-transform-btn" class="monster-quick-transform-btn" type="button" title="Transformar [T]">🤖 TRANSFORMAR [T]</button>
+      </div>
+      <div class="monster-mission-body">
+        <div class="monster-mission-item">
+          <div class="monster-row">
+            <span class="monster-label">🚗 MISSÃO 1: ESMAGAR 10 CARROS</span>
+            <strong id="monster-crush-val" class="monster-val">0 / 10</strong>
+          </div>
+          <div class="monster-track">
+            <div id="monster-crush-fill" class="monster-fill crush" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="monster-mission-item">
+          <div class="monster-row">
+            <span class="monster-label">🦍 MISSÃO 2: ATIRAR NO KING KONG (ARRANHA-CÉU)</span>
+            <strong id="monster-kong-val" class="monster-val">50 / 50 HP</strong>
+          </div>
+          <div class="monster-track">
+            <div id="monster-kong-fill" class="monster-fill kong" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="monster-info-row">
+          <span id="monster-dist-info">DISTÂNCIA DO KONG: -- m</span>
+          <span id="monster-instruction" class="monster-instruction">ESMAGUE CARROS OU TRANSFORME EM ROBÔ! [T]</span>
+        </div>
+      </div>
+    </div>
+
     <button id="cancel-auto-enter-btn" class="cancel-auto-enter-btn hidden" type="button" aria-label="Cancelar entrada automática no veículo">CANCELAR ENTRADA (10s)</button>
 
     <section id="start-overlay" class="overlay">
@@ -175,7 +240,11 @@ app.innerHTML = `
       <button class="mobile-control steer-right" data-control="right" type="button" aria-label="Virar à direita">›</button>
     </div>
     <button id="vehicle-button" class="vehicle-button hidden" type="button" aria-label="Sair do carro (E)">SAIR DO CARRO · E</button>
-    <div class="corner-label">38° 31' 12.4\" N <span>·</span> EASTSIDE</div>
+    <button id="plane-shoot-btn" class="plane-shoot-btn hidden" data-control="shoot" type="button" aria-label="Disparar metralhadoras do avião bimotor">🎯 ATIRAR · F</button>
+    <button id="monster-transform-btn" class="monster-transform-btn hidden" type="button" aria-label="Transformar veículo em robô Transformers (T)">🤖 TRANSFORMAR · T</button>
+    <button id="monster-thrust-btn" class="monster-thrust-btn hidden" data-control="thrust" type="button" aria-label="Ativar propulsão a jato para voar e mirar no King Kong (ESPAÇO / SHIFT)">🚀 PROPULSÃO · ESPAÇO</button>
+    <button id="monster-shoot-btn" class="monster-shoot-btn hidden" data-control="shoot" type="button" aria-label="Disparar canhão blaster do robô Transformers">💥 CANHÃO ION · F</button>
+    <div class="corner-label">38° 31' 12.4" N <span>·</span> EASTSIDE</div>
   </main>
 `
 

@@ -189,6 +189,7 @@ export class Traffic {
     const colors = kind === 'bus' ? 0xe0a824 : kind === 'fuel_tanker' ? 0xf0f3f6 : paintColors[Math.floor(Math.random() * paintColors.length)]
     const scale = kind === 'bicycle' ? 0.88 : (kind === 'truck' || kind === 'bus' || kind === 'fuel_tanker') ? 0.98 : 1
     const car = new Car(this.scene, { kind, color: colors, scale })
+    if (kind === 'bicycle') car.setRiderVisible(true)
     const yaw = this.heading(axis, direction)
     car.setPosition(x, z, yaw)
     car.speed = cruiseSpeed

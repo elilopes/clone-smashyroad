@@ -70,6 +70,7 @@ export class Minimap {
     helicopters?: { root: THREE.Group; yaw: number; exploded: boolean }[],
     tankerMissionStage?: 'none' | 'survive' | 'deliver' | 'completed',
     busPassengers?: { x: number; z: number; collected: boolean }[],
+    monsterTruckInfo?: { position: THREE.Vector3; inMonsterTruck: boolean },
   ): void {
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2)
 
@@ -127,6 +128,9 @@ export class Minimap {
 
     // 5.5. Fuel Service Garage (Garagem de Combustível indicada no minimapa e mapa)
     this.drawGarage(ctx, cx, cy, playerPosition, scale, radius, city.getFuelGarageInfo(), tankerMissionStage ?? 'none')
+
+    // 5.6. King Kong Building (Arranha-céu com o King Kong no topo)
+    this.drawKingKong(ctx, cx, cy, playerPosition, scale, radius, city.getKingKongLocation())
 
     // 5.8. Bus Passengers (Pessoas marcadas para o ônibus)
     if (busPassengers) {
@@ -196,6 +200,11 @@ export class Minimap {
         ctx.fillText('AVIÃO', 0, 9)
         ctx.restore()
       }
+    }
+
+    // 9.5. Monster Truck in Plaza (when not player driving it)
+    if (monsterTruckInfo && !monsterTruckInfo.inMonsterTruck) {
+      this.drawMonsterTruck(ctx, cx, cy, playerPosition, scale, radius, monsterTruckInfo)
     }
 
     // 7. Police Units (Veículos Policiais Próximos)
@@ -773,6 +782,67 @@ export class Minimap {
     }
   }
 
+  private drawKingKong(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    player: THREE.Vector3,
+    scale: number,
+    radius: number,
+    location: { blockX: number; centerZ: number; centerX: number },
+  ): void {
+    const kx = cx + (location.centerX - player.x) * scale
+    const kz = cy + (location.centerZ - player.z) * scale
+    const dist = Math.hypot(kx - cx, kz - cy)
+
+    if (dist < radius - 8) {
+      ctx.save()
+      ctx.translate(kx, kz)
+
+      // Base Skyscraper footprint
+      ctx.fillStyle = '#64748b'
+      ctx.strokeStyle = '#f59e0b'
+      ctx.lineWidth = 1.6
+      ctx.fillRect(-7, -7, 14, 14)
+      ctx.strokeRect(-7, -7, 14, 14)
+
+      // Gorilla Emoji / Icon
+      ctx.font = '12px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('🦍', 0, -1)
+
+      // Label
+      ctx.fillStyle = '#f59e0b'
+      ctx.font = '800 7px monospace'
+      ctx.fillText('KING KONG', 0, 11)
+      ctx.restore()
+    } else {
+      // Clamped indicator chevron on radar rim
+      const angle = Math.atan2(kz - cy, kx - cx)
+      const edgeX = cx + Math.cos(angle) * (radius - 12)
+      const edgeY = cy + Math.sin(angle) * (radius - 12)
+
+      ctx.save()
+      ctx.translate(edgeX, edgeY)
+      ctx.rotate(angle)
+
+      ctx.fillStyle = '#f59e0b'
+      ctx.beginPath()
+      ctx.moveTo(6, 0)
+      ctx.lineTo(-4, -4)
+      ctx.lineTo(-2, 0)
+      ctx.lineTo(-4, 4)
+      ctx.closePath()
+      ctx.fill()
+
+      ctx.font = '9px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('🦍', -9, 3)
+      ctx.restore()
+    }
+  }
+
   private drawBusPassengers(
     ctx: CanvasRenderingContext2D,
     cx: number,
@@ -846,6 +916,84 @@ export class Minimap {
         ctx.fillText(`🧍 ${Math.round(dist)}m`, textDistX, textDistY + 3)
         ctx.restore()
       }
+    }
+  }
+
+  private drawMonsterTruck(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    playerPosition: THREE.Vector3,
+    scale: number,
+    radius: number,
+    monsterTruckInfo: { position: THREE.Vector3; inMonsterTruck: boolean },
+  ): void {
+    const dx = (monsterTruckInfo.position.x - playerPosition.x) * scale
+    const dz = (monsterTruckInfo.position.z - playerPosition.z) * scale
+    const distSq = dx * dx + dz * dz
+    const maxRad = radius - 8
+
+    if (distSq < maxRad * maxRad) {
+      // Inside radar
+      const now = performance.now()
+      const pulse = 1 + Math.sin(now * 0.008) * 0.25
+      ctx.save()
+      ctx.translate(cx + dx, cy + dz)
+
+      // Cyan / yellow pulse circle
+      ctx.strokeStyle = '#0ea5e9'
+      ctx.lineWidth = 1.6
+      ctx.beginPath()
+      ctx.arc(0, 0, 7.5 * pulse, 0, Math.PI * 2)
+      ctx.stroke()
+
+      ctx.fillStyle = '#0ea5e9'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 1.2
+      ctx.font = '900 13px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('🛻', 0, -1)
+
+      ctx.fillStyle = '#facc15'
+      ctx.font = '800 7px monospace'
+      ctx.fillText('MONSTER TRUCK', 0, 10)
+      ctx.restore()
+    } else {
+      // Edge pointer arrow to Monster Truck in Praça Central
+      const angle = Math.atan2(dz, dx)
+      const edgeX = cx + Math.cos(angle) * (radius - 14)
+      const edgeY = cy + Math.sin(angle) * (radius - 14)
+
+      ctx.save()
+      ctx.translate(edgeX, edgeY)
+      ctx.rotate(angle)
+
+      ctx.fillStyle = '#0ea5e9'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 1.2
+      ctx.beginPath()
+      ctx.moveTo(9, 0)
+      ctx.lineTo(-5, -6)
+      ctx.lineTo(-2, 0)
+      ctx.lineTo(-5, 6)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+
+      const dist = Math.hypot(
+        monsterTruckInfo.position.x - playerPosition.x,
+        monsterTruckInfo.position.z - playerPosition.z,
+      )
+      const textX = cx + Math.cos(angle) * (radius - 28)
+      const textY = cy + Math.sin(angle) * (radius - 28)
+      ctx.save()
+      ctx.fillStyle = '#0ea5e9'
+      ctx.font = '800 7.5px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText(`🛻 ${Math.round(dist)}m`, textX, textY + 3)
+      ctx.restore()
     }
   }
 }

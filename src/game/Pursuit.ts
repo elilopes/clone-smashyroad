@@ -133,6 +133,44 @@ export class Pursuit {
         car.integrateMovement(dt)
       }
 
+    }
+
+    // Mutual collision physics between police units so they don't clip into each other
+    for (let i = 0; i < this.units.length; i++) {
+      for (let j = i + 1; j < this.units.length; j++) {
+        const uA = this.units[i]
+        const uB = this.units[j]
+        if (uA.car.exploded || uB.car.exploded) continue
+
+        const pxA = uA.car.root.position.x
+        const pzA = uA.car.root.position.z
+        const pxB = uB.car.root.position.x
+        const pzB = uB.car.root.position.z
+
+        const pdx = pxB - pxA
+        const pdz = pzB - pzA
+        const pdist = Math.hypot(pdx, pdz)
+        const minDist = 3.8 // Minimum distance between police cars
+        if (pdist < minDist && pdist > 0.001) {
+          const overlap = (minDist - pdist) * 0.5
+          const nx = pdx / pdist
+          const nz = pdz / pdist
+          uA.car.root.position.x -= nx * overlap
+          uA.car.root.position.z -= nz * overlap
+          uB.car.root.position.x += nx * overlap
+          uB.car.root.position.z += nz * overlap
+
+          uA.car.speed *= 0.92
+          uB.car.speed *= 0.92
+        }
+      }
+    }
+
+    for (let index = this.units.length - 1; index >= 0; index -= 1) {
+      const unit = this.units[index]
+      const car = unit.car
+      if (car.exploded) continue
+
       const vehicleCollision = player.collideWith(car, dt)
       if (vehicleCollision) isColliding = true
       unit.sparkCooldown = Math.max(0, unit.sparkCooldown - dt)
@@ -219,8 +257,18 @@ export class Pursuit {
   private spawnPolice(player: THREE.Vector3, level: number): void {
     const car = new Car(this.scene, { color: level > 6 ? 0x252a30 : 0xf0ede3, police: true, scale: 0.96, mass: 1.19 })
     const side = (Math.random() - 0.5) * 52
-    const streetX = Math.round((player.x + side) / 48) * 48 + (Math.random() - 0.5) * 2
-    car.setPosition(streetX, player.z + 75 + Math.random() * 40, 0)
+    let streetX = Math.round((player.x + side) / 48) * 48 + (Math.random() - 0.5) * 2
+    let spawnZ = player.z + 75 + Math.random() * 40
+
+    // Ensure spawn position is not on top of an existing police car
+    for (let attempts = 0; attempts < 6; attempts++) {
+      const collision = this.units.some(u => Math.hypot(u.car.root.position.x - streetX, u.car.root.position.z - spawnZ) < 5.5)
+      if (!collision) break
+      spawnZ += 8.0 + Math.random() * 6.0
+      streetX += (Math.random() > 0.5 ? 4.0 : -4.0)
+    }
+
+    car.setPosition(streetX, spawnZ, 0)
     this.units.push({ car, stunned: 0, hitCooldown: 0, sparkCooldown: 0, countedPass: false })
   }
 

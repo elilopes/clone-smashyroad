@@ -128,6 +128,12 @@ export class City {
 
   private trafficLightTimer = 0
 
+  private kingKongLocation: { blockX: number; centerZ: number; centerX: number } = {
+    blockX: -4,
+    centerZ: 144,
+    centerX: -4 * BLOCK + BLOCK / 2,
+  }
+
   // Airport Runway Materials
   private readonly runwayAsphalt = new THREE.MeshStandardMaterial({ color: 0x1a1d20, roughness: 0.92 })
   private readonly runwayPaintWhite = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.7 })
@@ -164,6 +170,7 @@ export class City {
     this.fadedRoofMaterial = this.makeFadedMaterial(this.roofBatchMaterial)
     this.fadedHouseMaterial = this.makeFadedMaterial(this.houseBatchMaterial)
     this.fadedHouseRoofMaterial = this.makeFadedMaterial(this.houseRoofMaterial)
+    this.selectRandomKingKongLocation()
   }
 
   private makeFadedMaterial(material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
@@ -354,6 +361,12 @@ export class City {
           continue
         }
 
+        // Check if this block is King Kong's Skyscraper
+        if (this.isKingKongAt(blockX, centerZ)) {
+          this.buildKingKongPlaza(group, centerX, centerZ, bounds, chunkCoins)
+          continue
+        }
+
         if (random() < 0.12) continue
         const isHouse = random() < 0.39
         const width = isHouse ? 14 + random() * 5 : 15 + random() * 15
@@ -535,6 +548,10 @@ export class City {
     ]
   }
 
+  getMonsterTruckPlazaLocation(): { x: number; z: number } {
+    return { x: -12.5, z: 72 }
+  }
+
   getPlazaAt(blockX: number, centerZ: number): PlazaInfo | null {
     // 1. Praça Central (North-West from player start)
     if (blockX === -1 && Math.abs(centerZ - 72) < 22) {
@@ -589,6 +606,44 @@ export class City {
       }
     }
     return lagoons
+  }
+
+  isKingKongAt(blockX: number, centerZ: number): boolean {
+    return blockX === this.kingKongLocation.blockX && Math.abs(centerZ - this.kingKongLocation.centerZ) < 22
+  }
+
+  getKingKongLocation(): { blockX: number; centerZ: number; centerX: number } {
+    return this.kingKongLocation
+  }
+
+  setKingKongLocation(loc: { blockX: number; centerZ: number; centerX: number }): void {
+    this.kingKongLocation = loc
+  }
+
+  selectRandomKingKongLocation(): { blockX: number; centerZ: number; centerX: number } {
+    const candidateBlocks: { blockX: number; centerZ: number }[] = []
+    const blockXOptions = [-5, -4, -1, 1, 2, 4, 5]
+    const centerZOptions = [-216, -168, -120, -72, 72, 120, 168, 216, 264]
+
+    for (const bx of blockXOptions) {
+      for (const cz of centerZOptions) {
+        if (this.isRunwayAt(bx, cz)) continue
+        if (this.isGarageAt(bx, cz)) continue
+        if (this.getPlazaAt(bx, cz) !== null) continue
+        if (this.getLagoonAt(bx, cz) !== null) continue
+        candidateBlocks.push({ blockX: bx, centerZ: cz })
+      }
+    }
+
+    if (candidateBlocks.length > 0) {
+      const chosen = candidateBlocks[Math.floor(Math.random() * candidateBlocks.length)]
+      this.kingKongLocation = {
+        blockX: chosen.blockX,
+        centerZ: chosen.centerZ,
+        centerX: chosen.blockX * BLOCK + BLOCK / 2,
+      }
+    }
+    return this.kingKongLocation
   }
 
   private buildAirportRunway(
@@ -894,6 +949,35 @@ export class City {
     walkCircle.receiveShadow = true
     group.add(walkCircle)
 
+    // 2.5 Monster Truck Designated Parking Stall in Praça Central
+    if (Math.abs(centerX - (-24)) < 2 && Math.abs(centerZ - 72) < 2) {
+      const stallPad = new THREE.Mesh(
+        new THREE.PlaneGeometry(5.2, 7.8),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 })
+      )
+      stallPad.rotation.x = -Math.PI / 2
+      stallPad.position.set(-12.5, 0.03, 72)
+      stallPad.receiveShadow = true
+      group.add(stallPad)
+
+      // Yellow chevron / boundary stripes for monster truck stall
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xeab308, emissiveIntensity: 0.4 })
+      const lineLeft = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 7.8), stripeMat)
+      lineLeft.rotation.x = -Math.PI / 2
+      lineLeft.position.set(-12.5 - 2.5, 0.035, 72)
+      group.add(lineLeft)
+
+      const lineRight = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 7.8), stripeMat)
+      lineRight.rotation.x = -Math.PI / 2
+      lineRight.position.set(-12.5 + 2.5, 0.035, 72)
+      group.add(lineRight)
+
+      const lineFront = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.2), stripeMat)
+      lineFront.rotation.x = -Math.PI / 2
+      lineFront.position.set(-12.5, 0.035, 72 - 3.8)
+      group.add(lineFront)
+    }
+
     // 3. Central Fountain (Fonte de Praça)
     const fountainBasin = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.8, 0.75, 18), this.plazaStoneMaterial)
     fountainBasin.position.set(centerX, 0.38, centerZ)
@@ -1129,6 +1213,70 @@ export class City {
     coinMesh.castShadow = true
     group.add(coinMesh)
     chunkCoins.push({ mesh: coinMesh, x: centerX, z: centerZ - lagoon.radius + 7, alive: true })
+  }
+
+  private buildKingKongPlaza(
+    group: THREE.Group,
+    centerX: number,
+    centerZ: number,
+    bounds: Bounds[],
+    chunkCoins: Coin[],
+  ): void {
+    // 1. Concrete Plaza Pavement (36x36)
+    const pavement = new THREE.Mesh(new THREE.PlaneGeometry(36, 36), this.plazaPathMaterial)
+    pavement.rotation.x = -Math.PI / 2
+    pavement.position.set(centerX, 0.02, centerZ)
+    pavement.receiveShadow = true
+    group.add(pavement)
+
+    // 2. Corner Street Lamps
+    for (const lx of [-15, 15]) {
+      for (const lz of [-15, 15]) {
+        const lamp = new THREE.Group()
+        lamp.position.set(centerX + lx, 0, centerZ + lz)
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 3.8, 8), this.plazaIronMaterial)
+        pole.position.y = 1.9
+        pole.castShadow = true
+        lamp.add(pole)
+        const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), this.plazaLampMaterial)
+        lantern.position.y = 3.8
+        lamp.add(lantern)
+        group.add(lamp)
+      }
+    }
+
+    // 3. Perimeter Trees
+    for (const tx of [-14, 14]) {
+      const tree = new THREE.Group()
+      tree.position.set(centerX + tx, 0, centerZ)
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.32, 2.8, 6), this.treeTrunkMaterial)
+      trunk.position.y = 1.4
+      trunk.castShadow = true
+      tree.add(trunk)
+      const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.8), this.treeFoliageMaterial)
+      crown.position.y = 3.6
+      crown.castShadow = true
+      tree.add(crown)
+      group.add(tree)
+    }
+
+    // 4. Solid Bounds for ground and air safety (reaches 110m high!)
+    bounds.push({
+      minX: centerX - 15.5,
+      maxX: centerX + 15.5,
+      minZ: centerZ - 15.5,
+      maxZ: centerZ + 15.5,
+      minY: 0,
+      maxY: 110,
+    })
+
+    // 5. Gold Collectible Coin in front of King Kong Skyscraper
+    const coinMesh = new THREE.Mesh(this.coinGeometry, this.coinMaterial)
+    coinMesh.rotation.x = Math.PI / 2
+    coinMesh.position.set(centerX, 1.2, centerZ + 12)
+    coinMesh.castShadow = true
+    group.add(coinMesh)
+    chunkCoins.push({ mesh: coinMesh, x: centerX, z: centerZ + 12, alive: true })
   }
 
   private addRiver(

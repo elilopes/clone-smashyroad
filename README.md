@@ -49,7 +49,16 @@ O protótipo foi profundamente expandido com sistemas urbanos interativos de fí
 
 #### 4. 🚚 Missão do Caminhão-Tanque e Ejeção Automática
 - **Design do Caminhão-Tanque**: Carroceria cilíndrica metálica com faixas de sinalização laranja e verde (altamente inflamável) e placas de diamante de risco.
-- **Ejeção na Garagem (Missão 2)**: Ao concluir com sucesso a entrega da carga inflamável na garagem industrial, o personagem palito do jogador é ejetado de forma automática e segura para a calçada ao lado do caminhão, desativando os controles e finalizando a perseguição policial de maneira nativa.
+- **Ejeção na Garagem (Missão 2)**: Ao concluir com sucesso a entrega da carga inflamável na garagem industrial, o personagem palito do jogador é retirado de dentro do caminhão de forma automática e segura, sendo posicionado ao lado do caminhão na calçada com velocidade zerada.
+
+#### 5. 🦍 Prédio do King Kong & Missão Aérea com o Avião Bimotor
+- **Spawn Aleatório a Cada Partida**: Todas as vezes que um novo jogo é iniciado, o computador seleciona aleatoriamente um quarteirão diferente da cidade para erguer o imponente arranha-céu Art-Deco estilo Empire State (mais de 110 metros de altura, com patamares escalonados, pilastras ornamentadas, janelas e um farol sinalizador de aviação pulsante no mastro de amarração).
+- **O Gorila Gigante no Arranha-Céu**: Pendurado nas vigas e parapeito do topo do edifício está o lendário King Kong, com animações de respiração, membros móveis e ataque aéreo caso uma aeronave se aproxime.
+- **Ativação da Missão por Proximidade Aérea**: Ao pilotar o **Avião Bimotor** e alcançar as redondezas do prédio (raio de 95 metros), as sirenes tocam e a missão de combate aéreo é iniciada com painel dedicado no HUD.
+- **Função de Atirar do Avião Bimotor**: Ao iniciar a missão, o avião bimotor é armado com metralhadoras duplas sincronizadas nas pontas das asas. O jogador pode disparar rajadas contínuas de alta velocidade pressionando **Espaço**, **F**, **Enter** ou tocando no botão virtual de mira/tiro na tela.
+- **Resistência de 50 Colisões (Boss Fight Épica)**: O King Kong possui resistência blindada de 50 impactos de disparos. A cada tiro certeiro, o modelo 3D do gorila pisca intensamente em vermelho/branco, sofre tremores mecânicos realistas e emite faíscas. A barra de resistência no HUD exibe a vida restante em tempo real (`X / 50`).
+- **Queda Cinematográfica e Grande Recompensa**: Ao atingir a 50ª colisão, o King Kong se solta do parapeito e despenca com aceleração gravitacional e rotação do topo até o chão, concluindo a missão com explosões, som triunfante e premiação de **+$5.000 em dinheiro** e **+15.000 pontos**.
+- **Radar & Minimapa GPS**: O arranha-céu e o gorila são sinalizados no radar e minimapa expandível com ícone dedicado `🦍 KING KONG`.
 
 ---
 
@@ -111,7 +120,16 @@ This prototype has been deeply enhanced with interactive city physics and advanc
 
 #### 4. 🚚 Inflammable Fuel Tanker Mission & Auto-Ejection
 - **Tanker Truck Design**: Features a highly detailed cylindrical steel fuel tank, hazard sign diamonds, and hazard stripes.
-- **Garage Auto-Ejection (Mission 2)**: Upon successfully delivering the fuel tanker to the industrial garage, the player is automatically and safely ejected from the cabin to the sidewalk alongside the truck, turning off vehicle systems smoothly.
+- **Garage Auto-Ejection (Mission 2)**: Upon successfully delivering the fuel tanker to the industrial garage, the player is automatically and safely ejected from the cabin to the sidewalk alongside the truck with velocity set to zero, concluding the pursuit natively.
+
+#### 5. 🦍 King Kong Skyscraper & Twin-Engine Plane Aerial Mission
+- **Random Location on Every Match**: Every time a new run begins, the computer randomly selects a different city block to construct the massive Art-Deco Empire State skyscraper (over 110 meters tall, featuring setbacks, pillars, warm illuminated windows, and a blinking aircraft beacon atop its mooring mast).
+- **The Giant Gorilla on the Tower**: Clinging to the observation deck and upper tier of the skyscraper is the colossal King Kong, featuring breathing cycles, mobile limbs, and swatting attacks when aircraft fly close.
+- **Proximity-Triggered Aerial Mission**: Piloting the **Twin-Engine Plane** into the vicinity of the skyscraper (within 95 meters) sounds the alarm and triggers the King Kong aerial boss fight, displaying a dedicated boss HUD.
+- **Twin-Engine Plane Shooting Mode**: Once the mission activates, the plane is armed with dual wing-mounted machine gun cannons. Players can fire rapid-fire streams of armor-piercing bullets by pressing **Space**, **F**, **Enter**, or tapping the on-screen target/shoot button.
+- **50-Hit Resistance Boss Health**: King Kong boasts a durable 50-hit collision resistance. Each direct bullet impact triggers an intense red/white hit-flash on his 3D mesh, mechanical flinch tremors, and spark discharges. The boss health bar dynamically tracks remaining endurance (`X / 50`).
+- **Cinematic Fall & Grand Reward**: Once 50 hits are registered, King Kong releases his grip and plummets in full gravity-driven freefall to the city streets below. Defeating him rewards the player with a celebratory explosion sequence, victory chimes, **+$5,000 cash**, and **+15,000 points**.
+- **GPS Minimap & Radar Tracking**: The skyscraper and the gorilla are tracked in real-time on both the mini-radar and expanded map with a custom `🦍 KING KONG` waypoint.
 
 ---
 

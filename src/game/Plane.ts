@@ -222,6 +222,17 @@ export class Plane {
     this.rightPropeller.add(propBlade2R)
     fuselage.add(this.rightPropeller)
 
+    // 3.5. Wing Machine Gun Barrels (Metralhadoras para a missão do King Kong)
+    const gunMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.85 })
+    const gunGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8)
+    gunGeo.rotateX(Math.PI / 2)
+    for (const sx of [-2.2, 2.2]) {
+      const gunMesh = new THREE.Mesh(gunGeo, gunMat)
+      gunMesh.position.set(sx, 0.85, -1.2)
+      gunMesh.castShadow = true
+      fuselage.add(gunMesh)
+    }
+
     // 4. Tail Assembly (Vertical Fin & Horizontal Stabilizers)
     const finGeo = new THREE.BoxGeometry(0.14, 1.85, 1.5)
     const fin = new THREE.Mesh(finGeo, this.wingMaterial)
@@ -321,6 +332,23 @@ export class Plane {
     const p = new THREE.Vector3(0, 1.0, -1.8)
     p.applyEuler(this.root.rotation).add(this.root.position)
     return p
+  }
+
+  getGunPositions(): [THREE.Vector3, THREE.Vector3] {
+    const left = new THREE.Vector3(-2.2, 0.85, -2.0)
+    const right = new THREE.Vector3(2.2, 0.85, -2.0)
+    left.applyEuler(this.root.rotation).add(this.root.position)
+    right.applyEuler(this.root.rotation).add(this.root.position)
+    return [left, right]
+  }
+
+  getForwardVector(): THREE.Vector3 {
+    const fwd = new THREE.Vector3(
+      -Math.sin(this.yaw) * Math.cos(this.pitch),
+      Math.sin(this.pitch),
+      -Math.cos(this.yaw) * Math.cos(this.pitch),
+    )
+    return fwd.normalize()
   }
 
   startBoarding(): void {

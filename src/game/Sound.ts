@@ -58,10 +58,98 @@ export class Sound {
     }
   }
 
-  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff'): void {
+  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff' | 'shoot' | 'roar' | 'transform' | 'laser'): void {
     if (!this.context || this.muted) return
     const context = this.context
     const now = context.currentTime
+
+    if (kind === 'transform') {
+      // Transformers mechanical servo pitch-shifting sound
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(160, now)
+      osc.frequency.linearRampToValueAtTime(580, now + 0.16)
+      osc.frequency.linearRampToValueAtTime(280, now + 0.32)
+      osc.frequency.linearRampToValueAtTime(740, now + 0.48)
+
+      filter.type = 'bandpass'
+      filter.frequency.setValueAtTime(1400, now)
+      filter.Q.value = 3.5
+
+      gain.gain.setValueAtTime(0.28, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.52)
+
+      osc.connect(filter).connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.52)
+      return
+    }
+
+    if (kind === 'laser') {
+      // High-energy ion blaster laser cannon shot
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(980, now)
+      osc.frequency.exponentialRampToValueAtTime(60, now + 0.14)
+
+      filter.type = 'bandpass'
+      filter.frequency.setValueAtTime(2200, now)
+      filter.Q.value = 2.5
+
+      gain.gain.setValueAtTime(0.32, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
+
+      osc.connect(filter).connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.15)
+      return
+    }
+
+    if (kind === 'shoot') {
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(480, now)
+      osc.frequency.exponentialRampToValueAtTime(90, now + 0.09)
+
+      filter.type = 'bandpass'
+      filter.frequency.setValueAtTime(1200, now)
+      filter.Q.value = 2.0
+
+      gain.gain.setValueAtTime(0.25, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09)
+
+      osc.connect(filter).connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.09)
+      return
+    }
+
+    if (kind === 'roar') {
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(95, now)
+      osc.frequency.linearRampToValueAtTime(140, now + 0.25)
+      osc.frequency.exponentialRampToValueAtTime(45, now + 0.9)
+
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(400, now)
+
+      gain.gain.setValueAtTime(0.42, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.95)
+
+      osc.connect(filter).connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.95)
+      return
+    }
 
     if (kind === 'explosion') {
       const osc = context.createOscillator()
