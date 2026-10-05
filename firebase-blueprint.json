@@ -1,0 +1,166 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile and Game Progress",
+      "description": "Stores user player progression, level, XP, cash, high score, playtime, garage shop unlocks, upgrades, and custom parts.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique user ID from Google or Play Games authentication"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name or gamer tag"
+        },
+        "email": {
+          "type": "string",
+          "description": "Optional user email address"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Authentication provider (google or playgames)"
+        },
+        "level": {
+          "type": "number",
+          "description": "Current player level (1+)"
+        },
+        "xp": {
+          "type": "number",
+          "description": "Current experience points in current level"
+        },
+        "totalXp": {
+          "type": "number",
+          "description": "Total accumulated experience points"
+        },
+        "cash": {
+          "type": "number",
+          "description": "Player cash wallet balance"
+        },
+        "highScore": {
+          "type": "number",
+          "description": "All-time highest distance / score"
+        },
+        "totalPlayTime": {
+          "type": "number",
+          "description": "Total seconds of gameplay across runs"
+        },
+        "dailyDate": {
+          "type": "string",
+          "description": "Current date string YYYY-MM-DD for daily tracking"
+        },
+        "dailyXp": {
+          "type": "number",
+          "description": "XP earned today"
+        },
+        "dailyCash": {
+          "type": "number",
+          "description": "Cash earned today"
+        },
+        "unlockedVehicles": {
+          "type": "array",
+          "description": "List of unlocked vehicle kinds"
+        },
+        "selectedVehicle": {
+          "type": "string",
+          "description": "Currently equipped starting vehicle kind"
+        },
+        "engineUpgradeLevel": {
+          "type": "number",
+          "description": "Engine performance upgrade level (0-5)"
+        },
+        "armorUpgradeLevel": {
+          "type": "number",
+          "description": "Armor collision resistance upgrade level (0-5)"
+        },
+        "unlockedPaints": {
+          "type": "array",
+          "description": "List of purchased exclusive vehicle paint IDs"
+        },
+        "selectedPaint": {
+          "type": "string",
+          "description": "Currently equipped paint style ID"
+        },
+        "unlockedDecals": {
+          "type": "array",
+          "description": "List of purchased exclusive stickers and decals"
+        },
+        "selectedDecal": {
+          "type": "string",
+          "description": "Currently equipped decal ID"
+        },
+        "unlockedParts": {
+          "type": "array",
+          "description": "List of purchased exclusive vehicle parts and spoilers"
+        },
+        "selectedPart": {
+          "type": "string",
+          "description": "Currently equipped custom body part ID"
+        },
+        "completedMissions": {
+          "type": "array",
+          "description": "List of completed mission IDs"
+        },
+        "trophies": {
+          "type": "array",
+          "description": "List of unlocked trophy IDs and exclusive paint unlocks"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Unix timestamp in milliseconds of last sync"
+        }
+      },
+      "required": ["uid", "displayName", "level", "xp", "cash", "highScore"]
+    },
+    "DailyRankingEntry": {
+      "title": "Daily Ranking Leaderboard Entry",
+      "description": "Stores player daily score entry for XP and Cash gained on a given calendar day.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Player user ID"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Player display name"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Provider: google or playgames"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date format YYYY-MM-DD"
+        },
+        "dailyXp": {
+          "type": "number",
+          "description": "Total XP gained today"
+        },
+        "dailyCash": {
+          "type": "number",
+          "description": "Total cash gained today"
+        },
+        "level": {
+          "type": "number",
+          "description": "Current player level"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp of last update"
+        }
+      },
+      "required": ["userId", "displayName", "date", "dailyXp", "dailyCash", "level"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account document containing cross-device game progress and garage purchases"
+    },
+    "/daily_rankings/{date}/entries/{userId}": {
+      "schema": "DailyRankingEntry",
+      "description": "Daily leaderboard record for ranking XP and cash earned on a specific date"
+    }
+  }
+}

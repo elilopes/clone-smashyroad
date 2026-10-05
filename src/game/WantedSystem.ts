@@ -18,6 +18,14 @@ export class WantedSystem {
     return this.level > before
   }
 
+  setLevel(targetLevel: number): boolean {
+    const before = this.level
+    const clamped = Math.max(0, Math.min(10, targetLevel))
+    this.heat = LEVEL_THRESHOLDS[clamped]
+    this.refreshLevel()
+    return this.level !== before
+  }
+
   addLevels(count = 1): boolean {
     const before = this.level
     const targetLevel = Math.min(10, this.level + count)

@@ -179,15 +179,15 @@ export class Traffic {
 
     const cruiseSpeed = kind === 'bicycle'
       ? 3.8 + Math.random() * 3.5
-      : kind === 'fuel_tanker'
+      : (kind === 'fuel_tanker' || kind === 'car_hauler')
         ? 7.2 + Math.random() * 4.0
         : kind === 'truck' || kind === 'bus'
           ? 6.5 + Math.random() * 4.5
           : kind === 'pickup' || kind === 'suv'
             ? 9 + Math.random() * 7
             : 11 + Math.random() * 8
-    const colors = kind === 'bus' ? 0xe0a824 : kind === 'fuel_tanker' ? 0xf0f3f6 : paintColors[Math.floor(Math.random() * paintColors.length)]
-    const scale = kind === 'bicycle' ? 0.88 : (kind === 'truck' || kind === 'bus' || kind === 'fuel_tanker') ? 0.98 : 1
+    const colors = kind === 'bus' ? 0xe0a824 : kind === 'fuel_tanker' ? 0xf0f3f6 : kind === 'car_hauler' ? 0x2563eb : kind === 'taxi' ? 0xfacc15 : paintColors[Math.floor(Math.random() * paintColors.length)]
+    const scale = kind === 'bicycle' ? 0.88 : (kind === 'truck' || kind === 'bus' || kind === 'fuel_tanker' || kind === 'car_hauler') ? 0.98 : 1
     const car = new Car(this.scene, { kind, color: colors, scale })
     if (kind === 'bicycle') car.setRiderVisible(true)
     const yaw = this.heading(axis, direction)
@@ -200,7 +200,7 @@ export class Traffic {
       direction,
       nextIntersection: this.nextGridCoordinate(coordinate, direction),
       cruiseSpeed,
-      acceleration: (kind === 'truck' || kind === 'bus' || kind === 'fuel_tanker') ? 2.0 : kind === 'bicycle' ? 2.8 : 3.4,
+      acceleration: (kind === 'truck' || kind === 'bus' || kind === 'fuel_tanker' || kind === 'car_hauler') ? 2.0 : kind === 'bicycle' ? 2.8 : 3.4,
       impactCooldown: 0,
       turn: null,
       decisionIntersection: null,
@@ -209,12 +209,14 @@ export class Traffic {
 
   private chooseKind(): VehicleKind {
     const roll = Math.random()
-    if (roll < 0.22) return 'sedan'
-    if (roll < 0.38) return 'suv'
-    if (roll < 0.52) return 'pickup'
-    if (roll < 0.65) return 'truck'
-    if (roll < 0.78) return 'fuel_tanker' // Caminhão tanque de combustível inflamável com carroceria redonda
-    if (roll < 0.89) return 'bus'
+    if (roll < 0.14) return 'sedan'
+    if (roll < 0.25) return 'taxi' // Táxi amarelo circulando pela cidade
+    if (roll < 0.37) return 'suv'
+    if (roll < 0.47) return 'pickup'
+    if (roll < 0.56) return 'truck'
+    if (roll < 0.70) return 'car_hauler' // Caminhão cegonha com rampa para saltos acrobáticos
+    if (roll < 0.81) return 'fuel_tanker' // Caminhão tanque de combustível inflamável com carroceria redonda
+    if (roll < 0.90) return 'bus'
     return 'bicycle'
   }
 

@@ -71,6 +71,7 @@ export class Minimap {
     tankerMissionStage?: 'none' | 'survive' | 'deliver' | 'completed',
     busPassengers?: { x: number; z: number; collected: boolean }[],
     monsterTruckInfo?: { position: THREE.Vector3; inMonsterTruck: boolean },
+    stationaryCars?: { x: number; z: number; collected: boolean }[],
   ): void {
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2)
 
@@ -336,6 +337,34 @@ export class Minimap {
           ctx.font = '700 7px monospace'
           ctx.textAlign = 'center'
           ctx.fillText('HELI', cx + dx, cy + dz + 11)
+        }
+      }
+    }
+
+    // 10. Stationary broken cars for Car Hauler mission
+    if (stationaryCars) {
+      for (const sc of stationaryCars) {
+        if (sc.collected) continue
+        const dx = (sc.x - playerPosition.x) * scale
+        const dz = (sc.z - playerPosition.z) * scale
+        const dist = Math.hypot(dx, dz)
+        if (dist < radius - 6) {
+          ctx.save()
+          ctx.translate(cx + dx, cy + dz)
+          const pulse = 1 + Math.sin(now * 0.008) * 0.25
+          ctx.fillStyle = '#38bdf8'
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 1.2
+          ctx.beginPath()
+          ctx.arc(0, 0, 4.5 * pulse, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
+
+          ctx.fillStyle = '#38bdf8'
+          ctx.font = '700 7px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('REBOQUE', cx + dx, cy + dz + 10)
         }
       }
     }

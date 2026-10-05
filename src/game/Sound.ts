@@ -58,10 +58,61 @@ export class Sound {
     }
   }
 
-  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff' | 'shoot' | 'roar' | 'transform' | 'laser'): void {
+  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff' | 'shoot' | 'roar' | 'transform' | 'laser' | 'jump' | 'winch' | 'upgrade'): void {
     if (!this.context || this.muted) return
     const context = this.context
     const now = context.currentTime
+
+    if (kind === 'upgrade') {
+      const notes = [523.25, 659.25, 783.99, 1046.50] // C5, E5, G5, C6 arpeggio
+      notes.forEach((freq, idx) => {
+        const osc = context.createOscillator()
+        const gain = context.createGain()
+        osc.type = 'triangle'
+        osc.frequency.setValueAtTime(freq, now + idx * 0.08)
+        gain.gain.setValueAtTime(0.22, now + idx * 0.08)
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.22)
+        osc.connect(gain).connect(this.master!)
+        osc.start(now + idx * 0.08)
+        osc.stop(now + idx * 0.08 + 0.24)
+      })
+      return
+    }
+
+    if (kind === 'jump') {
+      // Powerful whoosh / launch ramp sound
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(140, now)
+      osc.frequency.exponentialRampToValueAtTime(540, now + 0.35)
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(800, now)
+      gain.gain.setValueAtTime(0.3, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+      osc.connect(filter).connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.4)
+      return
+    }
+
+    if (kind === 'winch') {
+      // Mechanical tow winch ratchet / metallic cable sound
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(320, now)
+      osc.frequency.setValueAtTime(480, now + 0.06)
+      osc.frequency.setValueAtTime(620, now + 0.12)
+      osc.frequency.setValueAtTime(740, now + 0.18)
+      gain.gain.setValueAtTime(0.24, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28)
+      osc.connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.28)
+      return
+    }
 
     if (kind === 'transform') {
       // Transformers mechanical servo pitch-shifting sound

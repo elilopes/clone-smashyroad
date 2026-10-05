@@ -19,6 +19,7 @@ import { StickPerson } from './StickPerson'
 import { Tank } from './Tank'
 import { Traffic } from './Traffic'
 import { WantedSystem } from './WantedSystem'
+import { usersDB, getXpRequiredForLevel, SHOP_CATALOG, type UserProfile } from '../db/users'
 
 const CASH_KEY = 'smash-city-cash'
 const BEST_KEY = 'smash-city-best'
@@ -129,9 +130,133 @@ export class Game {
   private monsterMissionCrushCompleted = false
   private monsterMissionKongCompleted = false
   private monsterBlasterCooldown = 0
+  // Contracts Tabs
+  private contractsTab: 'active' | 'completed' = 'active'
+  private readonly contractsTabActiveBtn = document.querySelector<HTMLButtonElement>('#contracts-tab-active')
+  private readonly contractsTabCompletedBtn = document.querySelector<HTMLButtonElement>('#contracts-tab-completed')
+  private readonly activeContractsCountEl = document.querySelector<HTMLElement>('#active-contracts-count')
+  private readonly completedContractsCountEl = document.querySelector<HTMLElement>('#completed-contracts-count')
+
+  // Car Hauler Stunt Jump & Slow Motion
+  private rampJumpActive = false
+  private jumpVerticalVelocity = 0
+  private slowMotionActive = false
+  private readonly slowMotionBanner = document.querySelector<HTMLElement>('#slow-motion-banner')
+
+  // Car Hauler Truck Collection Mission
+  private haulerMissionStage: 'none' | 'active' | 'completed' = 'none'
+  private haulerCollectedCount = 0
+  private readonly haulerMissionPanel = document.querySelector<HTMLElement>('#hauler-mission-panel')!
+  private readonly haulerCollectedValEl = document.querySelector<HTMLElement>('#hauler-collected-val')!
+  private readonly haulerCollectedFillEl = document.querySelector<HTMLElement>('#hauler-collected-fill')!
+  private readonly haulerDistInfoEl = document.querySelector<HTMLElement>('#hauler-dist-info')!
+  private readonly haulerInstructionEl = document.querySelector<HTMLElement>('#hauler-instruction')!
+  private readonly strandedCars: { car: Car; marker: THREE.Group; collected: boolean; x: number; z: number }[] = []
+  private parkedHauler: Car | null = null
+
+  // 1. Taxi Mission (GTA Vice City / San Andreas)
+  private readonly taxiMissionPanel = document.querySelector<HTMLElement>('#taxi-mission-panel')
+  private readonly taxiStageLabel = document.querySelector<HTMLElement>('#taxi-stage-label')
+  private readonly taxiDestLabel = document.querySelector<HTMLElement>('#taxi-dest-label')
+  private readonly taxiTimerVal = document.querySelector<HTMLElement>('#taxi-timer-val')
+  private readonly taxiTimerFill = document.querySelector<HTMLElement>('#taxi-timer-fill')
+  private readonly taxiTipVal = document.querySelector<HTMLElement>('#taxi-tip-val')
+  private readonly taxiDistVal = document.querySelector<HTMLElement>('#taxi-dist-val')
+  private readonly taxiInstruction = document.querySelector<HTMLElement>('#taxi-instruction')
+  private taxiCar: Car | null = null
+  private taxiFareActive = false
+  private taxiPassengerOnboard = false
+  private taxiCurrentDestination: { name: string; x: number; z: number } | null = null
+  private taxiFareTimer = 55.0
+  private taxiFareTip = 1000
+  private taxiPassengerMesh: THREE.Group | null = null
+  private taxiPassengerTargetPos = new THREE.Vector3()
+  private taxiWaypointBeacon: THREE.Mesh | null = null
+  private taxiFaresCompleted = 0
+  private hasFastestCabbieTitle = false
+  private tokenMultiplier = 1.0
+
+  // 2. Bomb Car / Speed Mission (GTA III Mike Lips Lunch / Speed)
+  private readonly bombMissionPanel = document.querySelector<HTMLElement>('#bomb-mission-panel')
+  private readonly bombSpeedVal = document.querySelector<HTMLElement>('#bomb-speed-val')
+  private readonly bombSpeedFill = document.querySelector<HTMLElement>('#bomb-speed-fill')
+  private readonly bombCountdownVal = document.querySelector<HTMLElement>('#bomb-countdown-val')
+  private readonly bombWarningBox = document.querySelector<HTMLElement>('#bomb-warning-box')
+  private readonly bombGraceVal = document.querySelector<HTMLElement>('#bomb-grace-val')
+  private bombCar: Car | null = null
+  private bombMissionActive = false
+  private bombMissionSurvived = 0
+  private bombGraceTimer = 3.0
+  private bombMissionCompleted = false
+  private hasExclusiveSpeedPaint = localStorage.getItem('smash_speed_paint') === 'true'
+
+  // 3. Rampage / Modo Furia (GTA 2 / GTA Vice City)
+  private readonly rampageMissionPanel = document.querySelector<HTMLElement>('#rampage-mission-panel')
+  private readonly rampageTimerVal = document.querySelector<HTMLElement>('#rampage-timer-val')
+  private readonly rampageCountVal = document.querySelector<HTMLElement>('#rampage-count-val')
+  private readonly rampageFill = document.querySelector<HTMLElement>('#rampage-fill')
+  private rampageSkull: THREE.Group | null = null
+  private rampageActive = false
+  private rampageTimer = 60.0
+  private rampagePoliceDestroyed = 0
+  private rampageTargetPolice = 15
+  private rampageCompleted = false
+  private hasUrbanDestroyerTrophy = localStorage.getItem('smash_trophy_urban') === 'true'
+
+  // 4. Auth & Progression (Google & Play Games via users.ts)
+  private readonly authButton = document.querySelector<HTMLButtonElement>('#auth-button')
+  private readonly authModal = document.querySelector<HTMLElement>('#auth-modal')
+  private readonly googleSignInBtn = document.querySelector<HTMLButtonElement>('#google-sign-in-btn')
+  private readonly playGamesSignInBtn = document.querySelector<HTMLButtonElement>('#playgames-sign-in-btn')
+  private readonly closeAuthModalBtn = document.querySelector<HTMLButtonElement>('#close-auth-modal-btn')
+  private readonly authStatusMsg = document.querySelector<HTMLElement>('#auth-status-msg')
+  private readonly levelValue = document.querySelector<HTMLElement>('#level-value')
+  private readonly xpValue = document.querySelector<HTMLElement>('#xp-value')
+  private readonly xpBarFill = document.querySelector<HTMLElement>('#xp-bar-fill')
+  private readonly profileUserName = document.querySelector<HTMLElement>('#profile-user-name')
+  private readonly profileSyncBadge = document.querySelector<HTMLElement>('#profile-sync-badge')
+  private readonly profileLevelVal = document.querySelector<HTMLElement>('#profile-level-val')
+  private readonly profileXpVal = document.querySelector<HTMLElement>('#profile-xp-val')
+  private readonly profileCashVal = document.querySelector<HTMLElement>('#profile-cash-val')
+  private readonly profileHighscoreVal = document.querySelector<HTMLElement>('#profile-highscore-val')
+  private readonly guestWarningBanner = document.querySelector<HTMLElement>('#guest-warning-banner')
+  private readonly syncNowBtn = document.querySelector<HTMLButtonElement>('#sync-now-btn')
+  private readonly signOutBtn = document.querySelector<HTMLButtonElement>('#sign-out-btn')
+  private readonly authButtonsList = document.querySelector<HTMLElement>('#auth-buttons-list')
+  private currentAuthUser: UserProfile = usersDB.getCurrentUser()
+  private distanceXpAccumulator = 0
+
+  // 5. Daily Leaderboard (XP & Dinheiro)
+  private readonly leaderboardBtn = document.querySelector<HTMLButtonElement>('#leaderboard-btn')
+  private readonly leaderboardModal = document.querySelector<HTMLElement>('#leaderboard-modal')
+  private readonly closeLeaderboardBtn = document.querySelector<HTMLButtonElement>('#close-leaderboard-btn')
+  private readonly lbTabXp = document.querySelector<HTMLButtonElement>('#lb-tab-xp')
+  private readonly lbTabCash = document.querySelector<HTMLButtonElement>('#lb-tab-cash')
+  private readonly refreshLeaderboardBtn = document.querySelector<HTMLButtonElement>('#refresh-leaderboard-btn')
+  private readonly leaderboardList = document.querySelector<HTMLElement>('#leaderboard-list')
+  private readonly leaderboardDateLabel = document.querySelector<HTMLElement>('#leaderboard-date-label')
+  private readonly leaderboardMyStatVal = document.querySelector<HTMLElement>('#leaderboard-my-stat-val')
+  private readonly lbColScore = document.querySelector<HTMLElement>('#lb-col-score')
+  private currentLeaderboardTab: 'xp' | 'cash' = 'xp'
+
+  // 6. Garage & Customization Shop (Loja de Carros e Upgrades)
+  private readonly shopBtn = document.querySelector<HTMLButtonElement>('#shop-btn')
+  private readonly shopModal = document.querySelector<HTMLElement>('#shop-modal')
+  private readonly closeShopBtn = document.querySelector<HTMLButtonElement>('#close-shop-btn')
+  private readonly shopUserCash = document.querySelector<HTMLElement>('#shop-user-cash')
+  private readonly shopFeedbackMsg = document.querySelector<HTMLElement>('#shop-feedback-msg')
+  private readonly shopContentArea = document.querySelector<HTMLElement>('#shop-content-area')
+  private readonly shopTabVehicles = document.querySelector<HTMLButtonElement>('#shop-tab-vehicles')
+  private readonly shopTabEngine = document.querySelector<HTMLButtonElement>('#shop-tab-engine')
+  private readonly shopTabArmor = document.querySelector<HTMLButtonElement>('#shop-tab-armor')
+  private readonly shopTabPaints = document.querySelector<HTMLButtonElement>('#shop-tab-paints')
+  private readonly shopTabDecals = document.querySelector<HTMLButtonElement>('#shop-tab-decals')
+  private readonly shopTabParts = document.querySelector<HTMLButtonElement>('#shop-tab-parts')
+  private readonly hydraulicJumpBtn = document.querySelector<HTMLButtonElement>('#hydraulic-jump-btn')
+  private currentShopTab: 'vehicles' | 'engine' | 'armor' | 'paints' | 'decals' | 'parts' = 'vehicles'
+
   private readonly startOverlay = document.querySelector<HTMLElement>('#start-overlay')!
   private readonly endOverlay = document.querySelector<HTMLElement>('#end-overlay')!
-  private readonly missionCards: HTMLElement[] = []
   private readonly wantedSegments: HTMLElement[] = []
   private readonly cameraTarget = new THREE.Vector3()
   private readonly cameraOffset = new THREE.Vector3(0, 6.2, 12.5)
@@ -185,8 +310,7 @@ export class Game {
     this.plane = new Plane(this.scene, 168, -120, 0)
     this.floatingRings = new FloatingRings(this.scene)
     this.projectiles = new Projectiles(this.scene)
-    this.player = new Car(this.scene, { color: 0xe94f30, playerControlled: true })
-    this.player.setPosition(0, 0)
+    this.player = this.createPlayerVehicle(0, 0, 0)
     this.character = new StickPerson(this.scene)
     this.pursuit = new Pursuit(this.scene, this.wanted)
     this.sparks = new Sparks(this.scene)
@@ -201,6 +325,27 @@ export class Game {
     const mtLoc = this.city.getMonsterTruckPlazaLocation()
     this.monsterTruck.setPosition(mtLoc.x, mtLoc.z, 0)
     this.abandonedCars.push(this.monsterTruck)
+
+    // Caminhão Cegonha parked on street near starting spawn
+    this.parkedHauler = new Car(this.scene, { kind: 'car_hauler', color: 0x2563eb, scale: 0.98 })
+    this.parkedHauler.setPosition(48 + 4.2, 18, 0)
+    this.abandonedCars.push(this.parkedHauler)
+
+    // 1. Táxi Amarelo da Missão de Táxi / Corrida Maluca
+    this.taxiCar = new Car(this.scene, { kind: 'taxi', color: 0xfacc15 })
+    this.taxiCar.setPosition(-48 - 4.2, 16, Math.PI)
+    this.abandonedCars.push(this.taxiCar)
+
+    // 2. Carro-Bomba Esportivo (Velocidade Máxima)
+    this.bombCar = new Car(this.scene, { kind: 'bomb_car', color: 0x18181b })
+    this.bombCar.setPosition(0 + 4.2, -48, 0)
+    this.abandonedCars.push(this.bombCar)
+
+    // 3. Ícone 3D de Caveira para Modo Fúria / Rampage
+    this.initRampageSkull()
+    this.initTaxiMission()
+
+    this.initStrandedCars()
 
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
     this.city.ensureAround(this.player.root.position.z)
@@ -237,13 +382,21 @@ export class Game {
   private createHud(): void {
     this.wantedMeter.innerHTML = Array.from({ length: 10 }, (_, index) => `<span class="wanted-segment" data-level="${index + 1}"></span>`).join('')
     this.wantedSegments.push(...this.wantedMeter.querySelectorAll<HTMLElement>('.wanted-segment'))
-    this.missionList.innerHTML = ''
-    for (let slot = 0; slot < 3; slot += 1) {
-      const card = document.createElement('div')
-      card.className = 'mission'
-      this.missionList.appendChild(card)
-      this.missionCards.push(card)
-    }
+    this.updateMissionCards()
+
+    this.contractsTabActiveBtn?.addEventListener('click', () => {
+      this.contractsTab = 'active'
+      this.contractsTabActiveBtn?.classList.add('active')
+      this.contractsTabCompletedBtn?.classList.remove('active')
+      this.updateMissionCards()
+    })
+
+    this.contractsTabCompletedBtn?.addEventListener('click', () => {
+      this.contractsTab = 'completed'
+      this.contractsTabCompletedBtn?.classList.add('active')
+      this.contractsTabActiveBtn?.classList.remove('active')
+      this.updateMissionCards()
+    })
 
     document.querySelector<HTMLButtonElement>('#start-button')!.addEventListener('click', () => this.start())
     document.querySelector<HTMLButtonElement>('#retry-button')!.addEventListener('click', () => this.start())
@@ -298,6 +451,78 @@ export class Game {
         this.fireMonsterBlaster()
       }
     })
+
+    // Auth Button & Modal Events
+    this.authButton?.addEventListener('click', () => {
+      this.updateProfileModalUI()
+      this.authModal?.classList.remove('hidden')
+    })
+    this.closeAuthModalBtn?.addEventListener('click', () => {
+      this.authModal?.classList.add('hidden')
+    })
+    this.googleSignInBtn?.addEventListener('click', () => {
+      void this.handleSignIn('Google')
+    })
+    this.playGamesSignInBtn?.addEventListener('click', () => {
+      void this.handleSignIn('Google Play Games')
+    })
+    this.syncNowBtn?.addEventListener('click', () => {
+      void this.handleManualSync()
+    })
+    this.signOutBtn?.addEventListener('click', () => {
+      void this.handleSignOut()
+    })
+
+    // Daily Leaderboard Events
+    this.leaderboardBtn?.addEventListener('click', () => {
+      this.openDailyLeaderboard()
+    })
+    this.closeLeaderboardBtn?.addEventListener('click', () => {
+      this.leaderboardModal?.classList.add('hidden')
+    })
+    this.lbTabXp?.addEventListener('click', () => {
+      this.switchLeaderboardTab('xp')
+    })
+    this.lbTabCash?.addEventListener('click', () => {
+      this.switchLeaderboardTab('cash')
+    })
+    this.refreshLeaderboardBtn?.addEventListener('click', () => {
+      void this.loadDailyLeaderboardData()
+    })
+
+    // Garage & Customization Shop Events
+    this.shopBtn?.addEventListener('click', () => {
+      this.openShop()
+    })
+    this.closeShopBtn?.addEventListener('click', () => {
+      this.closeShop()
+    })
+    this.shopTabVehicles?.addEventListener('click', () => this.switchShopTab('vehicles'))
+    this.shopTabEngine?.addEventListener('click', () => this.switchShopTab('engine'))
+    this.shopTabArmor?.addEventListener('click', () => this.switchShopTab('armor'))
+    this.shopTabPaints?.addEventListener('click', () => this.switchShopTab('paints'))
+    this.shopTabDecals?.addEventListener('click', () => this.switchShopTab('decals'))
+    this.shopTabParts?.addEventListener('click', () => this.switchShopTab('parts'))
+
+    // Hydraulic Jump Mobile Button
+    this.hydraulicJumpBtn?.addEventListener('click', () => {
+      this.triggerHydraulicJump()
+    })
+
+    // Listen to usersDB updates in real time
+    usersDB.onUserStateChanged((user) => {
+      this.onUserDataUpdated(user)
+    })
+  }
+
+  private triggerHydraulicJump(): void {
+    if (this.inVehicle && !this.inPlane && this.player.hasHydraulicJump) {
+      if (this.player.hydraulicJump()) {
+        this.sound.effect('jump')
+        this.sparks.emit(new THREE.Vector3(this.player.root.position.x, 0.1, this.player.root.position.z))
+        this.showToast('🦘 SALTO HIDRÁULICO!')
+      }
+    }
   }
 
   private bindControls(): void {
@@ -316,6 +541,11 @@ export class Game {
       }
       if (event.key.toLowerCase() === 'c' && !event.repeat && !this.paused) this.toggleCamera()
       if (event.key.toLowerCase() === 'e' && !event.repeat && !this.paused) this.toggleVehicle()
+      if (event.code === 'Space' && !event.repeat && !this.paused) {
+        if (this.inVehicle && !this.inPlane && this.player.hasHydraulicJump) {
+          this.triggerHydraulicJump()
+        }
+      }
       if (event.key.toLowerCase() === 't' && !event.repeat && !this.paused) {
         if (this.inVehicle && this.player.kind === 'monster_truck') {
           this.toggleMonsterTransformation()
@@ -347,7 +577,7 @@ export class Game {
     this.tankSpawnTimer = 0
     this.heliSpawnTimer = 0
     for (const car of this.abandonedCars) {
-      if (car !== this.monsterTruck) car.dispose()
+      if (car !== this.monsterTruck && car !== this.parkedHauler) car.dispose()
     }
     this.abandonedCars.length = 0
     const mtLoc = this.city.getMonsterTruckPlazaLocation()
@@ -355,6 +585,41 @@ export class Game {
     this.monsterTruck.resetDamage()
     this.monsterTruck.toggleRobotMode(false)
     this.abandonedCars.push(this.monsterTruck)
+    if (this.parkedHauler) {
+      this.parkedHauler.setPosition(48 + 4.2, 18, 0)
+      this.parkedHauler.resetDamage()
+      this.parkedHauler.setHaulerCollectedCount(0)
+      this.abandonedCars.push(this.parkedHauler)
+    }
+    if (this.taxiCar) {
+      this.taxiCar.setPosition(-48 - 4.2, 16, Math.PI)
+      this.taxiCar.resetDamage()
+      this.abandonedCars.push(this.taxiCar)
+    }
+    if (this.bombCar) {
+      this.bombCar.setPosition(0 + 4.2, -48, 0)
+      this.bombCar.resetDamage()
+      this.abandonedCars.push(this.bombCar)
+    }
+    this.initRampageSkull()
+    this.initTaxiMission()
+    this.bombMissionActive = false
+    this.bombMissionSurvived = 0
+    this.bombGraceTimer = 3.0
+    this.bombMissionCompleted = false
+    this.updateBombMissionUI()
+    this.rampageActive = false
+    this.rampageTimer = 60.0
+    this.rampagePoliceDestroyed = 0
+    this.rampageCompleted = false
+    this.updateRampageMissionUI()
+    this.rampJumpActive = false
+    this.jumpVerticalVelocity = 0
+    this.slowMotionActive = false
+    this.haulerMissionStage = 'none'
+    this.haulerCollectedCount = 0
+    this.initStrandedCars()
+    this.updateHaulerMissionUI()
     this.monsterCrushCount = 0
     this.monsterCrushedCars.clear()
     this.monsterMissionCrushCompleted = false
@@ -362,8 +627,7 @@ export class Game {
     this.monsterBlasterCooldown = 0
     this.planeKingKongHitCooldown = 0
     this.player.dispose()
-    this.player = new Car(this.scene, { color: 0xe94f30, playerControlled: true })
-    this.player.setPosition(0, 0)
+    this.player = this.createPlayerVehicle(0, 0, 0)
     this.character.setPosition(-1.8, 0, 0)
     this.character.root.visible = false
     this.inVehicle = true
@@ -411,8 +675,14 @@ export class Game {
   }
 
   private readonly frame = (timestamp: number): void => {
-    const dt = this.lastFrame === 0 ? 0 : Math.min((timestamp - this.lastFrame) / 1000, 0.05)
+    const rawDt = this.lastFrame === 0 ? 0 : Math.min((timestamp - this.lastFrame) / 1000, 0.05)
     this.lastFrame = timestamp
+    const dt = this.slowMotionActive ? rawDt * 0.30 : rawDt
+
+    if (this.slowMotionBanner) {
+      this.slowMotionBanner.classList.toggle('hidden', !this.slowMotionActive)
+    }
+
     if (this.running && !this.paused) this.update(dt)
     this.updateCamera(Math.min(1, (this.paused ? 0.016 : dt) * (this.cameraMode === 'cockpit' ? 12 : 5)))
     const actorPosition = this.inPlane
@@ -451,6 +721,7 @@ export class Game {
         position: this.monsterTruck.root.position,
         inMonsterTruck: this.inVehicle && this.player === this.monsterTruck,
       },
+      this.getStationaryCarLocations(),
     )
     this.renderer.render(this.scene, this.camera)
     requestAnimationFrame(this.frame)
@@ -472,6 +743,58 @@ export class Game {
     } else if (this.inVehicle) {
       collided = this.player.drive(controls, dt, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.player.root.position.y + this.player.climbLift))
       this.cockpit.update(controls.steer, dt)
+
+      // Car Hauler Ramp Stunt Jump & Slow Motion Physics
+      if (this.rampJumpActive) {
+        this.jumpVerticalVelocity -= 17.0 * dt
+        this.player.climbLift += this.jumpVerticalVelocity * dt
+        this.player.climbPitch = -this.jumpVerticalVelocity * 0.009
+
+        // Check landing on the street
+        if (this.player.climbLift <= 0) {
+          this.player.climbLift = 0
+          this.player.climbPitch = 0
+          this.rampJumpActive = false
+          this.slowMotionActive = false
+          this.sound.effect('jump')
+          this.sound.effect('crash')
+          this.sparks.emit(this.player.root.position)
+          const justCompleted = this.missions.recordRampJump(1)
+          for (const m of justCompleted) this.completeMission(m)
+          this.cash += Math.round(500 * this.tokenMultiplier)
+          localStorage.setItem(CASH_KEY, String(this.cash))
+          this.rewardXp(75)
+          this.showToast('🚀 MEGA SALTO PERFEITO! +$500 (+75 XP)')
+          this.updateHud()
+          this.updateMissionCards()
+        }
+      } else if (this.player.kind !== 'car_hauler') {
+        const haulers = [
+          ...this.traffic.getCars().filter(c => c.kind === 'car_hauler' && !c.exploded),
+          ...this.abandonedCars.filter(c => c.kind === 'car_hauler' && !c.exploded),
+        ]
+        for (const hauler of haulers) {
+          if (hauler === this.player) continue
+          const check = this.player.checkRampClimb(hauler)
+          if (check.onRamp) {
+            this.player.climbLift = Math.max(this.player.climbLift, check.rampHeight)
+            this.player.climbPitch = -0.22
+            if (check.atLaunchLip) {
+              this.rampJumpActive = true
+              this.jumpVerticalVelocity = 56.0 + Math.min(42, Math.abs(this.player.speed) * 1.35)
+              this.player.speed = Math.max(40, this.player.speed * 1.9)
+              this.slowMotionActive = true
+              this.sound.effect('jump')
+              this.showToast('⚡ MEGA SALTO ACROBÁTICO ULTRA ALTO! CÂMERA LENTA ⚡')
+              if (this.inVehicle && this.player.kind === 'taxi' && this.taxiFareActive) {
+                this.taxiFareTip += 500
+                this.showToast('🚕 SALTO RADICAL NA CEGONHA! +$500 GORJETA!')
+              }
+              break
+            }
+          }
+        }
+      }
     } else {
       if (this.autoApproachCar) {
         if (this.autoApproachCar.exploded) {
@@ -528,6 +851,11 @@ export class Game {
     this.sun.target.position.set(actorPosition.x, 0, actorPosition.z)
     const distanceDelta = speed * dt
     this.distance += distanceDelta
+    this.distanceXpAccumulator += distanceDelta
+    if (this.distanceXpAccumulator >= 60) {
+      this.distanceXpAccumulator = 0
+      this.rewardXp(8)
+    }
     this.city.ensureAround(actorPosition.z)
     this.pedestrians.ensureAround(actorPosition.z)
     this.city.update(dt)
@@ -743,16 +1071,19 @@ export class Game {
       } else {
         this.addHeat(6 * pedestrianHits)
       }
+      this.rewardXp(15 * pedestrianHits)
       this.sound.effect('crash')
-      this.showToast(pedestrianHits > 1 ? `PEDESTRES ATROPELADOS // PROCURADO +${pedestrianHits} NÍVEIS!` : 'PEDESTRE ATROPELADO // PROCURADO +1 NÍVEL!')
+      this.showToast(pedestrianHits > 1 ? `PEDESTRES ATROPELADOS // PROCURADO +${pedestrianHits} NÍVEIS! (+${15 * pedestrianHits} XP)` : 'PEDESTRE ATROPELADO // PROCURADO +1 NÍVEL! (+15 XP)')
     }
 
     const coins = this.city.collectAt(actorPosition.x, actorPosition.z)
     if (coins > 0) {
-      this.cash += coins * 25
+      const earned = Math.round(coins * 25 * this.tokenMultiplier)
+      this.cash += earned
       localStorage.setItem(CASH_KEY, String(this.cash))
+      this.rewardXp(12 * coins)
       this.sound.effect('coin')
-      this.showToast(`FICHA RECOLHIDA  +$${coins * 25}`)
+      this.showToast(`FICHA RECOLHIDA +$${earned}${this.tokenMultiplier > 1 ? ' (FICHAS 2X)' : ''} (+${12 * coins} XP)`)
     }
 
     const oldLevel = this.wanted.level
@@ -763,9 +1094,32 @@ export class Game {
     for (const pt of pursuit.explosions) {
       this.sparks.emitExplosion(pt)
       this.sound.effect('explosion')
-      this.cash += 200
+      this.cash += Math.round(200 * this.tokenMultiplier)
       localStorage.setItem(CASH_KEY, String(this.cash))
-      this.showToast('VIATURA DESTRUÍDA! +$200')
+      this.rewardXp(40)
+      this.showToast('VIATURA DESTRUÍDA! +$200 (+40 XP)')
+
+      // Rampage / Modo Fúria Progress
+      if (this.rampageActive) {
+        this.rampagePoliceDestroyed++
+        this.rewardXp(25)
+        this.updateRampageMissionUI()
+        if (this.rampagePoliceDestroyed >= this.rampageTargetPolice && !this.rampageCompleted) {
+          this.rampageCompleted = true
+          this.rampageActive = false
+          this.hasUrbanDestroyerTrophy = true
+          localStorage.setItem('smash_trophy_urban', 'true')
+          this.cash += 4000
+          localStorage.setItem(CASH_KEY, String(this.cash))
+          this.rewardXp(750)
+          this.sound.effect('upgrade')
+          this.showToast('🏆 RAMPAGE CONCLUÍDO! TROFÉU "DESTRUIDOR URBANO" +$4.000 +10.000 PTS (+750 XP)!')
+          const justCompleted = this.missions.recordRampagePolice(15)
+          for (const m of justCompleted) this.completeMission(m)
+          this.updateHud()
+          this.updateMissionCards()
+        }
+      }
     }
     for (const pt of pursuit.smokingPositions) {
       this.sparks.emitSmoke(pt, 0.9)
@@ -1154,6 +1508,14 @@ export class Game {
     this.updateKingKongMission(dt, controls)
     // Atualização das Missões do Monster Truck Cyber & Robô Transformers
     this.updateMonsterMission(dt, controls)
+    // Atualização da Missão do Caminhão Cegonha (Recolher Carros)
+    this.updateHaulerMission(dt)
+    // 1. Missão de Táxi / Corrida Maluca (GTA Vice City / San Andreas)
+    this.updateTaxiMission(dt)
+    // 2. Missão Carro-Bomba / Velocidade Máxima (GTA III Mike Lips Lunch)
+    this.updateBombMission(dt)
+    // 3. Modo Fúria / Rampage (GTA 2 / GTA Vice City)
+    this.updateRampageMission(dt)
 
     if (!this.inPlane && pursuit.busted) this.endRun('busted')
     this.hudTimer += dt
@@ -1189,8 +1551,9 @@ export class Game {
   private completeMission(mission: MissionState): void {
     this.cash += mission.reward
     localStorage.setItem(CASH_KEY, String(this.cash))
+    this.rewardXp(250)
     this.sound.effect('mission')
-    this.showToast(`CONTRATO CUMPRIDO  +$${mission.reward}`)
+    this.showToast(`CONTRATO CUMPRIDO  +$${mission.reward} (+250 XP)`)
     this.updateHud()
   }
 
@@ -1664,13 +2027,68 @@ export class Game {
           }
         }
 
-        // Manual firing only when player explicitly triggers shoot control (F, Enter, or Shoot Button)
+        // Manual firing and sword attack when player triggers shoot control (F, Enter, or Shoot Button)
         if (controls.shoot && this.monsterBlasterCooldown <= 0) {
           this.fireMonsterBlaster()
+          this.checkSwordSlashOnCars()
         }
       }
     }
     this.updateMonsterMissionUI()
+  }
+
+  private checkSwordSlashOnCars(): void {
+    if (!this.inVehicle || this.player.kind !== 'monster_truck' || !this.player.isRobotMode) return
+    const slashed = this.player.performSwordSlash()
+    if (!slashed) return
+
+    this.sound.effect('crash')
+    const robotPos = this.player.root.position
+    const forwardX = -Math.sin(this.player.yaw)
+    const forwardZ = -Math.cos(this.player.yaw)
+
+    const checkCar = (car: Car) => {
+      if (car === this.player || car.kind === 'monster_truck' || this.monsterCrushedCars.has(car)) return
+      const carPos = car.root.position
+      const dx = carPos.x - robotPos.x
+      const dz = carPos.z - robotPos.z
+      const dist = Math.hypot(dx, dz)
+
+      if (dist < 10.5) {
+        const dot = (dx * forwardX + dz * forwardZ) / (dist || 1)
+        if (dot > -0.3) {
+          this.monsterCrushedCars.add(car)
+          this.monsterCrushCount += 1
+          car.crush()
+          this.sparks.emitExplosion(car.root.position)
+          for (let i = 0; i < 4; i++) {
+            this.sparks.emit(car.root.position)
+          }
+          this.sound.effect('explosion')
+          this.sound.effect('crash')
+
+          this.rewardXp(35)
+          this.cash += 150
+          localStorage.setItem(CASH_KEY, String(this.cash))
+          this.updateHud()
+          this.updateShopCashDisplay()
+
+          this.showToast('⚔️ CARRO CORTADO COM A ESPADA TRANSFORMERS! (+35 XP / +$150)')
+          if (this.monsterCrushCount >= 10 && !this.monsterMissionCrushCompleted) {
+            this.monsterMissionCrushCompleted = true
+            this.sound.effect('mission')
+            this.cash += 3500
+            this.distance += 2000
+            localStorage.setItem(CASH_KEY, String(this.cash))
+            this.showToast('🏆 MISSÃO 1 CUMPRIDA: 10 CARROS DESTRUÍDOS COM A ESPADA/ESMAGADOS! +$3.500 (+12.000 PTS)')
+          }
+        }
+      }
+    }
+
+    for (const car of this.traffic.getCars()) checkCar(car)
+    for (const car of this.pursuit.getCars()) checkCar(car)
+    for (const car of this.abandonedCars) checkCar(car)
   }
 
   private toggleMonsterTransformation(): void {
@@ -1679,7 +2097,7 @@ export class Game {
     this.sound.effect('transform')
     this.sparks.emitExplosion(this.player.root.position)
     if (isRobot) {
-      this.showToast('🤖 TRANSFORMAÇÃO CONCLUÍDA: ROBÔ TRANSFORMERS! DISPARE O CANHÃO NO KING KONG!')
+      this.showToast('🤖 TRANSFORMAÇÃO CONCLUÍDA: ROBÔ TRANSFORMERS! USE A ESPADA REGENERATIVA (F) PARA DESTRUIR CARROS E O CANHÃO NO KING KONG!')
     } else {
       this.showToast('🛻 MODO MONSTER TRUCK ATIVADO! ACELERE E ESMAGUE 10 CARROS COM AS RODAS GIGANTES!')
     }
@@ -1822,6 +2240,18 @@ export class Game {
     if (finalTimeEl) finalTimeEl.textContent = this.formatTime(currentRunTime)
     const bestTimeEl = document.querySelector<HTMLElement>('#best-time')
     if (bestTimeEl) bestTimeEl.textContent = this.formatTime(this.bestTime)
+
+    // Save progression via users.ts if authenticated
+    const currentUser = usersDB.getCurrentUser()
+    if (!currentUser.isGuest) {
+      usersDB.updateStats({
+        cash: this.cash,
+        highScore: Math.max(currentUser.highScore, score),
+        totalPlayTime: currentUser.totalPlayTime + Math.floor(currentRunTime),
+        completedMissions: this.missions.completed.map((m) => m.id),
+      })
+      void usersDB.syncPendingChanges()
+    }
 
     if (reason === 'drowned') {
       document.querySelector<HTMLElement>('#end-summary')!.textContent = 'Você permaneceu mais de 30 segundos dentro da água no rio sem retornar à terra firme.'
@@ -1973,6 +2403,19 @@ export class Game {
     } else if (this.player.kind === 'monster_truck') {
       this.updateMonsterMissionUI()
       this.showToast('A PÉ // VOCÊ SAIU DO MONSTER TRUCK')
+    } else if (this.player.kind === 'car_hauler') {
+      this.showToast('A PÉ // RETORNE AO CAMINHÃO CEGONHA PARA RECOLHER OS CARROS!')
+      this.updateHaulerMissionUI()
+    } else if (this.player.kind === 'taxi') {
+      this.showToast('A PÉ // VOCÊ SAIU DO TÁXI')
+      this.updateTaxiMissionUI()
+    } else if (this.player.kind === 'bomb_car') {
+      if (this.bombMissionActive) {
+        this.player.explode()
+        this.showToast('💥 BOOM! VOCÊ ABANDONOU O CARRO-BOMBA COM A BOMBA ARMADA!')
+        this.endRun('explosion')
+      }
+      this.updateBombMissionUI()
     } else {
       this.showToast('A PÉ // ENTRE EM QUALQUER CARRO OU NO AVIÃO · E')
     }
@@ -2114,6 +2557,12 @@ export class Game {
       ? 'VIATURA POLICIAL'
       : this.player.kind === 'fuel_tanker'
         ? 'CAMINHÃO TANQUE DE COMBUSTÍVEL'
+        : this.player.kind === 'car_hauler'
+          ? 'CAMINHÃO CEGONHA COM RAMPA'
+        : this.player.kind === 'taxi'
+          ? 'TÁXI AMARELO'
+        : this.player.kind === 'bomb_car'
+          ? 'ESPORTIVO COM CARRO-BOMBA'
         : this.player.kind === 'monster_truck'
           ? 'MONSTER TRUCK CYBER 4X4'
           : this.player.kind === 'truck'
@@ -2129,6 +2578,23 @@ export class Game {
                     : 'VEÍCULO'
 
     this.showToast(`AO VOLANTE // ${vehicleName} ASSUMIDO · E PARA SAIR`)
+
+    if (this.player.kind === 'taxi') {
+      this.initTaxiMission()
+      this.updateTaxiMissionUI()
+      this.showToast('🚕 TÁXI AMARELO // PARE NA CALÇADA PARA EMBARCAR PASSAGEIROS E FAÇA MANOBRAS RADICAIS!')
+    }
+
+    if (this.player.kind === 'bomb_car') {
+      if (!this.bombMissionCompleted) {
+        this.bombMissionActive = true
+        this.bombMissionSurvived = 0
+        this.bombGraceTimer = 3.0
+        this.sound.effect('takeoff')
+        this.showToast('💣 ALERTA: CARRO-BOMBA ATIVADO! MANTENHA A VELOCIDADE ACIMA DE 75 KM/H!')
+      }
+      this.updateBombMissionUI()
+    }
 
     if (this.player.kind === 'monster_truck') {
       this.updateMonsterMissionUI()
@@ -2159,6 +2625,18 @@ export class Game {
         this.showToast(`MISSÃO DO ÔNIBUS EM ANDAMENTO // EMBARQUE OS PASSAGEIROS RESTANTES [${this.busPassengers.count}/6]!`)
       }
       this.updateBusMissionUI()
+    }
+
+    if (this.player.kind === 'car_hauler') {
+      if (this.haulerMissionStage === 'none') {
+        this.haulerMissionStage = 'active'
+        this.haulerCollectedCount = 0
+        this.sound.effect('mission')
+        this.showToast('🚚 MISSÃO DA CEGONHA INICIADA: RECOLHA 5 CARROS PARADOS PELA CIDADE!')
+      } else if (this.haulerMissionStage === 'active') {
+        this.showToast(`MISSÃO DA CEGONHA EM ANDAMENTO // RECOLHA OS CARROS RESTANTES [${this.haulerCollectedCount}/5]!`)
+      }
+      this.updateHaulerMissionUI()
     }
   }
 
@@ -2222,11 +2700,12 @@ export class Game {
   }
 
   private updateCamera(alpha: number): void {
+    const playerElevatedPos = this.inVehicle
+      ? new THREE.Vector3(this.player.root.position.x, this.player.root.position.y + this.player.climbLift, this.player.root.position.z)
+      : this.character.root.position
     const position = this.inPlane
       ? this.plane.root.position
-      : this.inVehicle
-        ? this.player.root.position
-        : this.character.root.position
+      : playerElevatedPos
     const yaw = this.inPlane
       ? this.plane.yaw
       : this.inVehicle
@@ -2319,6 +2798,30 @@ export class Game {
   }
 
   private updateHud(): void {
+    const user = usersDB.getCurrentUser()
+    this.currentAuthUser = user
+    if (this.levelValue) {
+      this.levelValue.textContent = `NV ${user.level}`
+    }
+    if (this.xpValue && this.xpBarFill) {
+      const requiredXp = getXpRequiredForLevel(user.level)
+      this.xpValue.textContent = `${user.xp} / ${requiredXp} XP`
+      this.xpBarFill.style.width = `${Math.min(100, (user.xp / requiredXp) * 100)}%`
+    }
+    this.cash = user.cash
+
+    if (this.authButton) {
+      if (user.isGuest) {
+        this.authButton.textContent = '👤 ANÔNIMO'
+        this.authButton.classList.remove('connected')
+        this.authButton.title = 'Modo Anônimo (Sem salvamento). Clique para entrar com Google ou Play Games.'
+      } else {
+        this.authButton.textContent = `👤 ${user.displayName.substring(0, 14)} [NV ${user.level}]`
+        this.authButton.classList.add('connected')
+        this.authButton.title = `Conectado como ${user.displayName} (${user.provider}). Clique para ver perfil e sincronização.`
+      }
+    }
+
     const kmh = Math.floor(Math.abs(this.inPlane ? this.plane.speed : this.inVehicle ? this.player.speed : this.character.speed) * 3.6)
     this.speedValue.textContent = String(kmh).padStart(3, '0')
     this.speedFill.style.width = `${Math.min(100, (kmh / 240) * 100)}%`
@@ -2387,6 +2890,12 @@ export class Game {
         ? 'VIATURA'
         : this.player.kind === 'fuel_tanker'
           ? 'CAMINHÃO TANQUE'
+          : this.player.kind === 'car_hauler'
+            ? 'CEGONHA'
+        : this.player.kind === 'taxi'
+          ? 'TÁXI'
+        : this.player.kind === 'bomb_car'
+          ? 'CARRO-BOMBA'
           : this.player.kind === 'truck'
             ? 'CAMINHÃO'
             : this.player.kind === 'bus'
@@ -2441,18 +2950,1189 @@ export class Game {
   }
 
   private updateMissionCards(): void {
-    this.missions.active.forEach((mission, index) => {
-      const card = this.missionCards[index]
-      if (!card) return
-      const progress = Math.floor(mission.progress)
-      const percent = Math.min(100, (mission.progress / mission.target) * 100)
-      card.classList.toggle('completed', mission.completed)
-      card.innerHTML = `
-        <div class="mission-title">${mission.completed ? '✓ ' : ''}${mission.title}</div>
-        <div class="mission-reward">+$${mission.reward}</div>
-        <div class="mission-progress"><div class="mission-track"><div class="mission-fill" style="width:${percent}%"></div></div><span class="mission-count">${progress}/${mission.target}${mission.unit === 'm' ? 'm' : ''}</span></div>
-      `
+    if (this.activeContractsCountEl) {
+      this.activeContractsCountEl.textContent = this.missions.active.length.toString()
+    }
+    if (this.completedContractsCountEl) {
+      this.completedContractsCountEl.textContent = this.missions.completed.length.toString()
+    }
+
+    this.missionList.innerHTML = ''
+
+    if (this.contractsTab === 'active') {
+      const activeMissions = this.missions.active
+      if (activeMissions.length === 0) {
+        const empty = document.createElement('div')
+        empty.className = 'mission-empty'
+        empty.textContent = 'TODAS AS MISSÕES FORAM CONCLUÍDAS! PARABÉNS!'
+        this.missionList.appendChild(empty)
+        return
+      }
+
+      for (const mission of activeMissions) {
+        const card = document.createElement('div')
+        card.className = 'mission'
+        const progress = Math.floor(mission.progress)
+        const percent = Math.min(100, (mission.progress / mission.target) * 100)
+        card.innerHTML = `
+          <div class="mission-title">${mission.title}</div>
+          <div class="mission-reward">+$${mission.reward}</div>
+          <div class="mission-progress">
+            <div class="mission-track"><div class="mission-fill" style="width:${percent}%"></div></div>
+            <span class="mission-count">${progress}/${mission.target}${mission.unit === 'm' ? 'm' : ''}</span>
+          </div>
+        `
+        this.missionList.appendChild(card)
+      }
+    } else {
+      const completedMissions = this.missions.completed
+      if (completedMissions.length === 0) {
+        const empty = document.createElement('div')
+        empty.className = 'mission-empty'
+        empty.textContent = 'NENHUMA MISSÃO CONCLUÍDA AINDA.\nCUMPRA OS CONTRATOS ATIVOS PELA CIDADE!'
+        this.missionList.appendChild(empty)
+        return
+      }
+
+      for (const mission of completedMissions) {
+        const card = document.createElement('div')
+        card.className = 'mission completed'
+        card.innerHTML = `
+          <div class="mission-title"><span style="color:#4ade80;font-weight:bold;margin-right:5px;">✓</span>${mission.title}</div>
+          <div class="mission-reward" style="color:#4ade80;">+$${mission.reward}</div>
+          <div class="mission-progress">
+            <div class="mission-track"><div class="mission-fill" style="width:100%;background:#4ade80;"></div></div>
+            <span class="mission-count" style="color:#4ade80;font-weight:bold;">CONCLUÍDO</span>
+          </div>
+        `
+        this.missionList.appendChild(card)
+      }
+    }
+  }
+
+  private initStrandedCars(): void {
+    for (const sc of this.strandedCars) {
+      sc.car.dispose()
+      this.scene.remove(sc.marker)
+    }
+    this.strandedCars.length = 0
+
+    const strandedConfigs = [
+      { x: 48 + 4.2, z: 96, color: 0x3b82f6, yaw: 0 },              // Blue sedan
+      { x: -96 - 4.2, z: -48, color: 0xf59e0b, yaw: Math.PI },      // Amber SUV
+      { x: 144 + 4.2, z: -144, color: 0x10b981, yaw: Math.PI / 2 }, // Emerald compact
+      { x: -48 - 4.2, z: 192, color: 0x8b5cf6, yaw: -Math.PI / 2 }, // Purple sports
+      { x: 0 + 4.2, z: 240, color: 0xec4899, yaw: 0 },              // Pink coupe
+    ]
+
+    for (const cfg of strandedConfigs) {
+      const car = new Car(this.scene, { color: cfg.color, scale: 0.96 })
+      car.setPosition(cfg.x, cfg.z, cfg.yaw)
+      car.speed = 0
+      car.hits = car.smokeThreshold
+
+      const marker = new THREE.Group()
+      marker.position.set(cfg.x, 3.2, cfg.z)
+
+      const ringGeo = new THREE.TorusGeometry(0.72, 0.08, 8, 20)
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      const ring = new THREE.Mesh(ringGeo, ringMat)
+      ring.rotation.x = Math.PI / 2
+      marker.add(ring)
+
+      const coneGeo = new THREE.ConeGeometry(0.35, 0.75, 8)
+      const coneMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      const cone = new THREE.Mesh(coneGeo, coneMat)
+      cone.rotation.x = Math.PI
+      cone.position.y = -0.45
+      marker.add(cone)
+
+      this.scene.add(marker)
+
+      this.strandedCars.push({
+        car,
+        marker,
+        collected: false,
+        x: cfg.x,
+        z: cfg.z,
+      })
+    }
+  }
+
+  private getStationaryCarLocations(): { x: number; z: number; collected: boolean }[] {
+    return this.strandedCars.map(sc => ({ x: sc.x, z: sc.z, collected: sc.collected }))
+  }
+
+  private updateHaulerMission(dt: number): void {
+    // Animate 3D holographic beacon markers above uncollected stranded cars
+    for (const sc of this.strandedCars) {
+      if (sc.collected) continue
+      sc.marker.rotation.y += 2.2 * dt
+      sc.marker.position.y = 3.2 + Math.sin(this.elapsed * 4.0 + sc.x * 0.1) * 0.28
+    }
+
+    if (this.haulerMissionStage !== 'active') return
+
+    // If player is driving the car hauler, check pickup proximity
+    if (this.inVehicle && this.player.kind === 'car_hauler') {
+      const playerPos = this.player.root.position
+      for (const sc of this.strandedCars) {
+        if (sc.collected) continue
+        const dist = Math.hypot(playerPos.x - sc.x, playerPos.z - sc.z)
+        if (dist <= 8.5) {
+          sc.collected = true
+          sc.car.root.visible = false
+          sc.marker.visible = false
+          this.haulerCollectedCount = Math.min(5, this.haulerCollectedCount + 1)
+          this.player.setHaulerCollectedCount(this.haulerCollectedCount)
+
+          this.sound.effect('mission')
+          this.sparks.emit(sc.car.root.position)
+          this.showToast(`🚗 CARRO RECOLHIDO! (${this.haulerCollectedCount}/5) · CARREGADO NA CEGONHA`)
+
+          const justCompleted = this.missions.recordCarHaul(this.haulerCollectedCount)
+          for (const m of justCompleted) this.completeMission(m)
+
+          if (this.haulerCollectedCount >= 5) {
+            this.haulerMissionStage = 'completed'
+            this.cash += 4000
+            localStorage.setItem(CASH_KEY, String(this.cash))
+            this.sound.effect('mission')
+            this.showToast('🎉 MISSÃO DA CEGONHA CONCLUÍDA! TODOS OS 5 CARROS FORAM RECOLHIDOS! +$4000')
+            this.updateHud()
+          }
+          this.updateHaulerMissionUI()
+          this.updateMissionCards()
+          break
+        }
+      }
+      this.updateHaulerMissionUI()
+    }
+  }
+
+  private updateHaulerMissionUI(): void {
+    if (!this.haulerMissionPanel) return
+
+    if (this.haulerMissionStage === 'active') {
+      this.haulerMissionPanel.classList.remove('hidden')
+      this.haulerCollectedValEl.textContent = `${this.haulerCollectedCount} / 5`
+      this.haulerCollectedFillEl.style.width = `${(this.haulerCollectedCount / 5) * 100}%`
+
+      if (this.inVehicle && this.player.kind === 'car_hauler') {
+        let nearestDist = Infinity
+        const pos = this.player.root.position
+        for (const sc of this.strandedCars) {
+          if (sc.collected) continue
+          const d = Math.hypot(pos.x - sc.x, pos.z - sc.z)
+          if (d < nearestDist) nearestDist = d
+        }
+        if (nearestDist < Infinity) {
+          this.haulerDistInfoEl.textContent = `PRÓXIMO CARRO: ${Math.round(nearestDist)} m`
+          this.haulerInstructionEl.textContent = 'APROXIME-SE DO CARRO COM A RAMPA!'
+          this.haulerInstructionEl.style.color = '#38bdf8'
+        } else {
+          this.haulerDistInfoEl.textContent = 'TODOS OS CARROS RECOLHIDOS!'
+          this.haulerInstructionEl.textContent = 'PARABÉNS! MISSÃO CONCLUÍDA!'
+          this.haulerInstructionEl.style.color = '#4ade80'
+        }
+      } else {
+        this.haulerInstructionEl.textContent = '⚠ RETORNE AO CAMINHÃO CEGONHA!'
+        this.haulerInstructionEl.style.color = '#ff4438'
+      }
+    } else if (this.haulerMissionStage === 'completed') {
+      this.haulerMissionPanel.classList.remove('hidden')
+      this.haulerCollectedValEl.textContent = '✓ 5 / 5 (CUMPRIDA!)'
+      this.haulerCollectedFillEl.style.width = '100%'
+      this.haulerDistInfoEl.textContent = 'RECOLHIMENTO COMPLETO'
+      this.haulerInstructionEl.textContent = 'TODOS OS VEÍCULOS FORAM RESGATADOS! +$4000'
+      this.haulerInstructionEl.style.color = '#4ade80'
+    } else {
+      this.haulerMissionPanel.classList.add('hidden')
+    }
+  }
+
+  // ==========================================
+  // 1. MISSÃO DE TÁXI // CORRIDA MALUCA (GTA VICE CITY / SAN ANDREAS)
+  // ==========================================
+  private initTaxiMission(): void {
+    if (this.taxiPassengerMesh) {
+      this.scene.remove(this.taxiPassengerMesh)
+      this.taxiPassengerMesh = null
+    }
+    if (this.taxiWaypointBeacon) {
+      this.scene.remove(this.taxiWaypointBeacon)
+      this.taxiWaypointBeacon = null
+    }
+    this.taxiFareActive = false
+    this.taxiPassengerOnboard = false
+    this.taxiCurrentDestination = null
+    this.spawnTaxiPassenger()
+  }
+
+  private spawnTaxiPassenger(): void {
+    if (this.taxiPassengerMesh) {
+      this.scene.remove(this.taxiPassengerMesh)
+      this.taxiPassengerMesh = null
+    }
+    const charPos = this.inVehicle ? this.player.root.position : this.character.root.position
+    const px = Math.round(charPos.x / 48) * 48 + (Math.random() < 0.5 ? 24 : -24)
+    const pz = Math.round(charPos.z / 48) * 48 + (Math.random() * 40 - 20)
+    this.taxiPassengerTargetPos.set(px, 0, pz)
+
+    const group = new THREE.Group()
+    group.position.set(px, 0, pz)
+
+    const skin = new THREE.MeshStandardMaterial({ color: 0xf5d0b0 })
+    const clothes = new THREE.MeshStandardMaterial({ color: 0x3b82f6 })
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), skin)
+    head.position.y = 1.62
+    group.add(head)
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 8), clothes)
+    body.position.y = 1.05
+    group.add(body)
+
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, wireframe: true })
+    const beacon = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.06, 6, 16), beaconMat)
+    beacon.position.y = 2.4
+    beacon.rotation.x = Math.PI / 2
+    group.add(beacon)
+
+    this.scene.add(group)
+    this.taxiPassengerMesh = group
+  }
+
+  private updateTaxiMission(dt: number): void {
+    if (this.taxiPassengerMesh && !this.taxiPassengerOnboard) {
+      this.taxiPassengerMesh.rotation.y += 2.0 * dt
+      this.taxiPassengerMesh.children[2].position.y = 2.4 + Math.sin(this.elapsed * 4.0) * 0.25
+    }
+
+    if (this.taxiWaypointBeacon) {
+      this.taxiWaypointBeacon.rotation.y += 1.5 * dt
+    }
+
+    if (!this.inVehicle || this.player.kind !== 'taxi') {
+      if (this.taxiMissionPanel) this.taxiMissionPanel.classList.add('hidden')
+      return
+    }
+
+    if (this.taxiMissionPanel) this.taxiMissionPanel.classList.remove('hidden')
+
+    const playerPos = this.player.root.position
+
+    if (!this.taxiPassengerOnboard) {
+      if (this.taxiStageLabel) this.taxiStageLabel.textContent = 'PROCURANDO PASSAGEIRO'
+      if (this.taxiDestLabel) this.taxiDestLabel.textContent = '📍 AGUARDANDO EMBARQUE'
+      if (this.taxiInstruction) this.taxiInstruction.textContent = 'PARE JUNTO AO PASSAGEIRO NA CALÇADA!'
+
+      if (this.taxiPassengerMesh) {
+        const dist = playerPos.distanceTo(this.taxiPassengerTargetPos)
+        if (this.taxiDistVal) this.taxiDistVal.textContent = `DISTÂNCIA: ${Math.round(dist)} m`
+        if (dist <= 7.0 && Math.abs(this.player.speed) <= 3.0) {
+          this.taxiPassengerOnboard = true
+          this.taxiFareActive = true
+          this.taxiFareTimer = 55.0
+          this.taxiFareTip = 1000
+          if (this.taxiPassengerMesh) {
+            this.scene.remove(this.taxiPassengerMesh)
+            this.taxiPassengerMesh = null
+          }
+
+          const landmarks = [
+            { name: 'PRAÇA CENTRAL', x: 0, z: 0 },
+            { name: 'AEROPORTO INTERNACIONAL', x: 168, z: -120 },
+            { name: 'BANCO CENTRAL', x: 96, z: -96 },
+            { name: 'HOSPITAL GERAL', x: -144, z: -96 },
+            { name: 'MARINA SUL', x: 144, z: 144 },
+            { name: 'DISTRITO FINANCEIRO', x: -96, z: 96 },
+          ]
+          const valid = landmarks.filter(l => Math.hypot(l.x - playerPos.x, l.z - playerPos.z) > 90)
+          this.taxiCurrentDestination = valid[Math.floor(Math.random() * valid.length)] || landmarks[0]
+
+          if (this.taxiWaypointBeacon) this.scene.remove(this.taxiWaypointBeacon)
+          const beaconGeo = new THREE.CylinderGeometry(1.4, 1.4, 40, 16)
+          const beaconMat = new THREE.MeshBasicMaterial({
+            color: 0xfacc15,
+            transparent: true,
+            opacity: 0.4,
+            side: THREE.DoubleSide,
+          })
+          this.taxiWaypointBeacon = new THREE.Mesh(beaconGeo, beaconMat)
+          this.taxiWaypointBeacon.position.set(this.taxiCurrentDestination.x, 20, this.taxiCurrentDestination.z)
+          this.scene.add(this.taxiWaypointBeacon)
+
+          this.sound.effect('mission')
+          this.showToast(`🚕 PASSAGEIRO EMBARCOU! DESTINO: ${this.taxiCurrentDestination.name}`)
+        }
+      } else {
+        this.spawnTaxiPassenger()
+      }
+    } else {
+      this.taxiFareTimer -= dt
+      const speedKmh = Math.abs(this.player.speed) * 3.6
+      if (speedKmh > 75) {
+        this.taxiFareTip += 50 * dt
+      }
+
+      if (this.taxiStageLabel) this.taxiStageLabel.textContent = 'EM VIAGEM'
+      if (this.taxiDestLabel && this.taxiCurrentDestination) {
+        this.taxiDestLabel.textContent = `📍 ${this.taxiCurrentDestination.name}`
+      }
+      if (this.taxiTimerVal) this.taxiTimerVal.textContent = `${Math.max(0, this.taxiFareTimer).toFixed(1)}s`
+      if (this.taxiTimerFill) this.taxiTimerFill.style.width = `${Math.min(100, (this.taxiFareTimer / 55.0) * 100)}%`
+      if (this.taxiTipVal) this.taxiTipVal.textContent = `💰 GORJETA: $ ${Math.round(this.taxiFareTip * this.tokenMultiplier)}`
+      if (this.taxiInstruction) this.taxiInstruction.textContent = 'ACELERE E FAÇA MANOBRAS RADICAIS!'
+
+      if (this.taxiCurrentDestination) {
+        const dist = Math.hypot(playerPos.x - this.taxiCurrentDestination.x, playerPos.z - this.taxiCurrentDestination.z)
+        if (this.taxiDistVal) this.taxiDistVal.textContent = `DISTÂNCIA: ${Math.round(dist)} m`
+
+        if (dist <= 9.0 && Math.abs(this.player.speed) <= 4.5) {
+          const baseFare = 600
+          const tip = Math.round(this.taxiFareTip)
+          const totalEarned = Math.round((baseFare + tip) * this.tokenMultiplier)
+          this.cash += totalEarned
+          localStorage.setItem(CASH_KEY, String(this.cash))
+          this.taxiFaresCompleted++
+
+          if (this.taxiWaypointBeacon) {
+            this.scene.remove(this.taxiWaypointBeacon)
+            this.taxiWaypointBeacon = null
+          }
+
+          this.sound.effect('upgrade')
+          this.showToast(`🚕 CORRIDA CONCLUÍDA! +$${totalEarned} ($600 TARIFA + $${tip} GORJETA)`)
+
+          const justCompleted = this.missions.recordTaxiFare(1)
+          for (const m of justCompleted) this.completeMission(m)
+
+          if (this.taxiFaresCompleted >= 3 && !this.hasFastestCabbieTitle) {
+            this.hasFastestCabbieTitle = true
+            this.tokenMultiplier = 2.0
+            this.showToast('🏆 TÍTULO DESBLOQUEADO: "TAXISTA MAIS RÁPIDO DA CIDADE"! FICHAS 2X!')
+          }
+
+          this.taxiPassengerOnboard = false
+          this.taxiFareActive = false
+          this.taxiCurrentDestination = null
+          this.updateHud()
+          this.updateMissionCards()
+          setTimeout(() => this.spawnTaxiPassenger(), 3000)
+        }
+      }
+
+      if (this.taxiFareTimer <= 0) {
+        this.showToast('❌ TEMPO ESGOTADO! O PASSAGEIRO CANCELOU A CORRIDA.')
+        if (this.taxiWaypointBeacon) {
+          this.scene.remove(this.taxiWaypointBeacon)
+          this.taxiWaypointBeacon = null
+        }
+        this.taxiPassengerOnboard = false
+        this.taxiFareActive = false
+        this.taxiCurrentDestination = null
+        setTimeout(() => this.spawnTaxiPassenger(), 3000)
+      }
+    }
+  }
+
+  private updateTaxiMissionUI(): void {
+    if (!this.taxiMissionPanel) return
+    if (this.inVehicle && this.player.kind === 'taxi') {
+      this.taxiMissionPanel.classList.remove('hidden')
+    } else {
+      this.taxiMissionPanel.classList.add('hidden')
+    }
+  }
+
+  // ==========================================
+  // 2. MISSÃO CARRO-BOMBA (GTA III - SPEED)
+  // ==========================================
+  private updateBombMission(dt: number): void {
+    if (!this.inVehicle || this.player.kind !== 'bomb_car') {
+      if (this.bombMissionPanel) this.bombMissionPanel.classList.add('hidden')
+      return
+    }
+
+    if (this.bombMissionCompleted) {
+      if (this.bombMissionPanel) this.bombMissionPanel.classList.add('hidden')
+      return
+    }
+
+    if (this.bombMissionPanel) this.bombMissionPanel.classList.remove('hidden')
+
+    const speedKmh = Math.abs(this.player.speed) * 3.6
+    if (this.bombSpeedVal) {
+      this.bombSpeedVal.textContent = `${Math.round(speedKmh)} KM/H`
+      this.bombSpeedVal.classList.toggle('danger', speedKmh < 75)
+    }
+    if (this.bombSpeedFill) {
+      const fillPercent = Math.min(100, (speedKmh / 140) * 100)
+      this.bombSpeedFill.style.width = `${fillPercent}%`
+    }
+
+    if (this.bombMissionActive) {
+      if (speedKmh >= 75) {
+        this.bombMissionSurvived += dt
+        this.bombGraceTimer = 3.0
+        if (this.bombWarningBox) this.bombWarningBox.classList.add('hidden')
+      } else {
+        this.bombGraceTimer -= dt
+        if (this.bombWarningBox) {
+          this.bombWarningBox.classList.remove('hidden')
+          if (this.bombGraceVal) this.bombGraceVal.textContent = `${Math.max(0, this.bombGraceTimer).toFixed(1)}s`
+        }
+
+        if (this.bombGraceTimer <= 0) {
+          this.sparks.emitExplosion(this.player.root.position)
+          this.sound.effect('explosion')
+          this.player.explode()
+          this.bombMissionActive = false
+          this.showToast('💥 BOOM! A VELOCIDADE CAIU ABAIXO DE 75 KM/H POR MAIS DE 3s!')
+          this.endRun('explosion')
+          return
+        }
+      }
+
+      if (this.bombCountdownVal) {
+        const remaining = Math.max(0, 45.0 - this.bombMissionSurvived)
+        this.bombCountdownVal.textContent = `${remaining.toFixed(1)}s`
+      }
+
+      if (this.bombMissionSurvived >= 45.0) {
+        this.bombMissionCompleted = true
+        this.bombMissionActive = false
+        this.hasExclusiveSpeedPaint = true
+        localStorage.setItem('smash_speed_paint', 'true')
+        this.cash += 5000
+        localStorage.setItem(CASH_KEY, String(this.cash))
+        this.sound.effect('upgrade')
+        this.showToast('💣 BOMBA DESARMADA COM SUCESSO! +$5.000 & PINTURA SPEEDSTER DESBLOQUEADA!')
+        const justCompleted = this.missions.recordSpeedBomb(45)
+        for (const m of justCompleted) this.completeMission(m)
+        this.updateHud()
+        this.updateMissionCards()
+        this.updateBombMissionUI()
+      }
+    }
+  }
+
+  private updateBombMissionUI(): void {
+    if (!this.bombMissionPanel) return
+    if (this.inVehicle && this.player.kind === 'bomb_car' && !this.bombMissionCompleted) {
+      this.bombMissionPanel.classList.remove('hidden')
+    } else {
+      this.bombMissionPanel.classList.add('hidden')
+    }
+  }
+
+  // ==========================================
+  // 3. MODO FÚRIA / RAMPAGE (GTA 2 / GTA VICE CITY)
+  // ==========================================
+  private initRampageSkull(): void {
+    if (this.rampageSkull) {
+      this.scene.remove(this.rampageSkull)
+    }
+    const group = new THREE.Group()
+    group.position.set(48, 1.6, -48)
+
+    const skullMat = new THREE.MeshStandardMaterial({
+      color: 0xef4444,
+      emissive: 0xdc2626,
+      emissiveIntensity: 2.5,
+      roughness: 0.3,
     })
+    const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), skullMat)
+    cranium.scale.set(1, 1.1, 0.9)
+    group.add(cranium)
+
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.42), skullMat)
+    jaw.position.set(0, -0.42, 0.1)
+    group.add(jaw)
+
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 })
+    for (const ex of [-0.22, 0.22]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), eyeMat)
+      eye.position.set(ex, 0.04, 0.45)
+      group.add(eye)
+    }
+
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.05, 8, 24), haloMat)
+    halo.rotation.x = Math.PI / 2
+    group.add(halo)
+
+    const beaconMat = new THREE.MeshBasicMaterial({
+      color: 0xdc2626,
+      transparent: true,
+      opacity: 0.35,
+    })
+    const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.85, 28, 12), beaconMat)
+    beacon.position.set(0, 14, 0)
+    group.add(beacon)
+
+    this.scene.add(group)
+    this.rampageSkull = group
+  }
+
+  private triggerRampage(): void {
+    if (this.rampageActive) return
+    this.rampageActive = true
+    this.rampageTimer = 60.0
+    this.rampagePoliceDestroyed = 0
+    if (this.rampageSkull) this.rampageSkull.visible = false
+    this.wanted.setLevel(4)
+    this.sound.effect('upgrade')
+    this.showToast('💀 MODO FÚRIA ATIVADO! DESTRUA 15 VIATURAS POLICIAIS EM 60s!')
+    this.updateRampageMissionUI()
+  }
+
+  private updateRampageMission(dt: number): void {
+    if (this.rampageSkull && !this.rampageActive && !this.rampageCompleted) {
+      this.rampageSkull.rotation.y += 2.0 * dt
+      this.rampageSkull.position.y = 1.6 + Math.sin(this.elapsed * 3.5) * 0.25
+
+      const actorPos = this.inVehicle ? this.player.root.position : this.character.root.position
+      const dist = actorPos.distanceTo(this.rampageSkull.position)
+      if (dist <= 3.8) {
+        this.triggerRampage()
+      }
+    }
+
+    if (!this.rampageActive) {
+      if (this.rampageMissionPanel) this.rampageMissionPanel.classList.add('hidden')
+      return
+    }
+
+    if (this.rampageMissionPanel) this.rampageMissionPanel.classList.remove('hidden')
+
+    this.rampageTimer -= dt
+    if (this.rampageTimerVal) this.rampageTimerVal.textContent = `${Math.ceil(this.rampageTimer)}s`
+    if (this.rampageCountVal) this.rampageCountVal.textContent = `${this.rampagePoliceDestroyed} / 15`
+    if (this.rampageFill) this.rampageFill.style.width = `${Math.min(100, (this.rampagePoliceDestroyed / 15) * 100)}%`
+
+    if (this.rampageTimer <= 0) {
+      this.rampageActive = false
+      this.showToast('❌ MODO FÚRIA FALHOU // TEMPO ESGOTADO (60s)')
+      if (this.rampageSkull) this.rampageSkull.visible = true
+      this.updateRampageMissionUI()
+    }
+  }
+
+  private updateRampageMissionUI(): void {
+    if (!this.rampageMissionPanel) return
+    if (this.rampageActive) {
+      this.rampageMissionPanel.classList.remove('hidden')
+    } else {
+      this.rampageMissionPanel.classList.add('hidden')
+    }
+  }
+
+  private rewardXp(amount: number): void {
+    const res = usersDB.addXp(amount)
+    if (res.leveledUp) {
+      this.sound.effect('upgrade')
+      this.showToast(`⭐ SUBIU DE NÍVEL! NÍVEL ${res.newLevel} ALCANÇADO (+R$ ${res.bonusCash.toLocaleString('pt-BR')})!`)
+      this.cash = usersDB.getCurrentUser().cash
+    }
+    this.updateHud()
+  }
+
+  private onUserDataUpdated(user: UserProfile): void {
+    this.currentAuthUser = user
+    this.cash = user.cash
+    this.bestScore = user.highScore
+    this.updateHud()
+    this.updateProfileModalUI()
+  }
+
+  private updateProfileModalUI(): void {
+    const user = usersDB.getCurrentUser()
+    if (this.profileUserName) {
+      this.profileUserName.textContent = user.displayName
+    }
+    if (this.profileSyncBadge) {
+      if (user.isGuest) {
+        this.profileSyncBadge.className = 'sync-badge sync-badge-guest'
+        this.profileSyncBadge.textContent = '⚪ Anônimo (Sem Nuvem)'
+      } else if (user.pendingSync) {
+        this.profileSyncBadge.className = 'sync-badge sync-badge-offline'
+        this.profileSyncBadge.textContent = '🟡 Salvo Offline (users.ts)'
+      } else {
+        this.profileSyncBadge.className = 'sync-badge sync-badge-online'
+        this.profileSyncBadge.textContent = '🟢 Nuvem Sincronizada (Firestore)'
+      }
+    }
+    if (this.profileLevelVal) {
+      this.profileLevelVal.textContent = `Nível ${user.level}`
+    }
+    if (this.profileXpVal) {
+      const req = getXpRequiredForLevel(user.level)
+      this.profileXpVal.textContent = `${user.xp} / ${req} XP (Total: ${user.totalXp.toLocaleString('pt-BR')})`
+    }
+    if (this.profileCashVal) {
+      this.profileCashVal.textContent = `$ ${user.cash.toLocaleString('pt-BR')}`
+    }
+    if (this.profileHighscoreVal) {
+      this.profileHighscoreVal.textContent = `${user.highScore.toLocaleString('pt-BR')} m`
+    }
+
+    if (this.guestWarningBanner) {
+      this.guestWarningBanner.classList.toggle('hidden', !user.isGuest)
+    }
+    if (this.authButtonsList) {
+      this.authButtonsList.classList.toggle('hidden', !user.isGuest)
+    }
+    if (this.signOutBtn) {
+      this.signOutBtn.classList.toggle('hidden', user.isGuest)
+    }
+    if (this.syncNowBtn) {
+      this.syncNowBtn.classList.toggle('hidden', user.isGuest)
+    }
+    if (this.authStatusMsg) {
+      if (user.isGuest) {
+        this.authStatusMsg.textContent = 'Modo Anônimo ativo: dados locais não sincronizados entre dispositivos.'
+      } else if (user.pendingSync) {
+        this.authStatusMsg.textContent = 'Alterações salvas no banco local users.ts. Sincronização automática com Firestore assim que a internet estiver disponível.'
+      } else {
+        this.authStatusMsg.textContent = `Conectado como ${user.displayName} via ${user.provider.toUpperCase()}. Firestore ativo.`
+      }
+    }
+  }
+
+  private async handleSignIn(provider: 'Google' | 'Google Play Games'): Promise<void> {
+    if (this.authStatusMsg) {
+      this.authStatusMsg.textContent = `Autenticando com ${provider}...`
+    }
+    try {
+      if (provider === 'Google') {
+        await usersDB.signInWithGoogle()
+      } else {
+        await usersDB.signInWithPlayGames()
+      }
+      this.sound.effect('upgrade')
+      this.showToast(`CONECTADO VIA ${provider.toUpperCase()} // DADOS SINCRONIZADOS NO FIRESTORE!`)
+      this.updateProfileModalUI()
+      this.updateHud()
+      setTimeout(() => {
+        this.authModal?.classList.add('hidden')
+      }, 1000)
+    } catch (err) {
+      console.error('Sign in error:', err)
+      this.showToast(`ERRO AO CONECTAR COM ${provider.toUpperCase()}`)
+    }
+  }
+
+  private async handleSignOut(): Promise<void> {
+    await usersDB.signOut()
+    this.sound.effect('wanted')
+    this.showToast('DESCONECTADO // JOGANDO COMO ANÔNIMO')
+    this.updateProfileModalUI()
+    this.updateHud()
+  }
+
+  private async handleManualSync(): Promise<void> {
+    if (this.authStatusMsg) {
+      this.authStatusMsg.textContent = 'Sincronizando com Firebase Firestore...'
+    }
+    const success = await usersDB.syncPendingChanges()
+    if (success) {
+      this.sound.effect('upgrade')
+      this.showToast('✅ DADOS SINCRONIZADOS COM SUCESSO NO FIRESTORE!')
+    } else {
+      this.showToast('⚠️ OFFLINE: DADOS PROTEGIDOS NO BANCO USERS.TS')
+    }
+    this.updateProfileModalUI()
+  }
+
+  private createPlayerVehicle(x = 0, z = 0, yaw = 0): Car {
+    const user = this.currentAuthUser
+    const kind = (user.selectedVehicle || 'sedan') as any
+    const car = new Car(this.scene, {
+      kind,
+      playerControlled: true,
+      engineLevel: user.engineUpgradeLevel || 0,
+      armorLevel: user.armorUpgradeLevel || 0,
+      paintStyle: user.selectedPaint || 'default',
+      decalStyle: user.selectedDecal || 'none',
+      equippedParts: user.equippedParts || [],
+    })
+    car.setPosition(x, z, yaw)
+    return car
+  }
+
+  private rebuildPlayerVehicle(): void {
+    const oldPos = this.player.root.position.clone()
+    const oldYaw = this.player.yaw
+    const oldSpeed = this.player.speed
+    const wasRobot = this.player.isRobotMode
+    this.player.dispose()
+    this.player = this.createPlayerVehicle(oldPos.x, oldPos.z, oldYaw)
+    this.player.speed = oldSpeed
+    if (wasRobot && this.player.kind === 'monster_truck') {
+      this.player.toggleRobotMode(true)
+    }
+  }
+
+  // ================= GARAGE & SHOP METHODS =================
+
+  private openShop(): void {
+    if (!this.shopModal) return
+    this.shopModal.classList.remove('hidden')
+    this.updateShopCashDisplay()
+    this.renderShop()
+  }
+
+  private closeShop(): void {
+    this.shopModal?.classList.add('hidden')
+    this.rebuildPlayerVehicle()
+  }
+
+  private switchShopTab(tab: 'vehicles' | 'engine' | 'armor' | 'paints' | 'decals' | 'parts'): void {
+    this.currentShopTab = tab
+    this.shopTabVehicles?.classList.toggle('active', tab === 'vehicles')
+    this.shopTabEngine?.classList.toggle('active', tab === 'engine')
+    this.shopTabArmor?.classList.toggle('active', tab === 'armor')
+    this.shopTabPaints?.classList.toggle('active', tab === 'paints')
+    this.shopTabDecals?.classList.toggle('active', tab === 'decals')
+    this.shopTabParts?.classList.toggle('active', tab === 'parts')
+    this.renderShop()
+  }
+
+  private updateShopCashDisplay(): void {
+    const user = usersDB.getCurrentUser()
+    this.currentAuthUser = user
+    if (this.shopUserCash) {
+      this.shopUserCash.textContent = `$ ${user.cash.toLocaleString('pt-BR')}`
+    }
+    if (this.shopFeedbackMsg) {
+      if (user.isGuest) {
+        this.shopFeedbackMsg.textContent = '👤 Modo Anônimo: Você pode comprar e usar tudo nesta sessão! Conecte-se com Google ou Play Games para salvar permanentemente na nuvem.'
+      } else {
+        this.shopFeedbackMsg.textContent = `☁️ Conectado como ${user.displayName}: Suas compras e garagem são salvas no Firestore.`
+      }
+    }
+  }
+
+  private renderShop(): void {
+    if (!this.shopContentArea) return
+    this.updateShopCashDisplay()
+    const user = this.currentAuthUser
+    const tab = this.currentShopTab
+
+    if (tab === 'vehicles') {
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${SHOP_CATALOG.vehicles
+            .map((v) => {
+              const isUnlocked = user.unlockedVehicles.includes(v.id)
+              const isSelected = user.selectedVehicle === v.id
+              const canAfford = user.cash >= v.price
+
+              return `
+                <div class="shop-item-card ${isUnlocked ? 'unlocked' : ''} ${isSelected ? 'equipped' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon">${v.icon}</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${v.name}</div>
+                      <div class="shop-item-desc">${v.description}</div>
+                    </div>
+                  </div>
+                  <div class="shop-stat-bars">
+                    <div class="shop-stat-row">
+                      <span>VELOCIDADE</span>
+                      <div class="shop-stat-track"><div class="shop-stat-fill speed-fill-bar" style="width: ${v.stats.speed * 10}%"></div></div>
+                      <span>${v.stats.speed}/10</span>
+                    </div>
+                    <div class="shop-stat-row">
+                      <span>BLINDAGEM</span>
+                      <div class="shop-stat-track"><div class="shop-stat-fill armor-fill-bar" style="width: ${v.stats.armor * 10}%"></div></div>
+                      <span>${v.stats.armor}/10</span>
+                    </div>
+                    <div class="shop-stat-row">
+                      <span>ESPECIAL:</span>
+                      <span style="color: #facc15; font-size: 7.5px;">${v.stats.special}</span>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price ${v.price === 0 ? 'free' : ''}">${v.price === 0 ? 'PADRÃO' : `$ ${v.price.toLocaleString('pt-BR')}`}</div>
+                    ${
+                      isSelected
+                        ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ SELECIONADO</button>`
+                        : isUnlocked
+                          ? `<button class="shop-select-btn" type="button" data-action="select-vehicle" data-id="${v.id}">DIRIGIR ESTE</button>`
+                          : `<button class="shop-buy-btn" type="button" data-action="buy-vehicle" data-id="${v.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
+    } else if (tab === 'engine') {
+      const currentLevel = user.engineUpgradeLevel || 0
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${SHOP_CATALOG.engineUpgrades
+            .map((u) => {
+              const isUnlocked = currentLevel >= u.level
+              const isNext = u.level === currentLevel + 1
+              const canAfford = user.cash >= u.price
+
+              return `
+                <div class="shop-item-card ${isUnlocked ? 'equipped' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon">⚡</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${u.name}</div>
+                      <div class="shop-item-desc" style="color: #38bdf8;">${u.bonusText}</div>
+                    </div>
+                  </div>
+                  <div class="shop-stat-bars">
+                    <div class="shop-stat-row">
+                      <span>POTÊNCIA DO MOTOR</span>
+                      <div class="shop-stat-track"><div class="shop-stat-fill speed-fill-bar" style="width: ${(u.level / 5) * 100}%"></div></div>
+                      <span>NÍVEL ${u.level}</span>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price">$ ${u.price.toLocaleString('pt-BR')}</div>
+                    ${
+                      isUnlocked
+                        ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ INSTALADO</button>`
+                        : isNext
+                          ? `<button class="shop-buy-btn" type="button" data-action="buy-engine" ${canAfford ? '' : 'disabled'}>TURBINAR ↗</button>`
+                          : `<button class="shop-buy-btn" type="button" disabled>BLOQUEADO</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
+    } else if (tab === 'armor') {
+      const currentLevel = user.armorUpgradeLevel || 0
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${SHOP_CATALOG.armorUpgrades
+            .map((u) => {
+              const isUnlocked = currentLevel >= u.level
+              const isNext = u.level === currentLevel + 1
+              const canAfford = user.cash >= u.price
+
+              return `
+                <div class="shop-item-card ${isUnlocked ? 'equipped' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon">🛡️</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${u.name}</div>
+                      <div class="shop-item-desc" style="color: #34d399;">${u.bonusText}</div>
+                    </div>
+                  </div>
+                  <div class="shop-stat-bars">
+                    <div class="shop-stat-row">
+                      <span>RESISTÊNCIA DO CHASSI</span>
+                      <div class="shop-stat-track"><div class="shop-stat-fill armor-fill-bar" style="width: ${(u.level / 5) * 100}%"></div></div>
+                      <span>NÍVEL ${u.level}</span>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price">$ ${u.price.toLocaleString('pt-BR')}</div>
+                    ${
+                      isUnlocked
+                        ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ BLINDADO</button>`
+                        : isNext
+                          ? `<button class="shop-buy-btn" type="button" data-action="buy-armor" ${canAfford ? '' : 'disabled'}>REFORÇAR ↗</button>`
+                          : `<button class="shop-buy-btn" type="button" disabled>BLOQUEADO</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
+    } else if (tab === 'paints') {
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${SHOP_CATALOG.paints
+            .map((p) => {
+              const isUnlocked = user.unlockedPaints.includes(p.id)
+              const isSelected = user.selectedPaint === p.id
+              const canAfford = user.cash >= p.price
+
+              return `
+                <div class="shop-item-card ${isUnlocked ? 'unlocked' : ''} ${isSelected ? 'equipped' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon" style="background: ${p.colorHex}; box-shadow: 0 0 12px ${p.colorHex}66;">🎨</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${p.name}</div>
+                      <div class="shop-item-desc">${p.description}</div>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price ${p.price === 0 ? 'free' : ''}">${p.price === 0 ? 'GRÁTIS' : `$ ${p.price.toLocaleString('pt-BR')}`}</div>
+                    ${
+                      isSelected
+                        ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ APLICADA</button>`
+                        : isUnlocked
+                          ? `<button class="shop-select-btn" type="button" data-action="select-paint" data-id="${p.id}">APLICAR</button>`
+                          : `<button class="shop-buy-btn" type="button" data-action="buy-paint" data-id="${p.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
+    } else if (tab === 'decals') {
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${SHOP_CATALOG.decals
+            .map((d) => {
+              const isUnlocked = user.unlockedDecals.includes(d.id)
+              const isSelected = user.selectedDecal === d.id
+              const canAfford = user.cash >= d.price
+
+              return `
+                <div class="shop-item-card ${isUnlocked ? 'unlocked' : ''} ${isSelected ? 'equipped' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon">${d.icon}</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${d.name}</div>
+                      <div class="shop-item-desc">${d.description}</div>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price ${d.price === 0 ? 'free' : ''}">${d.price === 0 ? 'PADRÃO' : `$ ${d.price.toLocaleString('pt-BR')}`}</div>
+                    ${
+                      isSelected
+                        ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ EQUIPADO</button>`
+                        : isUnlocked
+                          ? `<button class="shop-select-btn" type="button" data-action="select-decal" data-id="${d.id}">EQUIPAR</button>`
+                          : `<button class="shop-buy-btn" type="button" data-action="buy-decal" data-id="${d.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
+    } else if (tab === 'parts') {
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${SHOP_CATALOG.parts
+            .map((pt) => {
+              const isUnlocked = user.unlockedParts.includes(pt.id)
+              const isEquipped = user.equippedParts.includes(pt.id)
+              const canAfford = user.cash >= pt.price
+
+              return `
+                <div class="shop-item-card ${isUnlocked ? 'unlocked' : ''} ${isEquipped ? 'equipped' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon">${pt.icon}</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${pt.name}</div>
+                      <div class="shop-item-desc">${pt.description}</div>
+                    </div>
+                  </div>
+                  <div class="shop-stat-bars">
+                    <div class="shop-stat-row">
+                      <span>EFEITO ESPECIAL:</span>
+                      <span style="color: #38bdf8; font-size: 7.5px;">${pt.effect}</span>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price">$ ${pt.price.toLocaleString('pt-BR')}</div>
+                    ${
+                      isEquipped
+                        ? `<button class="shop-select-btn is-selected" type="button" data-action="toggle-part" data-id="${pt.id}">✓ EQUIPADO (DESEQUIPAR)</button>`
+                        : isUnlocked
+                          ? `<button class="shop-select-btn" type="button" data-action="toggle-part" data-id="${pt.id}">INSTALAR NO CARRO</button>`
+                          : `<button class="shop-buy-btn" type="button" data-action="buy-part" data-id="${pt.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
+    }
+
+    // Attach click handlers to buy/select buttons inside shop
+    const buttons = this.shopContentArea.querySelectorAll<HTMLButtonElement>('button[data-action]')
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action
+        const id = btn.dataset.id
+
+        if (action === 'buy-vehicle' && id) {
+          const res = usersDB.buyVehicle(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🏎️ VEÍCULO ADQUIRIDO COM SUCESSO!`)
+            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'select-vehicle' && id) {
+          const res = usersDB.selectVehicle(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🏎️ VEÍCULO EQUIPADO!`)
+            this.rebuildPlayerVehicle()
+          }
+        } else if (action === 'buy-engine') {
+          const res = usersDB.buyEngineUpgrade()
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`⚡ MOTOR TURBINADO PARA O ESTÁGIO ${res.newLevel}!`)
+            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'buy-armor') {
+          const res = usersDB.buyArmorUpgrade()
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🛡️ BLINDAGEM REFORÇADA PARA O NÍVEL ${res.newLevel}!`)
+            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'buy-paint' && id) {
+          const res = usersDB.buyPaint(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🎨 NOVA PINTURA ADQUIRIDA E APLICADA!`)
+            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'select-paint' && id) {
+          const res = usersDB.selectPaint(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🎨 PINTURA ALTERADA COM SUCESSO!`)
+            this.rebuildPlayerVehicle()
+          }
+        } else if (action === 'buy-decal' && id) {
+          const res = usersDB.buyDecal(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🏷️ ADESIVO EXCLUSIVO ADQUIRIDO!`)
+            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'select-decal' && id) {
+          const res = usersDB.selectDecal(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🏷️ ADESIVO APLICADO AO CARRO!`)
+            this.rebuildPlayerVehicle()
+          }
+        } else if (action === 'buy-part' && id) {
+          const res = usersDB.buyPart(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🔧 PEÇA EXCLUSIVA INSTALADA!`)
+            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'toggle-part' && id) {
+          const res = usersDB.toggleEquipPart(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(res.equipped ? `🔧 PEÇA EQUIPADA NO VEÍCULO!` : `🔧 PEÇA DESEQUIPADA.`)
+            this.rebuildPlayerVehicle()
+          }
+        }
+
+        this.renderShop()
+        this.updateHud()
+      })
+    })
+  }
+
+  private openDailyLeaderboard(): void {
+    if (!this.leaderboardModal) return
+    this.leaderboardModal.classList.remove('hidden')
+    void this.loadDailyLeaderboardData()
+  }
+
+  private switchLeaderboardTab(tab: 'xp' | 'cash'): void {
+    this.currentLeaderboardTab = tab
+    this.lbTabXp?.classList.toggle('active', tab === 'xp')
+    this.lbTabCash?.classList.toggle('active', tab === 'cash')
+    if (this.lbColScore) {
+      this.lbColScore.textContent = tab === 'xp' ? 'XP HOJE' : 'DINHEIRO HOJE'
+    }
+    void this.loadDailyLeaderboardData()
+  }
+
+  private async loadDailyLeaderboardData(): Promise<void> {
+    if (!this.leaderboardList) return
+    const user = usersDB.getCurrentUser()
+
+    if (this.leaderboardDateLabel) {
+      const today = new Date()
+      this.leaderboardDateLabel.textContent = `Temporada de Hoje: ${today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`
+    }
+
+    if (this.leaderboardMyStatVal) {
+      if (this.currentLeaderboardTab === 'xp') {
+        this.leaderboardMyStatVal.textContent = `${(user.dailyXp || 0).toLocaleString('pt-BR')} XP ganhos hoje`
+      } else {
+        this.leaderboardMyStatVal.textContent = `$ ${(user.dailyCash || 0).toLocaleString('pt-BR')} ganhos hoje`
+      }
+    }
+
+    this.leaderboardList.innerHTML = '<div class="leaderboard-loading">Carregando classificação do Firestore...</div>'
+
+    try {
+      const data = await usersDB.getDailyLeaderboard(this.currentLeaderboardTab)
+      if (!data || data.length === 0) {
+        this.leaderboardList.innerHTML = '<div class="leaderboard-loading">Nenhum registro ainda hoje. Seja o primeiro a pontuar!</div>'
+        return
+      }
+
+      this.leaderboardList.innerHTML = data
+        .map((entry, index) => {
+          const rank = index + 1
+          const rankClass = rank === 1 ? 'lb-rank lb-rank-1' : rank === 2 ? 'lb-rank lb-rank-2' : rank === 3 ? 'lb-rank lb-rank-3' : 'lb-rank'
+          const medal = rank === 1 ? '🥇 ' : rank === 2 ? '🥈 ' : rank === 3 ? '🥉 ' : `#${rank}`
+          const score = this.currentLeaderboardTab === 'xp'
+            ? `${(entry.dailyXp || 0).toLocaleString('pt-BR')} XP`
+            : `$ ${(entry.dailyCash || 0).toLocaleString('pt-BR')}`
+          const providerIcon = entry.provider === 'google' ? '🇬' : entry.provider === 'playgames' ? '🎮' : '👤'
+
+          return `
+            <div class="leaderboard-row ${entry.isCurrentPlayer ? 'player-row' : ''}">
+              <span class="${rankClass}">${medal}</span>
+              <span class="lb-name" title="${entry.displayName}">${providerIcon} ${entry.displayName}</span>
+              <span class="lb-lvl">NV ${entry.level}</span>
+              <span class="lb-score">${score}</span>
+            </div>
+          `
+        })
+        .join('')
+    } catch (err) {
+      console.error('Error loading leaderboard:', err)
+      this.leaderboardList.innerHTML = '<div class="leaderboard-loading">Erro ao carregar dados online. Exibindo dados locais.</div>'
+    }
   }
 
   private formatTime(seconds: number): string {
@@ -2485,6 +4165,22 @@ export class Game {
     }
   }
 
+  get isFastestCabbie(): boolean {
+    return this.hasFastestCabbieTitle
+  }
+
+  get isUrbanDestroyer(): boolean {
+    return this.hasUrbanDestroyerTrophy
+  }
+
+  get isSpeedPaintUnlocked(): boolean {
+    return this.hasExclusiveSpeedPaint
+  }
+
+  get userProfile(): UserProfile {
+    return this.currentAuthUser
+  }
+
   dispose(): void {
     window.removeEventListener('resize', this.resize)
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
@@ -2497,6 +4193,11 @@ export class Game {
     for (const tank of this.tanks) tank.dispose()
     for (const heli of this.helicopters) heli.dispose()
     for (const car of this.abandonedCars) car.dispose()
+    for (const sc of this.strandedCars) {
+      sc.car.dispose()
+      this.scene.remove(sc.marker)
+    }
+    this.strandedCars.length = 0
     this.player.dispose()
     this.character.dispose()
     this.pursuit.dispose()

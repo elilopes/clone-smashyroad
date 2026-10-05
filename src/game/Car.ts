@@ -8,22 +8,45 @@ export interface DriveInput {
   thrust?: boolean
 }
 
-export type VehicleKind = 'sedan' | 'suv' | 'pickup' | 'truck' | 'bus' | 'bicycle' | 'fuel_tanker' | 'monster_truck'
+export type VehicleKind =
+  | 'sedan'
+  | 'suv'
+  | 'pickup'
+  | 'truck'
+  | 'bus'
+  | 'bicycle'
+  | 'fuel_tanker'
+  | 'monster_truck'
+  | 'car_hauler'
+  | 'taxi'
+  | 'bomb_car'
+  | 'hyper_f1'
+  | 'tactical_tanker'
 
 export function getMaxHits(kind: VehicleKind): number {
   if (kind === 'monster_truck') return 100 // Monster truck ultra reforçado: suporta 100 colisões
+  if (kind === 'tactical_tanker') return 70 // Blindado Tático SWAT Enforcer
   if (kind === 'fuel_tanker') return 4 // Caminhão tanque suporta 4 colisões antes de explodir
+  if (kind === 'car_hauler') return 35 // Caminhão cegonha resistente com rampa
   if (kind === 'truck' || kind === 'bus') return 30
+  if (kind === 'bomb_car') return 25 // Esportivo blindado do carro-bomba
+  if (kind === 'hyper_f1') return 22 // Monoposto de alta velocidade Le Mans/F1
   if (kind === 'suv' || kind === 'pickup') return 20
+  if (kind === 'taxi') return 18
   if (kind === 'bicycle') return 8
   return 15 // carro normal (sedan / default)
 }
 
 export function getSmokeThresholdHits(kind: VehicleKind): number {
   if (kind === 'monster_truck') return 80
+  if (kind === 'tactical_tanker') return 55
   if (kind === 'fuel_tanker') return 2
+  if (kind === 'car_hauler') return 28
   if (kind === 'truck' || kind === 'bus') return 25
+  if (kind === 'bomb_car') return 16
+  if (kind === 'hyper_f1') return 15
   if (kind === 'suv' || kind === 'pickup') return 15
+  if (kind === 'taxi') return 12
   if (kind === 'bicycle') return 5
   return 10 // carro normal (sedan / default)
 }
@@ -35,11 +58,46 @@ export interface CarOptions {
   kind?: VehicleKind
   scale?: number
   mass?: number
+  engineLevel?: number
+  armorLevel?: number
+  paintStyle?: string
+  decalStyle?: string
+  equippedParts?: string[]
 }
 
 const wheelGeometry = new THREE.CylinderGeometry(0.38, 0.38, 0.25, 10)
 const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x171a1a, roughness: 0.91 })
 const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x91b6bd, roughness: 0.32, metalness: 0.12 })
+
+let cachedHazardTexture: THREE.CanvasTexture | null = null
+function getHazardStripeTexture(): THREE.CanvasTexture {
+  if (cachedHazardTexture) return cachedHazardTexture
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.fillStyle = '#facc15'
+    ctx.fillRect(0, 0, 256, 256)
+    ctx.fillStyle = '#0f172a'
+    const stripeW = 32
+    for (let x = -256; x < 512; x += stripeW * 2) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x + stripeW, 0)
+      ctx.lineTo(x + stripeW + 256, 256)
+      ctx.lineTo(x + 256, 256)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(1, 4)
+  cachedHazardTexture = tex
+  return tex
+}
 
 export class Car {
   readonly scene: THREE.Scene
@@ -48,6 +106,8 @@ export class Car {
   readonly truckGroup = new THREE.Group()
   readonly robotGroup = new THREE.Group()
   readonly wheels: THREE.Mesh[] = []
+  haulerCollectedCarsCount = 0
+  private readonly haulerCargoSlots: THREE.Group[] = []
   isRobotMode = false
   isThrusting = false
   private robotThrusters: THREE.Object3D[] = []
@@ -87,28 +147,182 @@ export class Car {
   private throttleInput = 0
   private disposed = false
 
+  readonly engineLevel: number
+  readonly armorLevel: number
+  readonly paintStyle: string
+  readonly decalStyle: string
+  readonly equippedParts: string[]
+  hasNitroBooster = false
+  hasSteelRam = false
+  hasHydraulicJump = false
+  hasUnderglow = false
+  hasForgedWheels = false
+  swordSlashTimer = 0
+  swordSlashCooldown = 0
+  private swordSlashTrailGroup?: THREE.Group
+
   constructor(scene: THREE.Scene, options: CarOptions = {}) {
     this.scene = scene
     this.scale = options.scale ?? 1
     this.kind = options.kind ?? 'sedan'
     this.police = options.police ?? false
     this.playerControlled = options.playerControlled ?? false
-    this.rammingForce = this.playerControlled ? (this.kind === 'monster_truck' ? 2.6 : 1.05) : 1
-    this.maxHits = getMaxHits(this.kind)
-    this.smokeThreshold = getSmokeThresholdHits(this.kind)
-    this.mass = options.mass ?? (this.kind === 'monster_truck' ? 6.5 : this.kind === 'bicycle' ? 0.32 : this.kind === 'fuel_tanker' ? 3.2 : this.kind === 'bus' ? 3.1 : this.kind === 'truck' ? 2.6 : this.kind === 'suv' ? 1.65 : 1.25)
-    this.wheelBase = this.kind === 'monster_truck' ? 1.95 : this.kind === 'bicycle' ? 0.78 : this.kind === 'fuel_tanker' ? 2.4 : this.kind === 'bus' ? 2.8 : this.kind === 'truck' ? 2.1 : this.kind === 'suv' || this.kind === 'pickup' ? 1.45 : 1.25
-    this.halfWidth = this.kind === 'monster_truck' ? 2.05 : this.kind === 'bicycle' ? 0.34 : this.kind === 'fuel_tanker' ? 1.32 : this.kind === 'bus' ? 1.32 : this.kind === 'truck' ? 1.28 : this.kind === 'suv' ? 1.2 : this.kind === 'pickup' ? 1.12 : 1.06
-    this.halfLength = this.kind === 'monster_truck' ? 2.8 : this.kind === 'bicycle' ? 0.96 : this.kind === 'fuel_tanker' ? 3.95 : this.kind === 'bus' ? 4.1 : this.kind === 'truck' ? 3.3 : this.kind === 'suv' ? 2.35 : this.kind === 'pickup' ? 2.45 : 2.075
+    this.engineLevel = options.engineLevel ?? 0
+    this.armorLevel = options.armorLevel ?? 0
+    this.paintStyle = options.paintStyle ?? 'default'
+    this.decalStyle = options.decalStyle ?? 'none'
+    this.equippedParts = options.equippedParts ?? []
+
+    this.hasNitroBooster = this.equippedParts.includes('nitro_booster')
+    this.hasSteelRam = this.equippedParts.includes('steel_ram')
+    this.hasHydraulicJump = this.equippedParts.includes('hydraulic_jump')
+    this.hasUnderglow = this.equippedParts.includes('underglow')
+    this.hasForgedWheels = this.equippedParts.includes('forged_wheels')
+
+    const baseRamming = this.playerControlled ? (this.kind === 'monster_truck' ? 2.6 : this.kind === 'tactical_tanker' ? 2.4 : 1.05) : 1
+    this.rammingForce = this.hasSteelRam ? baseRamming * 2.8 : baseRamming
+
+    const rawMaxHits = getMaxHits(this.kind)
+    this.maxHits = Math.round(rawMaxHits * (1 + this.armorLevel * 0.4))
+    this.smokeThreshold = Math.round(getSmokeThresholdHits(this.kind) * (1 + this.armorLevel * 0.4))
+
+    this.mass =
+      options.mass ??
+      (this.kind === 'monster_truck'
+        ? 6.5
+        : this.kind === 'tactical_tanker'
+          ? 5.4
+          : this.kind === 'bicycle'
+            ? 0.32
+            : this.kind === 'fuel_tanker'
+              ? 3.2
+              : this.kind === 'bus'
+                ? 3.1
+                : this.kind === 'truck'
+                  ? 2.6
+                  : this.kind === 'suv'
+                    ? 1.65
+                    : this.kind === 'bomb_car'
+                      ? 1.45
+                      : this.kind === 'hyper_f1'
+                        ? 1.05
+                        : 1.25)
+    this.wheelBase =
+      this.kind === 'monster_truck'
+        ? 1.95
+        : this.kind === 'tactical_tanker'
+          ? 2.2
+          : this.kind === 'bicycle'
+            ? 0.78
+            : this.kind === 'fuel_tanker'
+              ? 2.4
+              : this.kind === 'bus'
+                ? 2.8
+                : this.kind === 'truck'
+                  ? 2.1
+                  : this.kind === 'bomb_car'
+                    ? 1.35
+                    : this.kind === 'hyper_f1'
+                      ? 1.55
+                      : this.kind === 'suv' || this.kind === 'pickup'
+                        ? 1.45
+                        : 1.25
+    this.halfWidth =
+      this.kind === 'monster_truck'
+        ? 2.05
+        : this.kind === 'tactical_tanker'
+          ? 1.38
+          : this.kind === 'bicycle'
+            ? 0.34
+            : this.kind === 'fuel_tanker'
+              ? 1.32
+              : this.kind === 'bus'
+                ? 1.32
+                : this.kind === 'truck'
+                  ? 1.28
+                  : this.kind === 'suv'
+                    ? 1.2
+                    : this.kind === 'bomb_car'
+                      ? 1.14
+                      : this.kind === 'hyper_f1'
+                        ? 1.18
+                        : this.kind === 'pickup'
+                          ? 1.12
+                          : 1.06
+    this.halfLength =
+      this.kind === 'monster_truck'
+        ? 2.8
+        : this.kind === 'tactical_tanker'
+          ? 3.3
+          : this.kind === 'bicycle'
+            ? 0.96
+            : this.kind === 'fuel_tanker'
+              ? 3.95
+              : this.kind === 'bus'
+                ? 4.1
+                : this.kind === 'truck'
+                  ? 3.3
+                  : this.kind === 'suv'
+                    ? 2.35
+                    : this.kind === 'bomb_car'
+                      ? 2.25
+                      : this.kind === 'hyper_f1'
+                        ? 2.5
+                        : this.kind === 'pickup'
+                          ? 2.45
+                          : 2.075
+
+    // Paint Style Material Configuration
+    let pColor = options.color ?? (this.kind === 'monster_truck' ? 0x0ea5e9 : this.kind === 'fuel_tanker' ? 0xf0f3f6 : this.kind === 'taxi' ? 0xfacc15 : this.kind === 'bomb_car' ? 0x18181b : this.kind === 'hyper_f1' ? 0xef4444 : this.kind === 'tactical_tanker' ? 0x272e38 : 0x2789d5)
+    let pRoughness = 0.45
+    let pMetalness = 0.2
+    let pEmissive: number | undefined
+    let pEmissiveIntensity: number | undefined
+
+    if (this.paintStyle === 'gold') {
+      pColor = 0xfacc15
+      pRoughness = 0.15
+      pMetalness = 0.95
+    } else if (this.paintStyle === 'stealth') {
+      pColor = 0x141619
+      pRoughness = 0.92
+      pMetalness = 0.1
+    } else if (this.paintStyle === 'cyberpunk') {
+      pColor = 0xc026d3
+      pRoughness = 0.25
+      pMetalness = 0.6
+      pEmissive = 0x701a75
+      pEmissiveIntensity = 0.4
+    } else if (this.paintStyle === 'fury_red') {
+      pColor = 0xdc2626
+      pRoughness = 0.28
+      pMetalness = 0.5
+    } else if (this.paintStyle === 'emerald') {
+      pColor = 0x10b981
+      pRoughness = 0.3
+      pMetalness = 0.6
+    } else if (this.paintStyle === 'pearl') {
+      pColor = 0xf8fafc
+      pRoughness = 0.12
+      pMetalness = 0.75
+    } else if (this.paintStyle === 'camo') {
+      pColor = 0x4d5b44
+      pRoughness = 0.85
+      pMetalness = 0.25
+    }
+
     this.bodyMaterial = new THREE.MeshStandardMaterial({
-      color: options.color ?? (this.kind === 'monster_truck' ? 0x0ea5e9 : this.kind === 'fuel_tanker' ? 0xf0f3f6 : 0x2789d5),
-      roughness: 0.45,
-      metalness: 0.2,
+      color: pColor,
+      roughness: pRoughness,
+      metalness: pMetalness,
+      ...(pEmissive ? { emissive: pEmissive, emissiveIntensity: pEmissiveIntensity } : {}),
     })
+
     this.root.scale.setScalar(this.scale)
     this.root.add(this.truckGroup)
     this.root.add(this.robotGroup)
     this.buildBody(this.police)
+    this.buildCustomAddons()
     this.scene.add(this.root)
   }
 
@@ -122,6 +336,31 @@ export class Car {
   }
 
   private buildBody(police: boolean): void {
+    if (this.kind === 'hyper_f1') {
+      this.buildHyperF1()
+      return
+    }
+
+    if (this.kind === 'tactical_tanker') {
+      this.buildTacticalTanker()
+      return
+    }
+
+    if (this.kind === 'taxi') {
+      this.buildTaxi()
+      return
+    }
+
+    if (this.kind === 'bomb_car') {
+      this.buildBombCar()
+      return
+    }
+
+    if (this.kind === 'car_hauler') {
+      this.buildCarHauler()
+      return
+    }
+
     if (this.kind === 'monster_truck') {
       this.buildMonsterTruck()
       this.buildTransformersRobot()
@@ -563,6 +802,594 @@ export class Car {
     }
   }
 
+  private buildCarHauler(): void {
+    const chassisMat = new THREE.MeshStandardMaterial({ color: 0x1e2226, roughness: 0.85, metalness: 0.3 })
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.85 })
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7, metalness: 0.4 })
+    const hazardMat = new THREE.MeshStandardMaterial({
+      map: getHazardStripeTexture(),
+      roughness: 0.55,
+      metalness: 0.2,
+    })
+
+    // 1. Chassis Frame:
+    // Side longitudinal steel beams (leaving center 100% open and clear for the ramp)
+    for (const side of [-1.15, 1.15]) {
+      this.addBox([0.22, 0.45, 8.8], 0.6, chassisMat, side, 0.4)
+    }
+    this.addBox([2.48, 0.46, 0.32], 0.68, chassisMat, 0, -3.52) // Front heavy push bumper
+    // Rear side bumper corners (leaving center wide open to the road)
+    for (const side of [-1.22, 1.22]) {
+      this.addBox([0.18, 0.36, 0.32], 0.45, chassisMat, side, 4.65)
+    }
+
+    // 2. Cab (Truck front)
+    this.addBox([2.36, 1.62, 2.15], 1.6, this.bodyMaterial, 0, -2.4)
+    this.addBox([2.28, 0.42, 1.8], 2.62, this.bodyMaterial, 0, -2.35) // Roof deflector
+    const windshield = this.addBox([1.96, 0.74, 0.09], 1.82, glassMaterial, 0, -3.48)
+    windshield.rotation.x = -0.14
+    this.addBox([0.08, 0.58, 0.98], 1.82, glassMaterial, -1.19, -2.4)
+    this.addBox([0.08, 0.58, 0.98], 1.82, glassMaterial, 1.19, -2.4)
+    this.addBox([2.15, 0.52, 0.12], 1.12, chassisMat, 0, -3.48) // Front grille surround
+    this.addBox([1.65, 0.42, 0.06], 1.12, chromeMat, 0, -3.5) // Front chrome louvers
+
+    // Side Mirrors
+    for (const sm of [-1.24, 1.24]) {
+      this.addBox([0.16, 0.38, 0.18], 1.82, chassisMat, sm, -2.85)
+      this.addBox([0.04, 0.32, 0.12], 1.82, glassMaterial, sm + (sm > 0 ? 0.08 : -0.08), -2.85)
+    }
+
+    // Dual vertical chrome exhaust stacks
+    for (const ex of [-1.18, 1.18]) {
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 10), chromeMat)
+      stack.position.set(ex, 2.45, -1.25)
+      this.root.add(stack)
+    }
+
+    // Dual side diesel fuel tanks
+    for (const side of [-1, 1]) {
+      const tankGeo = new THREE.CylinderGeometry(0.32, 0.32, 1.6, 12)
+      tankGeo.rotateX(Math.PI / 2)
+      const dTank = new THREE.Mesh(tankGeo, chromeMat)
+      dTank.position.set(side * 1.22, 0.68, -0.7)
+      this.root.add(dTank)
+    }
+
+    // 3. Upper Deck overhead launch deck above cab
+    this.addBox([2.36, 0.12, 2.4], 2.45, steelMat, 0, -1.0)
+
+    // Structural Vertical & Diagonal Steel Truss Pillars
+    for (const zPillar of [-1.2, 0.3, 1.7]) {
+      for (const side of [-1.2, 1.2]) {
+        this.addBox([0.12, 1.65, 0.14], 1.48, steelMat, side, zPillar)
+      }
+    }
+    // Upper deck side safety guard rails
+    for (const side of [-1.2, 1.2]) {
+      this.addBox([0.08, 0.22, 2.6], 2.6, chassisMat, side, -1.0)
+    }
+
+    // 4. THE INCLINED LAUNCH RAMP (Slopes DOWNWARDS to the asphalt at the rear of the truck!)
+    // Rear touchdown point: z = +5.6, Y = 0.04 (touching pavement)
+    // Front launch lip: z = -1.0, Y = 2.45 (high up over the cab)
+    const dz = 6.6
+    const dy = 2.41
+    const rampLength = Math.hypot(dz, dy) // ~7.02m
+    const rampAngle = Math.atan2(dy, dz) // ~0.35 radians
+    const rampCenterZ = (5.6 - 1.0) / 2 // +2.30
+    const rampCenterY = (0.04 + 2.45) / 2 // +1.245
+
+    const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(2.30, 0.10, rampLength), hazardMat)
+    rampMesh.position.set(0, rampCenterY, rampCenterZ)
+    rampMesh.rotation.x = rampAngle
+    rampMesh.castShadow = true
+    rampMesh.receiveShadow = true
+    this.root.add(rampMesh)
+
+    // Ramp raised lateral safety curbs / guide tracks
+    for (const side of [-1.16, 1.16]) {
+      const railMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, rampLength), chassisMat)
+      railMesh.position.set(side, rampCenterY + 0.12, rampCenterZ)
+      railMesh.rotation.x = rampAngle
+      railMesh.castShadow = true
+      this.root.add(railMesh)
+    }
+
+    // Ground transition entry plate at the very rear (z = +5.6 to +6.3), touching the pavement at Y = 0.01!
+    const toeMat = new THREE.MeshStandardMaterial({
+      map: getHazardStripeTexture(),
+      roughness: 0.5,
+    })
+    const toePlate = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.04, 0.7), toeMat)
+    toePlate.position.set(0, 0.02, 5.85)
+    toePlate.rotation.x = Math.atan2(0.06, 0.7)
+    toePlate.castShadow = true
+    toePlate.receiveShadow = true
+    this.root.add(toePlate)
+
+    // Glowing Green Run-up Chevron Arrows on the Ramp
+    const chevronMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x16a34a,
+      emissiveIntensity: 2.2,
+    })
+    for (let c = 0; c < 4; c++) {
+      const cz = 4.8 - c * 1.5
+      const ct = (5.6 - cz) / 6.6
+      const cy = 0.04 + ct * 2.41 + 0.06
+      const chevron = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 3), chevronMat)
+      chevron.position.set(0, cy, cz)
+      chevron.rotation.x = rampAngle - Math.PI / 2
+      this.root.add(chevron)
+    }
+
+    // Hydraulic ramp lift cylinders underneath
+    for (const side of [-0.85, 0.85]) {
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 8), chromeMat)
+      cyl.position.set(side, 0.85, 1.9)
+      cyl.rotation.x = -0.35
+      this.root.add(cyl)
+    }
+
+    // 5. Glowing Launch Lip Indicator & Ramp Entry Beacons
+    const launchLipMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x16a34a,
+      emissiveIntensity: 2.4,
+    })
+    this.addBox([2.34, 0.16, 0.28], 2.48, launchLipMat, 0, -1.0)
+
+    const entryBeaconMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      emissive: 0xd97706,
+      emissiveIntensity: 1.8,
+    })
+    for (const side of [-1.18, 1.18]) {
+      this.addBox([0.16, 0.38, 0.16], 0.28, entryBeaconMat, side, 5.6)
+    }
+
+    // 6. Slots for Rescued/Collected Cars
+    this.initHaulerCargoSlots()
+
+    // 7. Heavy 8-Wheel Configuration for Car Hauler
+    const haulerWheelPositions: [number, number][] = [
+      [-1.22, -2.45], [1.22, -2.45],
+      [-1.22, 0.45], [1.22, 0.45],
+      [-1.22, 1.75], [1.22, 1.75],
+      [-1.22, 3.05], [1.22, 3.05],
+    ]
+    const alloyMat = new THREE.MeshStandardMaterial({ color: 0xdde3ea, roughness: 0.25, metalness: 0.8 })
+    const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.26, 10)
+    for (const [wx, wz] of haulerWheelPositions) {
+      const wheel = new THREE.Mesh(wheelGeometry, tireMaterial)
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(wx, 0.47, wz)
+      wheel.castShadow = true
+      const rim = new THREE.Mesh(rimGeo, alloyMat)
+      rim.rotation.z = Math.PI / 2
+      rim.position.set(wx, 0.47, wz)
+      this.root.add(wheel)
+      this.root.add(rim)
+      this.wheels.push(wheel)
+    }
+  }
+
+  private buildTaxi(): void {
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.75, metalness: 0.4 })
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.85 })
+    const taxiYellowMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35, metalness: 0.15 })
+
+    // 1. Sleek Sedan Body in Vibrant Taxi Yellow
+    this.addBox([2.18, 0.52, 4.35], 0.68, taxiYellowMat, 0, 0)
+    this.addBox([2.24, 0.28, 0.25], 0.58, trimMat, 0, -2.18) // Front bumper
+    this.addBox([2.24, 0.28, 0.25], 0.58, trimMat, 0, 2.18) // Rear bumper
+
+    // 2. Hood with Power Bulge & Grille
+    this.addBox([2.04, 0.38, 1.45], 1.05, taxiYellowMat, 0, -1.25)
+    this.addBox([0.75, 0.12, 0.95], 1.25, taxiYellowMat, 0, -1.25)
+    this.addBox([1.5, 0.36, 0.08], 0.95, chromeMat, 0, -2.18) // Chrome grille
+
+    // 3. Cabin Greenhouse
+    this.addBox([1.82, 0.72, 2.18], 1.28, taxiYellowMat, 0, 0.12)
+    this.addBox([1.84, 0.12, 2.15], 1.66, taxiYellowMat, 0, 0.12) // Roof
+
+    // Windshield & Windows
+    const windshield = this.addBox([1.62, 0.58, 0.09], 1.32, glassMaterial, 0, -0.62)
+    windshield.rotation.x = -0.3
+    this.addBox([0.08, 0.48, 1.6], 1.32, glassMaterial, -0.92, 0.12)
+    this.addBox([0.08, 0.48, 1.6], 1.32, glassMaterial, 0.92, 0.12)
+    const rearGlass = this.addBox([1.58, 0.52, 0.09], 1.32, glassMaterial, 0, 0.88)
+    rearGlass.rotation.x = 0.32
+
+    // Black/White Checkered Taxi Livery Decal Stripes on Doors
+    const checkerMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 })
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9 })
+    for (const side of [-1, 1]) {
+      for (let ch = -3; ch <= 3; ch++) {
+        const mat = Math.abs(ch) % 2 === 0 ? checkerMat : whiteMat
+        this.addBox([0.02, 0.14, 0.22], 0.76, mat, side * 1.10, ch * 0.23)
+      }
+    }
+
+    // 4. Glowing Illuminated "TAXI" Roof Light Box
+    const taxiSignMat = new THREE.MeshStandardMaterial({
+      color: 0xfffbeb,
+      emissive: 0xfef08a,
+      emissiveIntensity: 1.8,
+      roughness: 0.2,
+    })
+    const signBaseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+    this.addBox([0.72, 0.06, 0.32], 1.74, signBaseMat, 0, 0.08)
+    this.addBox([0.62, 0.22, 0.24], 1.86, taxiSignMat, 0, 0.08)
+
+    // Rear Trunk Deck
+    this.addBox([1.95, 0.38, 1.05], 0.98, taxiYellowMat, 0, 1.55)
+    // Dual Chrome Exhaust
+    for (const ex of [-0.62, 0.62]) {
+      const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.25, 10), chromeMat)
+      exhaust.rotation.x = Math.PI / 2
+      exhaust.position.set(ex, 0.48, 2.22)
+      this.root.add(exhaust)
+    }
+  }
+
+  private buildBombCar(): void {
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.25, metalness: 0.6 }) // Obsidian Black
+    const redAccentMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4, metalness: 0.3 }) // Crimson Racing Accents
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.8, metalness: 0.5 })
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.15, metalness: 0.9 })
+
+    // 1. Low-slung Sports Car Body
+    this.addBox([2.22, 0.46, 4.45], 0.62, darkMat, 0, 0)
+    this.addBox([2.28, 0.24, 0.35], 0.52, redAccentMat, 0, -2.25) // Aggressive Front Splitter
+    this.addBox([2.28, 0.28, 0.35], 0.54, trimMat, 0, 2.25) // Rear Diffuser
+
+    // 2. Wide Aero Fenders
+    for (const side of [-1, 1]) {
+      this.addBox([0.16, 0.42, 1.05], 0.78, redAccentMat, side * 1.13, -1.25)
+      this.addBox([0.16, 0.42, 1.05], 0.78, redAccentMat, side * 1.13, 1.25)
+    }
+
+    // 3. Cabin with Tinted Glass
+    this.addBox([1.84, 0.68, 2.1], 1.22, darkMat, 0, 0.1)
+    const darkGlass = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15, metalness: 0.4 })
+    const windshield = this.addBox([1.64, 0.56, 0.09], 1.26, darkGlass, 0, -0.62)
+    windshield.rotation.x = -0.34
+    this.addBox([0.08, 0.46, 1.55], 1.26, darkGlass, -0.93, 0.1)
+    this.addBox([0.08, 0.46, 1.55], 1.26, darkGlass, 0.93, 0.1)
+    const rearGlass = this.addBox([1.6, 0.50, 0.09], 1.26, darkGlass, 0, 0.85)
+    rearGlass.rotation.x = 0.36
+
+    // 4. High-Performance Racing GT Wing / Spoiler
+    for (const side of [-0.75, 0.75]) {
+      this.addBox([0.06, 0.42, 0.12], 1.35, trimMat, side, 2.15)
+    }
+    this.addBox([2.04, 0.08, 0.42], 1.56, redAccentMat, 0, 2.15)
+
+    // 5. BOMB UNIT STRAPPED ON ROOF & WIRES (The Mike Lips / Speed Bomb)
+    const bombMat = new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.7, metalness: 0.5 })
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: 0xef4444,
+      emissive: 0xdc2626,
+      emissiveIntensity: 2.5,
+    })
+    const wireMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.8 })
+    // C4 Dynamite / Explosive Block
+    this.addBox([0.65, 0.22, 0.75], 1.66, bombMat, 0, 0.15)
+    // Digital Countdown Timer Display (Flashing LED)
+    this.addBox([0.35, 0.12, 0.04], 1.76, ledMat, 0, -0.22)
+    // Detonator Horn & Wires
+    this.addBox([0.14, 0.14, 0.14], 1.78, chromeMat, 0.2, 0.15)
+    this.addBox([0.04, 0.04, 0.6], 1.68, wireMat, -0.22, 0.15)
+  }
+
+  private buildHyperF1(): void {
+    const carbonMat = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.85, metalness: 0.6 })
+    const redAccentMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3, metalness: 0.4 })
+    const titaniumMat = new THREE.MeshStandardMaterial({ color: 0xdde3ea, roughness: 0.15, metalness: 0.95 })
+    const rainLightMat = new THREE.MeshStandardMaterial({ color: 0xff1e27, emissive: 0xff0015, emissiveIntensity: 2.8 })
+
+    // 1. Sleek Monocoque Chassis & Long Aero Nose Cone
+    this.addBox([1.05, 0.34, 3.8], 0.38, this.bodyMaterial, 0, 0)
+    this.addBox([0.65, 0.24, 1.8], 0.32, this.bodyMaterial, 0, -2.2) // Long tapered nose cone
+    this.addBox([0.45, 0.18, 0.6], 0.26, this.bodyMaterial, 0, -2.85) // Front nose tip
+
+    // Front Multi-Element Wing with Endplates
+    this.addBox([2.24, 0.06, 0.52], 0.22, carbonMat, 0, -2.8)
+    this.addBox([2.24, 0.04, 0.28], 0.28, redAccentMat, 0, -2.7) // Upper wing flap
+    this.addBox([0.06, 0.28, 0.65], 0.32, carbonMat, -1.12, -2.8) // Left endplate
+    this.addBox([0.06, 0.28, 0.65], 0.32, carbonMat, 1.12, -2.8) // Right endplate
+
+    // 2. Cockpit Tub & Titanium Halo Safety System
+    this.addBox([0.82, 0.28, 1.4], 0.62, carbonMat, 0, -0.2) // Cockpit tub
+    // Halo curved bar
+    this.addBox([0.68, 0.08, 0.08], 0.92, titaniumMat, 0, -0.62) // Halo center arch
+    this.addBox([0.06, 0.08, 0.72], 0.92, titaniumMat, -0.32, -0.26) // Halo left stalk
+    this.addBox([0.06, 0.08, 0.72], 0.92, titaniumMat, 0.32, -0.26) // Halo right stalk
+    this.addBox([0.06, 0.32, 0.06], 0.78, titaniumMat, 0, -0.62) // Center pillar
+
+    // 3. Sidepods & Overhead Airbox Intake
+    for (const side of [-1, 1]) {
+      this.addBox([0.45, 0.36, 2.0], 0.45, this.bodyMaterial, side * 0.72, 0.1) // Sculpted sidepod
+      this.addBox([0.38, 0.28, 0.08], 0.45, carbonMat, side * 0.72, -0.92) // Radiator intake vent
+      this.addBox([0.35, 0.04, 1.95], 0.24, carbonMat, side * 0.85, 0.1) // Floor barge board
+    }
+    // Overhead Airbox
+    this.addBox([0.32, 0.38, 0.68], 0.96, this.bodyMaterial, 0, 0.35)
+    this.addBox([0.24, 0.22, 0.06], 0.96, carbonMat, 0, 0.0) // Airbox intake
+
+    // Shark Fin Engine Cover
+    this.addBox([0.06, 0.52, 1.4], 1.02, redAccentMat, 0, 1.25)
+
+    // 4. Massive Double-Deck Rear Wing with Swan-Neck Mounts
+    this.addBox([0.06, 0.62, 0.18], 1.02, carbonMat, -0.4, 2.15) // Mount L
+    this.addBox([0.06, 0.62, 0.18], 1.02, carbonMat, 0.4, 2.15) // Mount R
+    this.addBox([1.98, 0.08, 0.52], 1.32, this.bodyMaterial, 0, 2.18) // Main rear wing element
+    this.addBox([1.98, 0.06, 0.32], 1.44, redAccentMat, 0, 2.22) // DRS flap
+    this.addBox([0.06, 0.52, 0.68], 1.25, carbonMat, -0.98, 2.2) // Wing endplate L
+    this.addBox([0.06, 0.52, 0.68], 1.25, carbonMat, 0.98, 2.2) // Wing endplate R
+
+    // 5. Rear Diffuser & FIA Flashing Rain Light
+    this.addBox([1.2, 0.22, 0.5], 0.24, carbonMat, 0, 2.1)
+    this.addBox([0.22, 0.16, 0.06], 0.35, rainLightMat, 0, 2.38)
+
+    // Wide F1 Slick Racing Wheels with Center-lock Nuts
+    const f1WheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.35, 14)
+    const f1WheelPositions: [number, number][] = [
+      [-1.15, -1.6],
+      [1.15, -1.6],
+      [-1.18, 1.55],
+      [1.18, 1.55],
+    ]
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: this.hasForgedWheels ? 0xfacc15 : 0x1f242d,
+      roughness: this.hasForgedWheels ? 0.15 : 0.6,
+      metalness: 0.85,
+    })
+    const centerNutMat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.9 })
+
+    for (const [wx, wz] of f1WheelPositions) {
+      const wheel = new THREE.Mesh(f1WheelGeo, tireMaterial)
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(wx, 0.38, wz)
+      wheel.castShadow = true
+
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.36, 12), rimMat)
+      rim.rotation.z = Math.PI / 2
+      wheel.add(rim)
+
+      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.38, 8), centerNutMat)
+      nut.rotation.z = Math.PI / 2
+      wheel.add(nut)
+
+      this.root.add(wheel)
+      this.wheels.push(wheel)
+    }
+  }
+
+  private buildTacticalTanker(): void {
+    const armorSteelMat = new THREE.MeshStandardMaterial({ color: 0x1f242d, roughness: 0.8, metalness: 0.45 })
+    const heavyBumperMat = new THREE.MeshStandardMaterial({ color: 0x0f1318, roughness: 0.9, metalness: 0.3 })
+    const gratingMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7, metalness: 0.6 })
+    const searchlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfef08a, emissiveIntensity: 2.5 })
+    const swatStrobeRed = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xef4444, emissiveIntensity: 2.2 })
+    const swatStrobeBlue = new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x2563eb, emissiveIntensity: 2.2 })
+
+    // 1. Heavy Armored Monocoque Hull (Caminhão Blindado SWAT 6x6)
+    this.addBox([2.45, 1.85, 6.4], 1.45, this.bodyMaterial, 0, 0)
+    this.addBox([2.48, 0.28, 6.2], 2.45, armorSteelMat, 0, 0) // Armored roof deck
+
+    // 2. Heavy Angular Ram Plow (Aríete de Choque Anti-Barricadas Dianteiro)
+    this.addBox([2.54, 0.65, 0.45], 0.68, heavyBumperMat, 0, -3.35)
+    this.addBox([2.35, 0.45, 0.35], 1.15, heavyBumperMat, 0, -3.32)
+    // Triangular wedge plow blades
+    for (const side of [-0.85, 0, 0.85]) {
+      this.addBox([0.14, 0.75, 0.65], 0.72, heavyBumperMat, side, -3.55)
+    }
+
+    // 3. Armored Slit Windshield with Steel Grating
+    this.addBox([1.88, 0.52, 0.08], 1.72, glassMaterial, 0, -3.22)
+    for (let g = -0.8; g <= 0.8; g += 0.25) {
+      this.addBox([0.04, 0.56, 0.12], 1.72, gratingMat, g, -3.24) // Vertical wire bars
+    }
+
+    // Armored Vision Slits along sides
+    for (const side of [-1.24, 1.24]) {
+      for (const sz of [-1.5, 0.2, 1.8]) {
+        this.addBox([0.08, 0.35, 0.65], 1.72, glassMaterial, side, sz)
+        this.addBox([0.1, 0.04, 0.7], 1.72, gratingMat, side, sz)
+      }
+    }
+
+    // 4. 360-Degree Armored Roof Turret & Searchlight Pod
+    const turretGeo = new THREE.CylinderGeometry(0.72, 0.78, 0.45, 16)
+    const turret = new THREE.Mesh(turretGeo, armorSteelMat)
+    turret.position.set(0, 2.75, -0.8)
+    turret.castShadow = true
+    this.root.add(turret)
+
+    const searchLight = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.28, 12), searchlightMat)
+    searchLight.rotation.x = Math.PI / 2
+    searchLight.position.set(0, 3.12, -0.85)
+    this.root.add(searchLight)
+
+    // SWAT Police Emergency LED Flashers on Roof and Grille
+    this.addBox([0.38, 0.15, 0.18], 2.65, swatStrobeRed, -0.92, -3.1)
+    this.addBox([0.38, 0.15, 0.18], 2.65, swatStrobeBlue, 0.92, -3.1)
+    this.addBox([0.38, 0.15, 0.18], 2.65, swatStrobeRed, -0.92, 3.15)
+    this.addBox([0.38, 0.15, 0.18], 2.65, swatStrobeBlue, 0.92, 3.15)
+
+    // 5. Heavy 6-Wheel Configuration with Steel Wheel Protectors
+    const tacticalWheelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.36, 14)
+    const tacticalWheelPositions: [number, number][] = [
+      [-1.25, -2.15],
+      [1.25, -2.15],
+      [-1.25, 0.65],
+      [1.25, 0.65],
+      [-1.25, 2.35],
+      [1.25, 2.35],
+    ]
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: this.hasForgedWheels ? 0xfacc15 : 0x0f1318,
+      roughness: this.hasForgedWheels ? 0.2 : 0.8,
+      metalness: 0.6,
+    })
+
+    for (const [wx, wz] of tacticalWheelPositions) {
+      const wheel = new THREE.Mesh(tacticalWheelGeo, tireMaterial)
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(wx, 0.52, wz)
+      wheel.castShadow = true
+
+      const armorCap = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.38, 10), rimMat)
+      armorCap.rotation.z = Math.PI / 2
+      wheel.add(armorCap)
+
+      this.root.add(wheel)
+      this.wheels.push(wheel)
+    }
+  }
+
+  private buildCustomAddons(): void {
+    // Decal Addons
+    if (this.decalStyle === 'racing_stripes') {
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 })
+      for (const sx of [-0.22, 0.22]) {
+        this.addBox([0.14, 0.04, 3.8], 1.28, stripeMat, sx, 0)
+      }
+    } else if (this.decalStyle === 'flames') {
+      const flameRed = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 })
+      const flameYellow = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 })
+      for (const side of [-1, 1]) {
+        this.addBox([0.02, 0.22, 1.4], 0.85, flameRed, side * (this.halfWidth + 0.02), -0.3)
+        this.addBox([0.03, 0.12, 1.0], 0.85, flameYellow, side * (this.halfWidth + 0.03), -0.4)
+      }
+    } else if (this.decalStyle === 'skull') {
+      const skullMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+      this.addBox([0.45, 0.03, 0.45], 1.28, skullMat, 0, -1.2)
+      this.addBox([0.22, 0.04, 0.18], 1.29, skullMat, 0, -0.92)
+    } else if (this.decalStyle === 'smash_v8') {
+      const v8Mat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xeab308, emissiveIntensity: 0.8 })
+      this.addBox([0.42, 0.03, 0.35], 1.28, v8Mat, 0, -1.15)
+    } else if (this.decalStyle === 'lightning') {
+      const lightMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 1.2 })
+      for (const side of [-1, 1]) {
+        this.addBox([0.03, 0.12, 1.8], 0.86, lightMat, side * (this.halfWidth + 0.02), 0)
+      }
+    } else if (this.decalStyle === 'dragon') {
+      const dragonMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.8 })
+      for (const side of [-1, 1]) {
+        this.addBox([0.03, 0.28, 1.6], 0.88, dragonMat, side * (this.halfWidth + 0.02), 0)
+      }
+    }
+
+    // Steel Ram Bumper (Cowcatcher)
+    if (this.hasSteelRam && this.kind !== 'tactical_tanker') {
+      const ramSteelMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.6, metalness: 0.7 })
+      const spikeMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.2, metalness: 0.9 })
+      const frontZ = -this.halfLength - 0.2
+      this.addBox([this.halfWidth * 2.1, 0.42, 0.18], 0.68, ramSteelMat, 0, frontZ)
+      // Vertical push bars
+      for (const rx of [-0.65, -0.22, 0.22, 0.65]) {
+        this.addBox([0.08, 0.75, 0.14], 0.78, ramSteelMat, rx, frontZ - 0.06)
+        // Hardened steel ram spikes
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28, 8), spikeMat)
+        spike.rotation.x = -Math.PI / 2
+        spike.position.set(rx, 0.68, frontZ - 0.2)
+        this.root.add(spike)
+      }
+    }
+
+    // Underglow Neon Ground Effect
+    if (this.hasUnderglow) {
+      const glowColor =
+        this.paintStyle === 'cyberpunk'
+          ? 0xd946ef
+          : this.paintStyle === 'gold'
+            ? 0xfacc15
+            : this.paintStyle === 'fury_red'
+              ? 0xef4444
+              : this.paintStyle === 'emerald'
+                ? 0x10b981
+                : 0x06b6d4
+      const underMat = new THREE.MeshStandardMaterial({
+        color: glowColor,
+        emissive: glowColor,
+        emissiveIntensity: 3.5,
+        roughness: 0.1,
+      })
+      const underglow = new THREE.Mesh(new THREE.PlaneGeometry(this.halfWidth * 2.1, this.halfLength * 1.8), underMat)
+      underglow.rotation.x = -Math.PI / 2
+      underglow.position.set(0, 0.06, 0)
+      this.root.add(underglow)
+    }
+
+    // Super Nitro Booster Duplo
+    if (this.hasNitroBooster) {
+      const nosBlueMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2, metalness: 0.85 })
+      const nosValveMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.95 })
+      for (const nx of [-0.35, 0.35]) {
+        const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.65, 12), nosBlueMat)
+        bottle.position.set(nx, 1.15, 0.6)
+        bottle.rotation.x = 0.4
+        this.root.add(bottle)
+        const valve = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 8), nosValveMat)
+        valve.position.set(nx, 1.45, 0.48)
+        this.root.add(valve)
+      }
+    }
+
+    // Armored Reinforcement Plates (Armor Upgrades)
+    if (this.armorLevel > 0 && this.kind !== 'tactical_tanker') {
+      const plateMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7, metalness: 0.5 })
+      for (const side of [-1, 1]) {
+        this.addBox([0.04, 0.38, this.halfLength * 1.2], 0.92, plateMat, side * (this.halfWidth + 0.02), 0)
+      }
+    }
+  }
+
+  hydraulicJump(): boolean {
+    if (!this.hasHydraulicJump || this.climbLift > 0.3 || this.inWater || this.exploded) {
+      return false
+    }
+    this.climbLift = 3.6
+    this.climbPitch = -0.15
+    return true
+  }
+
+  private initHaulerCargoSlots(): void {
+    const slotConfigs = [
+      { x: 0, y: 0.82, z: 0.8, color: 0x3b82f6 }, // Blue coupe lower
+      { x: 0, y: 0.82, z: 2.8, color: 0xf59e0b }, // Amber sedan lower
+      { x: 0, y: 2.36, z: -1.7, color: 0x10b981 }, // Green compact upper
+      { x: 0, y: 1.85, z: 1.0, color: 0x8b5cf6 }, // Purple sport mid
+      { x: 0, y: 1.35, z: 2.3, color: 0xec4899 }, // Pink roadster ramp
+    ]
+
+    for (const conf of slotConfigs) {
+      const g = new THREE.Group()
+      g.position.set(conf.x, conf.y, conf.z)
+      const carMat = new THREE.MeshStandardMaterial({ color: conf.color, roughness: 0.35 })
+      const carBody = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.48, 2.4), carMat)
+      carBody.position.y = 0.28
+      carBody.castShadow = true
+      g.add(carBody)
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.38, 1.3), glassMaterial)
+      cabin.position.set(0, 0.65, -0.1)
+      g.add(cabin)
+      g.visible = false
+      this.root.add(g)
+      this.haulerCargoSlots.push(g)
+    }
+  }
+
+  setHaulerCollectedCount(count: number): void {
+    this.haulerCollectedCarsCount = count
+    for (let i = 0; i < this.haulerCargoSlots.length; i++) {
+      this.haulerCargoSlots[i].visible = i < count
+    }
+  }
+
   private buildBicycle(): void {
     const tire = new THREE.MeshStandardMaterial({ color: 0x202628, roughness: 0.94 })
     const metal = new THREE.MeshStandardMaterial({ color: 0xb8c4bf, metalness: 0.64, roughness: 0.38 })
@@ -991,14 +1818,92 @@ export class Car {
 
     this.robotGroup.add(torsoGroup)
 
-    // 2. Left Arm
+    // 2. Left Arm holding Stylized Purple Energy Flame Sword (Image 1)
     this.robotLeftArm = new THREE.Group()
     this.robotLeftArm.position.set(-1.65, 4.0, 0)
     this.addRobotBox(this.robotLeftArm, [0.75, 0.75, 0.85], [0, 0, 0], botRed) // Shoulder pauldron
     this.addRobotBox(this.robotLeftArm, [0.5, 0.65, 0.5], [0, -0.65, 0], botRed) // Bicep
     this.addRobotBox(this.robotLeftArm, [0.58, 0.85, 0.58], [0, -1.35, 0], botBlue) // Forearm
     this.addRobotBox(this.robotLeftArm, [0.45, 0.45, 0.45], [0, -1.9, 0], botDarkMetal) // Fist
+
+    // Stylized Energy Flame Sword Materials (Matching Image 1)
+    const swordHiltMat = new THREE.MeshStandardMaterial({ color: 0x4a2810, roughness: 0.8 }) // Brown leather grip
+    const swordMetalMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.15, metalness: 0.92 }) // Silver guard & pommel
+    const swordBladeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.08, metalness: 0.96 }) // Polished radiant steel blade
+    const purpleFlameMat = new THREE.MeshStandardMaterial({
+      color: 0xd946ef,
+      emissive: 0xc026d3,
+      emissiveIntensity: 4.2,
+      transparent: true,
+      opacity: 0.88,
+      roughness: 0.1,
+    }) // Purple / Magenta energy flame aura
+
+    // Sword Hilt & Silver Guard
+    this.addRobotBox(this.robotLeftArm, [0.12, 0.52, 0.12], [0, -1.9, -0.2], swordHiltMat) // Leather hilt grip
+    const pommel = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.12, 8), swordMetalMat)
+    pommel.position.set(0, -1.9, 0.12)
+    this.robotLeftArm.add(pommel)
+
+    // Curved Silver Crossguard
+    this.addRobotBox(this.robotLeftArm, [0.85, 0.12, 0.18], [0, -1.9, -0.48], swordMetalMat) // Guard wings
+    this.addRobotBox(this.robotLeftArm, [0.18, 0.18, 0.18], [0, -1.9, -0.48], swordMetalMat) // Center guard hub
+
+    // Double-Edged Radiant Steel Blade
+    this.addRobotBox(this.robotLeftArm, [0.22, 0.08, 2.3], [0, -1.9, -1.65], swordBladeMat) // Main blade
+    const bladeTip = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.48, 4), swordBladeMat)
+    bladeTip.rotation.x = -Math.PI / 2
+    bladeTip.position.set(0, -1.9, -2.95)
+    this.robotLeftArm.add(bladeTip)
+
+    // Purple Energy Flame Coating (Wrapping the blade like Image 1)
+    this.addRobotBox(this.robotLeftArm, [0.28, 0.12, 2.2], [0, -1.9, -1.65], purpleFlameMat) // Outer purple flame
+    for (const fx of [-0.15, 0.15]) {
+      const flamePill = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.92, 4), purpleFlameMat)
+      flamePill.rotation.x = -Math.PI / 2
+      flamePill.rotation.z = fx > 0 ? 0.35 : -0.35
+      flamePill.position.set(fx, -1.9, -1.85)
+      this.robotLeftArm.add(flamePill)
+    }
+
     this.robotGroup.add(this.robotLeftArm)
+
+    // Crescent Slash Arc Trail Visual Effect Group (Matching Image 2)
+    this.swordSlashTrailGroup = new THREE.Group()
+    this.swordSlashTrailGroup.position.set(0, 3.2, -2.2)
+
+    const arcAmberMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 5.2,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    })
+    const arcPurpleMat = new THREE.MeshStandardMaterial({
+      color: 0xd946ef,
+      emissive: 0xc026d3,
+      emissiveIntensity: 4.5,
+      transparent: true,
+      opacity: 0.88,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    })
+
+    // Crescent Glowing Arc Mesh (Image 2 style)
+    const arcCoreGeo = new THREE.RingGeometry(2.2, 3.8, 36, 1, -Math.PI * 0.48, Math.PI * 0.96)
+    const arcCoreMesh = new THREE.Mesh(arcCoreGeo, arcAmberMat)
+    arcCoreMesh.rotation.x = Math.PI / 2
+    this.swordSlashTrailGroup.add(arcCoreMesh)
+
+    const arcOuterGeo = new THREE.RingGeometry(3.6, 4.6, 36, 1, -Math.PI * 0.45, Math.PI * 0.9)
+    const arcOuterMesh = new THREE.Mesh(arcOuterGeo, arcPurpleMat)
+    arcOuterMesh.rotation.x = Math.PI / 2
+    this.swordSlashTrailGroup.add(arcOuterMesh)
+
+    this.swordSlashTrailGroup.visible = false
+    this.robotGroup.add(this.swordSlashTrailGroup)
 
     // 3. Right Arm holding Blaster Cannon
     this.robotRightArm = new THREE.Group()
@@ -1125,13 +2030,26 @@ export class Car {
       }
     }
 
-    if (throttle > 0) this.speed += 17.5 * throttle * dt
+    const maxSpeed =
+      (this.kind === 'hyper_f1'
+        ? 48
+        : this.kind === 'bomb_car'
+          ? 42
+          : this.kind === 'monster_truck' || this.kind === 'tactical_tanker'
+            ? 34
+            : 37) *
+      (1 + (this.engineLevel || 0) * 0.12) *
+      (this.hasNitroBooster ? 1.15 : 1)
+
+    const accelMult = (1 + (this.engineLevel || 0) * 0.15) * (this.kind === 'hyper_f1' ? 1.3 : 1) * (this.hasNitroBooster ? 1.25 : 1)
+
+    if (throttle > 0) this.speed += 17.5 * accelMult * throttle * dt
     else if (throttle < 0) this.speed += 12 * throttle * dt
     else this.speed *= Math.max(0, 1 - (input.handbrake ? 3.3 : 0.7) * dt)
 
     if (input.handbrake) this.speed *= Math.max(0, 1 - 2.4 * dt)
-    this.speed = THREE.MathUtils.clamp(this.speed, -8, 37)
-    const grip = input.handbrake ? 1.65 : 1
+    this.speed = THREE.MathUtils.clamp(this.speed, -8, maxSpeed)
+    const grip = (input.handbrake ? 1.65 : 1) * (this.hasForgedWheels ? 1.25 : 1)
     this.yaw += input.steer * dt * (0.45 + Math.min(Math.abs(this.speed) * 0.044, 1.5)) * Math.sign(this.speed || 1) * grip
 
     const oldX = this.root.position.x
@@ -1170,8 +2088,57 @@ export class Car {
     return collided
   }
 
+  performSwordSlash(): boolean {
+    if (this.kind !== 'monster_truck' || !this.isRobotMode || this.swordSlashCooldown > 0) return false
+    this.swordSlashCooldown = 0.45
+    this.swordSlashTimer = 0.35
+    if (this.swordSlashTrailGroup) {
+      this.swordSlashTrailGroup.visible = true
+      this.swordSlashTrailGroup.scale.set(0.3, 0.3, 0.3)
+      this.swordSlashTrailGroup.rotation.y = -Math.PI * 0.45
+    }
+    return true
+  }
+
   integrateMovement(dt: number): void {
     if (this.hitCooldown > 0) this.hitCooldown = Math.max(0, this.hitCooldown - dt)
+
+    // Sword Slash Animation & Crescent Trail Effect
+    if (this.swordSlashCooldown > 0) {
+      this.swordSlashCooldown = Math.max(0, this.swordSlashCooldown - dt)
+    }
+
+    if (this.swordSlashTimer > 0) {
+      this.swordSlashTimer = Math.max(0, this.swordSlashTimer - dt)
+      const progress = 1 - this.swordSlashTimer / 0.35
+
+      if (this.robotLeftArm) {
+        this.robotLeftArm.rotation.y = THREE.MathUtils.lerp(-1.4, 1.4, progress)
+        this.robotLeftArm.rotation.x = THREE.MathUtils.lerp(0.3, -0.6, Math.sin(progress * Math.PI))
+      }
+
+      if (this.swordSlashTrailGroup) {
+        const s = THREE.MathUtils.lerp(0.5, 1.45, progress)
+        this.swordSlashTrailGroup.scale.set(s, s, s)
+        this.swordSlashTrailGroup.rotation.y = THREE.MathUtils.lerp(-Math.PI * 0.45, Math.PI * 0.5, progress)
+        this.swordSlashTrailGroup.visible = true
+
+        const opacity = progress > 0.6 ? (1 - progress) / 0.4 : 1.0
+        this.swordSlashTrailGroup.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            child.material.opacity = opacity * 0.95
+          }
+        })
+      }
+    } else {
+      if (this.swordSlashTrailGroup) {
+        this.swordSlashTrailGroup.visible = false
+      }
+      if (this.robotLeftArm && this.isRobotMode) {
+        this.robotLeftArm.rotation.y = THREE.MathUtils.lerp(this.robotLeftArm.rotation.y, 0, dt * 12)
+        this.robotLeftArm.rotation.x = THREE.MathUtils.lerp(this.robotLeftArm.rotation.x, 0, dt * 12)
+      }
+    }
 
     if (this.inWater) {
       this.speed = 0
@@ -1210,7 +2177,7 @@ export class Car {
   }
 
   crush(): void {
-    if (this.kind === 'monster_truck' || this.kind === 'fuel_tanker' || this.kind === 'truck' || this.kind === 'bus') return
+    if (this.kind === 'monster_truck' || this.kind === 'fuel_tanker' || this.kind === 'truck' || this.kind === 'bus' || this.kind === 'car_hauler') return
     this.isCrushed = true
     this.exploded = true
     this.hits = this.maxHits
@@ -1224,7 +2191,43 @@ export class Car {
     this.bodyMaterial.needsUpdate = true
   }
 
+  checkRampClimb(hauler: Car): { onRamp: boolean; atLaunchLip: boolean; rampHeight: number } {
+    if (hauler.kind !== 'car_hauler') return { onRamp: false, atLaunchLip: false, rampHeight: 0 }
+    const local = hauler.root.worldToLocal(this.root.position.clone())
+    // Hauler ramp extends from rear ground z = +6.3 (Y = 0.02) to upper deck front lip z = -1.0 (Y = 2.45)
+    // Width is ~2.32m (local.x +/- 1.55)
+    if (Math.abs(local.x) <= 1.55 && local.z <= 6.3 && local.z >= -1.3) {
+      const t = THREE.MathUtils.clamp((5.6 - local.z) / 6.6, 0, 1)
+      const rampHeight = 0.04 + t * 2.45
+      // Launch lip reached with forward speed
+      const atLaunchLip = local.z <= -0.7 && (this.speed > 3.0 || this.speed < -3.0)
+      return { onRamp: true, atLaunchLip, rampHeight }
+    }
+    return { onRamp: false, atLaunchLip: false, rampHeight: 0 }
+  }
+
   collideWith(other: Car, dt = 1 / 60): boolean {
+    // If one car is airborne significantly above the other, they do not collide horizontally
+    const yA = this.root.position.y + this.climbLift
+    const yB = other.root.position.y + other.climbLift
+    if (Math.abs(yA - yB) > 1.45) {
+      return false
+    }
+
+    // Car Hauler Ramp Exemption:
+    // If one vehicle is driving up the ramp of a car hauler truck, exempt from rigid body collision
+    if (other.kind === 'car_hauler' && this.kind !== 'car_hauler') {
+      const local = other.root.worldToLocal(this.root.position.clone())
+      if (Math.abs(local.x) <= 1.55 && local.z <= 6.3 && local.z >= -1.3) {
+        return false
+      }
+    } else if (this.kind === 'car_hauler' && other.kind !== 'car_hauler') {
+      const local = this.root.worldToLocal(other.root.position.clone())
+      if (Math.abs(local.x) <= 1.55 && local.z <= 6.3 && local.z >= -1.3) {
+        return false
+      }
+    }
+
     const rightA = new THREE.Vector2(Math.cos(this.yaw), -Math.sin(this.yaw))
     const forwardA = new THREE.Vector2(-Math.sin(this.yaw), -Math.cos(this.yaw))
     const rightB = new THREE.Vector2(Math.cos(other.yaw), -Math.sin(other.yaw))
