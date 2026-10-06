@@ -6,7 +6,7 @@
 
 ## <a name="português"></a>Português
 
-Protótipo jogável e completo de perseguição veicular em HTML5, TypeScript e Three.js. A cidade é gerada de forma procedural ao redor do carro e se estende indefinidamente enquanto a corrida continua.
+Jogo MOST WANTED CAR, um protótipo completo e jogável em 3D de perseguição veicular em HTML5, TypeScript e Three.js. Este jogo foi baseado no jogo Smash City 2. A cidade é gerada de forma procedural ao redor do carro e se estende indefinidamente enquanto a corrida continua.
 
 ### 🎮 Como Executar
 
@@ -28,9 +28,9 @@ npm run dev
 
 ---
 
-### 🚀 Novas Funcionalidades Adicionadas pelo Google AI Studio
+### 🚀 Funcionalidades adicionadas
 
-O protótipo foi profundamente expandido com sistemas urbanos interativos de física e IA de trânsito avançados:
+O protótipo foi  expandido com sistemas urbanos interativos de física e IA de trânsito:
 
 #### 1. 🚦 Semáforos de Trânsito Inteligentes e Postes 3D
 - **Sinalização em Esquinas Reais**: Adicionados semáforos físicos realistas em 3D em quatro esquinas centrais movimentadas da cidade (`X = -48` ou `X = 48` cruzando com `Z = 0` ou `Z = 48`).
@@ -61,7 +61,6 @@ O protótipo foi profundamente expandido com sistemas urbanos interativos de fí
 - **Radar & Minimapa GPS**: O arranha-céu e o gorila são sinalizados no radar e minimapa expandível com ícone dedicado `🦍 KING KONG`.
 
 #### 6. 🛠️ Otimizações, Novas Físicas & Melhorias de Interface (UI)
-- **Most Wanted Car (MWC)**: O nome e a marca do jogo foram oficialmente atualizados de *Most Pursued Car* para **Most Wanted Car** em toda a interface e títulos.
 - **Modo Gráfico Baixo (Culled Meshing)**: Implementado sistema de *Culled Meshing* combinado com *Instanced Mesh*. O jogo remove as faces ocultas inferiores de todos os edifícios e blocos instanciados no modo Baixo para otimização pesada e fluidez ultra-rápida.
 - **Modo Gráfico Alto (Rounded & Hatchback)**: O modo de qualidade gráfica Alta agora renderiza os veículos com cantos e bordas perfeitamente arredondadas via *RoundedBoxGeometry*. Além disso, todos os veículos não-picapes possuem uma traseira esportiva na diagonal estilo *hatchback* em vez de blocos quadrados de 90 graus.
 - **Física de Voo Tridimensional (Avião)**: O avião bimotor agora possui resolução de colisão sólida em 3D. Ele desliza e colide corretamente contra as paredes laterais dos prédios ao invés de passar por dentro, mas pode voar livremente por cima deles se estiver acima de seu topo.
@@ -86,7 +85,7 @@ O protótipo foi profundamente expandido com sistemas urbanos interativos de fí
 
 ## <a name="english"></a>English
 
-A complete, playable 3D vehicle pursuit prototype built using HTML5, TypeScript, and Three.js. The city is generated procedurally around the player's vehicle, extending infinitely as the race progresses.
+Jogo MOST WANTED CAR, a complete prototype and playable 3D vehicle pursuit built using HTML5, TypeScript, and Three.js. This game is basead at game Smash City 2. The city is generated procedurally around the player's vehicle, extending infinitely as the race progresses.
 
 ### 🎮 Getting Started
 
@@ -108,9 +107,9 @@ npm run dev
 
 ---
 
-### 🚀 New Features Added by Google AI Studio
+### 🚀 Features Added
 
-This prototype has been deeply enhanced with interactive city physics and advanced Traffic Light AI:
+This prototype has been deeply enhanced with interactive city physics and Traffic Light AI:
 
 #### 1. 🚦 Intelligent Traffic Lights and 3D Poles
 - **Real-Corner Light Signaling**: Real 3D traffic light poles were added at four major central intersections (`X = -48` or `X = 48` intersecting with `Z = 0` or `Z = 48`).
@@ -141,7 +140,6 @@ This prototype has been deeply enhanced with interactive city physics and advanc
 - **GPS Minimap & Radar Tracking**: The skyscraper and the gorilla are tracked in real-time on both the mini-radar and expanded map with a custom `🦍 KING KONG` waypoint.
 
 #### 6. 🛠️ Optimizations, New Physics & UI Enhancements
-- **Most Wanted Car (MWC)**: The game title and branding have been officially updated from *Most Pursued Car* to **Most Wanted Car** across all headings and interfaces.
 - **Low Graphics Mode (Culled Meshing)**: Combines *Culled Meshing* with *Instanced Mesh* rendering. This optimization removes hidden bottom faces of all procedural building blocks to achieve maximum frame rates and ultra-fluid gameplay.
 - **High Graphics Mode (Rounded & Hatchback)**: The High quality mode renders vehicles with smooth rounded corners using *RoundedBoxGeometry*. Additionally, all non-pickup vehicles feature a sporty slanted hatchback rear profile rather than flat vertical 90-degree boxes.
 - **3D Flight Collision Resolution (Plane)**: The twin-engine plane now features robust 3D collision sliding resolution. The aircraft slides and bounces correctly against skyscraper walls instead of clipping through them, while still allowing the player to fly freely above the building rooftops.
