@@ -38,20 +38,17 @@ O protótipo foi  expandido com sistemas urbanos interativos de física e IA de 
 - **IA de Parada de Tráfego**: Os veículos civis do trânsito detectam o sinal fechado (Vermelho/Amarelo) a até 18 metros e desaceleram suavemente até parar. Graças ao sistema de car-following, os carros de trás formam filas organizadas. Quando o sinal abre, eles retomam a velocidade.
 - **HUD Limpo**: Respeitando as regras visuais, não são exibidos cronômetros, contadores ou barras de tempo na tela para o jogador.
 
-#### 2. 🚲 Condutor de Bicicleta (Stick Figure Rider)
-- **Fim das Bicicletas Fantasmas**: Todas as bicicletas que andam no trânsito civil ou que o jogador utiliza possuem agora um condutor com corpo formado por boneco palito (camisa vermelha e calça azul) que pedala ativamente o veículo, tornando o ecossistema urbano muito mais animado e crível.
-
-#### 3. 🌊 Lagoas Urbanas e Física de Flutuação
+#### 2. 🌊 Lagoas Urbanas e Física de Flutuação
 - **Água Azul-Royal Brilhante (#2563eb)**: As lagoas urbanas foram pintadas com um azul-royal opaco e vibrante, imune à mistura de cor com a grama do fundo.
 - **Física de Flutuação e Travamento**: Ao entrar na água com qualquer carro ou veículo, os controles de aceleração e direção são travados e o carro flutua balançando estaticamente.
 - **Ejeção Automática no Rio/Lagoa**: Quando um veículo cai na água, o jogador palito é automaticamente arremessado para fora do veículo pela lateral (esquerda ou direita) para que possa nadar livremente até a terra firme.
 - **Sistema de Fôlego (30s)**: Nadar na água ativa um cronômetro visual de fôlego com contagem regressiva de 30 a 0 segundos. Se o jogador não alcançar terra firme antes do tempo esgotar, ocorre o fim de jogo por afogamento.
 
-#### 4. 🚚 Missão do Caminhão-Tanque e Ejeção Automática
+#### 3. 🚚 Missão do Caminhão-Tanque e Ejeção Automática
 - **Design do Caminhão-Tanque**: Carroceria cilíndrica metálica com faixas de sinalização laranja e verde (altamente inflamável) e placas de diamante de risco.
 - **Ejeção na Garagem (Missão 2)**: Ao concluir com sucesso a entrega da carga inflamável na garagem industrial, o personagem palito do jogador é retirado de dentro do caminhão de forma automática e segura, sendo posicionado ao lado do caminhão na calçada com velocidade zerada.
 
-#### 5. 🦍 Prédio do King Kong & Missão Aérea com o Avião Bimotor
+#### 4. 🦍 Prédio do King Kong & Missão Aérea com o Avião Bimotor
 - **Spawn Aleatório a Cada Partida**: Todas as vezes que um novo jogo é iniciado, o computador seleciona aleatoriamente um quarteirão diferente da cidade para erguer o imponente arranha-céu Art-Deco estilo Empire State (mais de 110 metros de altura, com patamares escalonados, pilastras ornamentadas, janelas e um farol sinalizador de aviação pulsante no mastro de amarração).
 - **O Gorila Gigante no Arranha-Céu**: Pendurado nas vigas e parapeito do topo do edifício está o lendário King Kong, com animações de respiração, membros móveis e ataque aéreo caso uma aeronave se aproxime.
 - **Ativação da Missão por Proximidade Aérea**: Ao pilotar o **Avião Bimotor** e alcançar as redondezas do prédio (raio de 95 metros), as sirenes tocam e a missão de combate aéreo é iniciada com painel dedicado no HUD.
@@ -65,8 +62,7 @@ O protótipo foi  expandido com sistemas urbanos interativos de física e IA de 
 - **Modo Gráfico Alto (Rounded & Hatchback)**: O modo de qualidade gráfica Alta agora renderiza os veículos com cantos e bordas perfeitamente arredondadas via *RoundedBoxGeometry*. Além disso, todos os veículos não-picapes possuem uma traseira esportiva na diagonal estilo *hatchback* em vez de blocos quadrados de 90 graus.
 - **Física de Voo Tridimensional (Avião)**: O avião bimotor agora possui resolução de colisão sólida em 3D. Ele desliza e colide corretamente contra as paredes laterais dos prédios ao invés de passar por dentro, mas pode voar livremente por cima deles se estiver acima de seu topo.
 - **Física do Personagem Palito contra Policiais**: Quando o jogador estiver a pé, as viaturas policiais colidem e o empurram fisicamente sem passar por dentro do seu modelo 3D, batendo sem infligir dano direto.
-- **Gerenciamento de Modais de UI**: Modais de Perfil do Piloto (Conexão Google), Ajustes de Configurações e Ranking Diário foram reordenados e configurados com `z-index: 500`, aparecendo sempre à frente da tela de jogo pausado. O botão de Configurações também foi embutido diretamente nas opções de Pausa.
-- **Modo de Perfil Simplificado**: Jogadores não conectados agora exibem o status limpo de `ANÔNIMO` no menu superior, ocultando o indicador de níveis e o texto longo "Jogador Anônimo".
+- **Perfil Simplificado**: Jogadores não conectados exibem o status limpo de `ANÔNIMO` no menu superior.
 
 ---
 
@@ -119,20 +115,17 @@ This prototype has been deeply enhanced with interactive city physics and Traffi
 - **Traffic Stopping AI**: Civilian vehicles detect closed signals (Red/Yellow) up to 18m away and smoothly slow down to a halt. The car-following algorithm queues subsequent vehicles in neat rows. Once the light turns green, they automatically resume cruising.
 - **Clean UI**: In compliance with the visual guidelines, there are no timers, progress bars, or countdowns displayed on the screen for the player.
 
-#### 2. 🚲 Stick Figure Bicycle Rider
-- **No More Ghost Bikes**: All civilian traffic bicycles and those ridden by the player feature an active stick-figure rider (red shirt, blue pants) pedaling, animating the city grid and making it feel much more organic.
-
-#### 3. 🌊 Urban Lagoons and Water Buoyancy
+#### 2. 🌊 Urban Lagoons and Water Buoyancy
 - **Vibrant Royal Blue Water (#2563eb)**: Urban lagoons feature a solid, beautiful royal blue color, fully opaque to prevent the underlying grass from spoiling its color.
 - **Buoyancy and Movement Freeze**: Driving any vehicle into a water body blocks accelerator/steering controls. The car floats with a gentle, static bobbing animation.
 - **Auto-Ejection in Water**: Falling into rivers or lagoons automatically throws the stick-figure player out of the vehicle through the side (left or right), allowing them to swim back to dry land.
 - **Breath/Drowning System (30s)**: Swimming triggers a visual oxygen progress bar counting down from 30s to 0s. If the player fails to reach dry land in time, the game ends due to drowning.
 
-#### 4. 🚚 Inflammable Fuel Tanker Mission & Auto-Ejection
+#### 3. 🚚 Inflammable Fuel Tanker Mission & Auto-Ejection
 - **Tanker Truck Design**: Features a highly detailed cylindrical steel fuel tank, hazard sign diamonds, and hazard stripes.
 - **Garage Auto-Ejection (Mission 2)**: Upon successfully delivering the fuel tanker to the industrial garage, the player is automatically and safely ejected from the cabin to the sidewalk alongside the truck with velocity set to zero, concluding the pursuit natively.
 
-#### 5. 🦍 King Kong Skyscraper & Twin-Engine Plane Aerial Mission
+#### 4. 🦍 King Kong Skyscraper & Twin-Engine Plane Aerial Mission
 - **Random Location on Every Match**: Every time a new run begins, the computer randomly selects a different city block to construct the massive Art-Deco Empire State skyscraper (over 110 meters tall, featuring setbacks, pillars, warm illuminated windows, and a blinking aircraft beacon atop its mooring mast).
 - **The Giant Gorilla on the Tower**: Clinging to the observation deck and upper tier of the skyscraper is the colossal King Kong, featuring breathing cycles, mobile limbs, and swatting attacks when aircraft fly close.
 - **Proximity-Triggered Aerial Mission**: Piloting the **Twin-Engine Plane** into the vicinity of the skyscraper (within 95 meters) sounds the alarm and triggers the King Kong aerial boss fight, displaying a dedicated boss HUD.
@@ -146,8 +139,7 @@ This prototype has been deeply enhanced with interactive city physics and Traffi
 - **High Graphics Mode (Rounded & Hatchback)**: The High quality mode renders vehicles with smooth rounded corners using *RoundedBoxGeometry*. Additionally, all non-pickup vehicles feature a sporty slanted hatchback rear profile rather than flat vertical 90-degree boxes.
 - **3D Flight Collision Resolution (Plane)**: The twin-engine plane now features robust 3D collision sliding resolution. The aircraft slides and bounces correctly against skyscraper walls instead of clipping through them, while still allowing the player to fly freely above the building rooftops.
 - **Foot Physics against Cop Units**: When playing on foot as the stick figure, patrol cars physically collide and push the character away without clipping through, bumping the player with sparks and without applying direct damage.
-- **UI Modal Overlay Management**: The Pilot Profile, Daily Leaderboard, and Graphics Settings modals have been properly configured with fixed views and `z-index: 500`. They now display smoothly on top of the paused screen, and a Settings button has been embedded into the Pause screen.
-- **Simplified Anonymous Profile**: Guest players now see a clean `ANONYMOUS` (or `ANÔNIMO`) tag in the header bar instead of the long "Jogador Anônimo" level label.
+- **Simplified Profile**: Guest players now see a clean `ANONYMOUS` tag in the header bar.
 
 ---
 
