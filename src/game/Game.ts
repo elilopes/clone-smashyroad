@@ -1,11 +1,15 @@
 import * as THREE from 'three'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { BusPassengers } from './BusPassengers'
 import { Car, type DriveInput } from './Car'
-import { City } from './City'
+import { City, type GraphicsDesignMode } from './City'
 import { Cockpit } from './Cockpit'
 import { FloatingRings } from './FloatingRings'
 import { Helicopter } from './Helicopter'
-import { Input } from './Input'
+import { Input, type MobileControlMode } from './Input'
 import { KingKong } from './KingKong'
 import { Minimap } from './Minimap'
 import { Missions, type MissionEvent, type MissionState } from './Missions'
@@ -239,6 +243,39 @@ export class Game {
   private readonly lbColScore = document.querySelector<HTMLElement>('#lb-col-score')
   private currentLeaderboardTab: 'xp' | 'cash' = 'xp'
 
+  // 5.5 Settings / Ajustes Gráficos
+  private readonly settingsButton = document.querySelector<HTMLButtonElement>('#settings-button')
+  private readonly pauseSettingsBtn = document.querySelector<HTMLButtonElement>('#pause-settings-button')
+  private readonly settingsModal = document.querySelector<HTMLElement>('#settings-modal')
+  private readonly closeSettingsBtn = document.querySelector<HTMLButtonElement>('#close-settings-btn')
+  private readonly fpsOptionsContainer = document.querySelector<HTMLElement>('#fps-options-container')
+  private readonly shadowOptionsContainer = document.querySelector<HTMLElement>('#shadow-options-container')
+  private readonly graphicsOptionsContainer = document.querySelector<HTMLElement>('#graphics-options-container')
+  private readonly accelOptionsContainer = document.querySelector<HTMLElement>('#accel-options-container')
+  private readonly controlOptionsContainer = document.querySelector<HTMLElement>('#control-options-container')
+  private readonly langOptionsContainer = document.querySelector<HTMLElement>('#lang-options-container')
+  private currentGameLang = 'pt'
+  private readonly mobileControlsEl = document.querySelector<HTMLElement>('.mobile-controls')
+  private readonly touchZoneLeft = document.querySelector<HTMLElement>('#touch-zone-left')
+  private readonly touchZoneRight = document.querySelector<HTMLElement>('#touch-zone-right')
+  private readonly tiltIndicator = document.querySelector<HTMLElement>('#tilt-indicator')
+  private readonly tiltBubble = document.querySelector<HTMLElement>('#tilt-bubble')
+  private readonly mobileJoystick = document.querySelector<HTMLElement>('#mobile-joystick')
+  private readonly joystickKnob = document.querySelector<HTMLElement>('#joystick-knob')
+  private readonly joystickArrowUp = document.querySelector<HTMLElement>('#joystick-arrow-up')
+  private readonly joystickArrowDown = document.querySelector<HTMLElement>('#joystick-arrow-down')
+  private readonly joystickArrowLeft = document.querySelector<HTMLElement>('#joystick-arrow-left')
+  private readonly joystickArrowRight = document.querySelector<HTMLElement>('#joystick-arrow-right')
+  private readonly mobileAutoAccelBtn = document.querySelector<HTMLButtonElement>('#mobile-auto-accel-btn')
+  private readonly autoAccelText = document.querySelector<HTMLElement>('#auto-accel-text')
+  private readonly mobileAccelerateBtn = document.querySelector<HTMLButtonElement>('#mobile-accelerate-btn')
+  private wasPausedBeforeSettings = false
+  private targetFps = 30
+  private fpsInterval = 1000 / 30
+  private lastRenderTime = 0
+  private autoAccelEnabled = false
+  private mobileControlsMode: MobileControlMode = 'joystick'
+
   // 6. Garage & Customization Shop (Loja de Carros e Upgrades)
   private readonly shopBtn = document.querySelector<HTMLButtonElement>('#shop-btn')
   private readonly shopModal = document.querySelector<HTMLElement>('#shop-modal')
@@ -254,6 +291,7 @@ export class Game {
   private readonly shopTabParts = document.querySelector<HTMLButtonElement>('#shop-tab-parts')
   private readonly hydraulicJumpBtn = document.querySelector<HTMLButtonElement>('#hydraulic-jump-btn')
   private currentShopTab: 'vehicles' | 'engine' | 'armor' | 'paints' | 'decals' | 'parts' = 'vehicles'
+  private wasPausedBeforeShop = false
 
   private readonly startOverlay = document.querySelector<HTMLElement>('#start-overlay')!
   private readonly endOverlay = document.querySelector<HTMLElement>('#end-overlay')!
@@ -285,10 +323,13 @@ export class Game {
   private readonly contractsToggleBtn = document.querySelector<HTMLButtonElement>('#contracts-toggle-btn')
   private readonly missionPanel = document.querySelector<HTMLElement>('#mission-panel')
   private waterTimer = 30.0
-  private wantedCalmTimer = 0
   private readonly waterTimerPanel = document.querySelector<HTMLElement>('#water-timer-panel')!
   private readonly waterTimerValEl = document.querySelector<HTMLElement>('#water-timer-val')!
   private readonly waterTimerFillEl = document.querySelector<HTMLElement>('#water-timer-fill')!
+
+  private graphicsMode: GraphicsDesignMode = 'medium'
+  private composer?: EffectComposer
+  private ssaoPass?: SSAOPass
 
   constructor(host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -297,7 +338,8 @@ export class Game {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.06
-    this.renderer.shadowMap.enabled = true
+    const shadowsEnabled = localStorage.getItem('smash_shadows_enabled') !== 'false'
+    this.renderer.shadowMap.enabled = shadowsEnabled
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     host.appendChild(this.renderer.domElement)
     this.cockpit = new Cockpit(this.scene)
@@ -305,7 +347,14 @@ export class Game {
     this.scene.background = new THREE.Color(0xa6c2a1)
     this.scene.fog = new THREE.Fog(0xa6c2a1, 140, 380)
     this.createLighting()
+    this.sun.castShadow = shadowsEnabled
+    this.targetFps = 30
+    this.fpsInterval = 1000 / 30
     this.city = new City(this.scene)
+
+    this.graphicsMode = (localStorage.getItem('smash_graphics_mode') as GraphicsDesignMode) || 'medium'
+    this.initPostProcessing()
+    this.city.setGraphicsMode(this.graphicsMode, 0)
     this.pedestrians = new Pedestrians(this.scene)
     this.plane = new Plane(this.scene, 168, -120, 0)
     this.floatingRings = new FloatingRings(this.scene)
@@ -359,6 +408,54 @@ export class Game {
     this.updateMissionCards()
     window.addEventListener('resize', this.resize)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+
+    // Setup mobile controls in Input engine
+    this.input.setupMobileControls({
+      joystick: this.mobileJoystick,
+      joystickKnob: this.joystickKnob,
+      joystickArrows: {
+        up: this.joystickArrowUp,
+        down: this.joystickArrowDown,
+        left: this.joystickArrowLeft,
+        right: this.joystickArrowRight,
+      },
+      tiltIndicator: this.tiltIndicator,
+      tiltBubble: this.tiltBubble,
+      touchZoneLeft: this.touchZoneLeft,
+      touchZoneRight: this.touchZoneRight,
+    })
+
+    // Load saved graphics, auto-acceleration, and control preferences
+    this.autoAccelEnabled = localStorage.getItem('smash_auto_accel') === 'true'
+    const savedMode = localStorage.getItem('smash_mobile_control_mode') as MobileControlMode | 'full' | 'arrows'
+    if (savedMode === 'tilt' || savedMode === 'touch' || savedMode === 'joystick') {
+      this.mobileControlsMode = savedMode
+    } else if (savedMode === 'arrows') {
+      this.mobileControlsMode = 'touch'
+    } else {
+      this.mobileControlsMode = 'joystick'
+    }
+    this.applyMobileControlsMode()
+    this.input.setAutoAccel(this.autoAccelEnabled)
+    this.updateAutoAccelUI()
+
+    // Apply saved graphics mode (shadows, unlit vehicle materials, fog, and greeble mode)
+    this.applyGraphicsMode(this.graphicsMode)
+
+    // Load and apply game language preference
+    this.currentGameLang = localStorage.getItem('smash_lang') || 'pt'
+    this.applyLanguage()
+
+    // Collapse contracts panel on mobile by default on start
+    const isMobile = window.innerWidth <= 760 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    if (isMobile && this.missionPanel) {
+      this.missionPanel.classList.add('collapsed')
+      if (this.contractsToggleBtn) {
+        this.contractsToggleBtn.textContent = '▼'
+        this.contractsToggleBtn.setAttribute('aria-label', 'Expandir contratos')
+      }
+    }
+
     requestAnimationFrame(this.frame)
   }
 
@@ -377,6 +474,67 @@ export class Game {
     this.sun.shadow.camera.far = 210
     this.sun.shadow.bias = -0.0002
     this.scene.add(this.sun, this.sun.target)
+  }
+
+  private initPostProcessing(): void {
+    try {
+      this.composer = new EffectComposer(this.renderer)
+      const renderPass = new RenderPass(this.scene, this.camera)
+      this.composer.addPass(renderPass)
+
+      this.ssaoPass = new SSAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight)
+      this.ssaoPass.kernelRadius = 14
+      this.ssaoPass.minDistance = 0.002
+      this.ssaoPass.maxDistance = 0.12
+      this.composer.addPass(this.ssaoPass)
+
+      const outputPass = new OutputPass()
+      this.composer.addPass(outputPass)
+    } catch (err) {
+      console.warn('EffectComposer / SSAO initialization note:', err)
+    }
+  }
+
+  private applyGraphicsMode(mode: GraphicsDesignMode): void {
+    this.graphicsMode = mode
+    localStorage.setItem('smash_graphics_mode', mode)
+
+    const playerZ = this.player ? this.player.root.position.z : 0
+    this.city.setGraphicsMode(mode, playerZ)
+
+    if (mode === 'low') {
+      // 1. Remova as sombras dos objetos
+      this.renderer.shadowMap.enabled = false
+      this.sun.castShadow = false
+
+      // 2. Remova a nevoa do horizonte
+      this.scene.fog = null
+    } else {
+      // Restore shadows and fog for medium / high
+      const shadowsEnabled = localStorage.getItem('smash_shadows_enabled') !== 'false'
+      this.renderer.shadowMap.enabled = shadowsEnabled
+      this.sun.castShadow = shadowsEnabled
+
+      this.scene.fog = new THREE.Fog(0xa6c2a1, 140, 380)
+    }
+
+    // 3. Remova a iluminação e detalhes dos veículos
+    this.updateAllVehiclesGraphicsMode(mode)
+  }
+
+  private updateAllVehiclesGraphicsMode(mode: GraphicsDesignMode): void {
+    if (this.player) this.player.setGraphicsMode(mode)
+    if (this.monsterTruck) this.monsterTruck.setGraphicsMode(mode)
+    if (this.parkedHauler) this.parkedHauler.setGraphicsMode(mode)
+    if (this.taxiCar) this.taxiCar.setGraphicsMode(mode)
+    if (this.bombCar) this.bombCar.setGraphicsMode(mode)
+    for (const car of this.abandonedCars) car.setGraphicsMode(mode)
+    for (const sc of this.strandedCars) sc.car.setGraphicsMode(mode)
+    if (this.pursuit) this.pursuit.setGraphicsMode(mode)
+    if (this.traffic) this.traffic.setGraphicsMode(mode)
+    for (const tank of this.tanks) tank.setGraphicsMode(mode)
+    for (const heli of this.helicopters) heli.setGraphicsMode(mode)
+    if (this.plane) this.plane.setGraphicsMode(mode)
   }
 
   private createHud(): void {
@@ -509,6 +667,123 @@ export class Game {
       this.triggerHydraulicJump()
     })
 
+    // Settings Modal UI Events
+    this.settingsButton?.addEventListener('click', () => {
+      this.openSettings()
+    })
+    this.pauseSettingsBtn?.addEventListener('click', () => {
+      this.openSettings()
+    })
+
+    this.fpsOptionsContainer?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.settings-option-btn')
+      if (!btn) return
+      this.fpsOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      const fpsVal = Number(btn.getAttribute('data-fps'))
+      this.targetFps = fpsVal
+      this.fpsInterval = 1000 / fpsVal
+    })
+
+    this.shadowOptionsContainer?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.settings-option-btn')
+      if (!btn) return
+      this.shadowOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      const shadowsVal = btn.getAttribute('data-shadow') === 'true'
+      localStorage.setItem('smash_shadows_enabled', String(shadowsVal))
+      this.renderer.shadowMap.enabled = shadowsVal
+      this.sun.castShadow = shadowsVal
+      
+      // Traverse scene and update shadow receiving on materials
+      this.scene.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.material) {
+          if (Array.isArray(object.material)) {
+            for (const mat of object.material) mat.needsUpdate = true
+          } else {
+            object.material.needsUpdate = true
+          }
+        }
+      })
+      this.renderer.shadowMap.needsUpdate = true
+    })
+
+    // Mobile on-screen Auto-Acceleration toggle button
+    this.mobileAutoAccelBtn?.addEventListener('click', () => {
+      this.toggleAutoAcceleration()
+    })
+
+    this.closeSettingsBtn?.addEventListener('click', () => {
+      this.closeSettings()
+    })
+
+    this.settingsModal?.addEventListener('click', (e) => {
+      if (e.target === this.settingsModal) {
+        this.closeSettings()
+      }
+    })
+
+    this.graphicsOptionsContainer?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.settings-option-btn')
+      if (!btn) return
+      this.graphicsOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      const graphicsVal = (btn.getAttribute('data-graphics') || 'medium') as GraphicsDesignMode
+      this.applyGraphicsMode(graphicsVal)
+
+      const isPt = this.currentGameLang === 'pt'
+      let modeDesc = ''
+      if (graphicsVal === 'low') {
+        modeDesc = isPt ? 'BAIXA: Low Poly sem iluminação, sombras, detalhes nem névoa' : 'LOW: Low Poly without lighting, shadows, details or fog'
+      } else if (graphicsVal === 'medium') {
+        modeDesc = isPt ? 'MÉDIA: Voxels com Greeble clássico' : 'MEDIUM: Classic Greeble Voxels'
+      } else {
+        modeDesc = isPt ? 'ALTA: Greeble High Poly + Merged Geo + SSAO' : 'HIGH: High Poly Greeble + Merged Geo + SSAO'
+      }
+      this.showToast(`🎨 ${modeDesc}`)
+    })
+
+    this.accelOptionsContainer?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.settings-option-btn')
+      if (!btn) return
+      this.accelOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      const accelVal = btn.getAttribute('data-accel') === 'true'
+      this.autoAccelEnabled = accelVal
+      this.input.setAutoAccel(accelVal)
+      localStorage.setItem('smash_auto_accel', String(accelVal))
+      this.updateAutoAccelUI()
+    })
+
+    this.controlOptionsContainer?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.settings-option-btn')
+      if (!btn) return
+      this.controlOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      const modeVal = btn.getAttribute('data-controls-mode') as MobileControlMode
+      if (modeVal) {
+        this.mobileControlsMode = modeVal
+        localStorage.setItem('smash_mobile_control_mode', modeVal)
+        this.applyMobileControlsMode()
+        if (modeVal === 'tilt') {
+          void this.input.requestTiltPermission()
+        }
+      }
+    })
+
+    this.langOptionsContainer?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.settings-option-btn')
+      if (!btn) return
+      this.langOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      const langVal = btn.getAttribute('data-lang')
+      if (langVal === 'pt' || langVal === 'en') {
+        this.currentGameLang = langVal
+        localStorage.setItem('smash_lang', langVal)
+        this.applyLanguage()
+      }
+    })
+
     // Listen to usersDB updates in real time
     usersDB.onUserStateChanged((user) => {
       this.onUserDataUpdated(user)
@@ -529,6 +804,10 @@ export class Game {
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && this.minimap.isExpanded && !event.repeat) {
         this.minimap.toggleExpand(false)
+        return
+      }
+      if (event.key === 'Escape' && this.settingsModal && !this.settingsModal.classList.contains('hidden') && !event.repeat) {
+        this.closeSettings()
         return
       }
       if ((event.key.toLowerCase() === 'p' || event.key === 'Escape') && !event.repeat) {
@@ -643,7 +922,6 @@ export class Game {
     this.ended = false
     this.cancelAutoApproach(null)
     this.waterTimer = 30.0
-    this.wantedCalmTimer = 0
     this.updateWaterTimerUI(false)
     this.tankerMissionStage = 'none'
     this.tankerMissionTimer = 60.0
@@ -668,6 +946,17 @@ export class Game {
       this.pauseButton.textContent = '❚❚'
       this.pauseButton.setAttribute('aria-label', 'Pausar jogo')
     }
+
+    // Collapse contracts panel on mobile by default on start/restart
+    const isMobile = window.innerWidth <= 760 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    if (isMobile && this.missionPanel) {
+      this.missionPanel.classList.add('collapsed')
+      if (this.contractsToggleBtn) {
+        this.contractsToggleBtn.textContent = '▼'
+        this.contractsToggleBtn.setAttribute('aria-label', 'Expandir contratos')
+      }
+    }
+
     void this.sound.start()
     this.updateMissionCards()
     this.updateHud()
@@ -675,7 +964,23 @@ export class Game {
   }
 
   private readonly frame = (timestamp: number): void => {
-    const rawDt = this.lastFrame === 0 ? 0 : Math.min((timestamp - this.lastFrame) / 1000, 0.05)
+    if (this.lastFrame === 0) {
+      this.lastFrame = timestamp
+      this.lastRenderTime = timestamp
+      requestAnimationFrame(this.frame)
+      return
+    }
+
+    const elapsed = timestamp - this.lastRenderTime
+    if (elapsed < this.fpsInterval) {
+      requestAnimationFrame(this.frame)
+      return
+    }
+
+    // Adjust lastRenderTime by subtract-residue to maintain timing precision
+    this.lastRenderTime = timestamp - (elapsed % this.fpsInterval)
+
+    const rawDt = Math.min((timestamp - this.lastFrame) / 1000, 0.05)
     this.lastFrame = timestamp
     const dt = this.slowMotionActive ? rawDt * 0.30 : rawDt
 
@@ -723,32 +1028,61 @@ export class Game {
       },
       this.getStationaryCarLocations(),
     )
-    this.renderer.render(this.scene, this.camera)
+    if (this.graphicsMode === 'high' && this.composer) {
+      this.composer.render()
+    } else {
+      this.renderer.render(this.scene, this.camera)
+    }
     requestAnimationFrame(this.frame)
   }
 
   private update(dt: number): void {
     this.elapsed += dt
-    const controls = this.input.read()
+    const controls = this.input.read(this.autoAccelEnabled)
     let collided = false
 
     if (this.inPlane) {
       const prevAltitude = this.plane.altitude
-      collided = this.plane.driveFlight(controls, dt, (x, y, z, radius) => this.city.collides3D(x, y, z, radius))
+      collided = this.plane.driveFlight(
+        controls,
+        dt,
+        (x, y, z, radius) => this.city.collides3D(x, y, z, radius),
+        (x, y, z, radius) => this.city.resolveCollision(x, z, radius, y)
+      )
       if (this.plane.state === 'flying' && prevAltitude <= 0.6 && this.plane.altitude > 0.6) {
         this.sound.effect('takeoff')
         this.showToast('DECOLAGEM! // USE W/S/A/D PARA PILOTAR NO AR')
       }
       this.cockpit.update(controls.steer, dt)
     } else if (this.inVehicle) {
+      const playerX = this.player.root.position.x
+      const playerZ = this.player.root.position.z
+      const duneY = this.city.getDuneHeightAt(playerX, playerZ)
+      this.player.groundElevation = duneY
+
+      if (duneY > 0.1) {
+        const forwardX = -Math.sin(this.player.yaw)
+        const forwardZ = -Math.cos(this.player.yaw)
+        const frontY = this.city.getDuneHeightAt(playerX + forwardX * 2.5, playerZ + forwardZ * 2.5)
+        const backY = this.city.getDuneHeightAt(playerX - forwardX * 2.5, playerZ - forwardZ * 2.5)
+        this.player.dunePitch = Math.atan2(frontY - backY, 5.0)
+      } else {
+        this.player.dunePitch = 0
+      }
+
       collided = this.player.drive(controls, dt, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.player.root.position.y + this.player.climbLift))
       this.cockpit.update(controls.steer, dt)
 
       // Car Hauler Ramp Stunt Jump & Slow Motion Physics
       if (this.rampJumpActive) {
-        this.jumpVerticalVelocity -= 17.0 * dt
+        this.jumpVerticalVelocity -= 26.0 * dt
         this.player.climbLift += this.jumpVerticalVelocity * dt
-        this.player.climbPitch = -this.jumpVerticalVelocity * 0.009
+        // Limita a subida máxima do salto para nunca ultrapassar o topo dos prédios mais altos (~28m)
+        if (this.player.climbLift > 26.0) {
+          this.player.climbLift = 26.0
+          if (this.jumpVerticalVelocity > 0) this.jumpVerticalVelocity = 0
+        }
+        this.player.climbPitch = -this.jumpVerticalVelocity * 0.008
 
         // Check landing on the street
         if (this.player.climbLift <= 0) {
@@ -781,11 +1115,12 @@ export class Game {
             this.player.climbPitch = -0.22
             if (check.atLaunchLip) {
               this.rampJumpActive = true
-              this.jumpVerticalVelocity = 56.0 + Math.min(42, Math.abs(this.player.speed) * 1.35)
-              this.player.speed = Math.max(40, this.player.speed * 1.9)
+              // Altura diminuída para garantir que o mega salto perfeito não ultrapasse o prédio mais alto (máximo ~26m de altura com gravidade 26.0)
+              this.jumpVerticalVelocity = 17.5 + Math.min(4.5, Math.abs(this.player.speed) * 0.12)
+              this.player.speed = Math.max(28, this.player.speed * 1.25)
               this.slowMotionActive = true
               this.sound.effect('jump')
-              this.showToast('⚡ MEGA SALTO ACROBÁTICO ULTRA ALTO! CÂMERA LENTA ⚡')
+              this.showToast('⚡ MEGA SALTO ACROBÁTICO! CÂMERA LENTA ⚡')
               if (this.inVehicle && this.player.kind === 'taxi' && this.taxiFareActive) {
                 this.taxiFareTip += 500
                 this.showToast('🚕 SALTO RADICAL NA CEGONHA! +$500 GORJETA!')
@@ -810,6 +1145,7 @@ export class Game {
             this.cancelAutoApproach('ENTRADA CANCELADA // VEÍCULO NÃO ALCANÇADO EM 10s')
           } else {
             const targetPos = this.autoApproachCar.root.position
+            this.character.groundElevation = this.city.getDuneHeightAt(this.character.root.position.x, this.character.root.position.z)
             const stepRes = this.character.stepTowards(
               targetPos.x,
               targetPos.z,
@@ -825,6 +1161,7 @@ export class Game {
           }
         }
       } else {
+        this.character.groundElevation = this.city.getDuneHeightAt(this.character.root.position.x, this.character.root.position.z)
         const charInWater = !this.inVehicle && !this.inPlane && this.city.isInWater(this.character.root.position.x, this.character.root.position.z)
         this.character.update(dt, controls, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.character.root.position.y).collided, charInWater)
       }
@@ -946,19 +1283,42 @@ export class Game {
     }
 
     const traffic = this.traffic.update(dt, this.player, this.city)
+
+    // Update ground elevation and vertical position for traffic, cop, and abandoned cars
+    for (const car of this.traffic.getCars()) {
+      car.groundElevation = this.city.getDuneHeightAt(car.root.position.x, car.root.position.z)
+      car.root.position.y = car.groundElevation + car.climbLift
+    }
+    for (const cop of this.pursuit.getCars()) {
+      cop.groundElevation = this.city.getDuneHeightAt(cop.root.position.x, cop.root.position.z)
+      cop.root.position.y = cop.groundElevation + cop.climbLift
+    }
+    for (const car of this.abandonedCars) {
+      car.groundElevation = this.city.getDuneHeightAt(car.root.position.x, car.root.position.z)
+      car.root.position.y = car.groundElevation + car.climbLift
+    }
+
     const pedestrianHits = !this.inPlane ? this.pedestrians.update(dt, actorPosition, actorYaw, this.inVehicle ? speed : 0) : 0
 
-    if (!this.inPlane && this.city.isRiver(actorPosition.x, actorPosition.z)) {
+    if (!this.inPlane && this.city.isWater(actorPosition.x, actorPosition.z)) {
       if (this.inVehicle) {
         this.player.speed *= Math.max(0, 1 - 3.8 * dt)
+        this.sparks.emitWaterSplash(actorPosition, false)
       } else {
         this.character.speed *= Math.max(0, 1 - 3.8 * dt)
+        // Efeito da água pulando em tamanho reduzido e sutil para o personagem palito
+        if (Math.abs(this.character.speed) > 0.15 || Math.random() < 0.25) {
+          this.sparks.emitWaterSplash(actorPosition, true)
+        }
       }
-      this.sparks.emit(actorPosition)
       if (this.elapsed - this.lastImpact > 1.2) {
         this.lastImpact = this.elapsed
         this.sound.effect('crash')
-        this.showToast('NO RIO // CUIDADO COM A CORRENTEZA')
+        if (Math.abs(actorPosition.x) >= 1540) {
+          this.showToast('🌊 NO OCEANO // CUIDADO COM A CORRENTEZA DO MAR ABERTO')
+        } else {
+          this.showToast('NO RIO // CUIDADO COM A CORRENTEZA')
+        }
       }
     }
 
@@ -1184,25 +1544,7 @@ export class Game {
       }
     }
 
-    // ==========================================
-    // DIMINUIR NÍVEL PROCURADO SEM ATROPELAR / SEM COLIDIR
-    // ==========================================
-    const hitPedestrian = pedestrianHits > 0
-    const hitVehicle = (this.inVehicle && (pursuit.vehicleCollisions > 0 || traffic.playerCollisions > 0)) || pursuit.isColliding
-    if (hitPedestrian || hitVehicle) {
-      this.wantedCalmTimer = 0
-    } else if (this.wanted.level > 0) {
-      this.wantedCalmTimer += dt
-      if (this.wantedCalmTimer >= 10.0) {
-        this.wantedCalmTimer = 0
-        const dropped = this.wanted.removeLevels(1)
-        if (dropped) {
-          this.sound.effect('coin')
-          this.showToast('CALMARIA // STATUS PROCURADO DIMINUIU 1 NÍVEL!')
-          this.updateHud()
-        }
-      }
-    }
+    // Automatic wanted level decay removed per game rules. Wanted level can only be reduced by purchasing items in the Shop.
 
     // Previne que o carro do jogador ou viaturas penetrem dentro dos prédios
     if (this.inVehicle) {
@@ -1210,6 +1552,13 @@ export class Game {
       if (wallRes.collided) {
         this.player.root.position.x = wallRes.x
         this.player.root.position.z = wallRes.z
+        if (this.city.getGraphicsMode() === 'high' && Math.abs(this.player.speed) > 1.8) {
+          const impactX = wallRes.x - wallRes.normalX * 1.3
+          const impactZ = wallRes.z - wallRes.normalZ * 1.3
+          const impactY = this.player.root.position.y + 0.8
+          this.city.addWallDeformation(impactX, impactY, impactZ, wallRes.normalX, wallRes.normalZ, Math.abs(this.player.speed) / 6.0)
+          this.sparks.emitMasonryDebris(new THREE.Vector3(impactX, impactY, impactZ), wallRes.normalX, wallRes.normalZ)
+        }
       }
     }
     for (const cop of this.pursuit.getCars()) {
@@ -1217,6 +1566,13 @@ export class Game {
       if (copWall.collided) {
         cop.root.position.x = copWall.x
         cop.root.position.z = copWall.z
+        if (this.city.getGraphicsMode() === 'high' && Math.abs(cop.speed) > 2.5) {
+          const impactX = copWall.x - copWall.normalX * 1.2
+          const impactZ = copWall.z - copWall.normalZ * 1.2
+          const impactY = cop.root.position.y + 0.8
+          this.city.addWallDeformation(impactX, impactY, impactZ, copWall.normalX, copWall.normalZ, Math.abs(cop.speed) / 6.0)
+          this.sparks.emitMasonryDebris(new THREE.Vector3(impactX, impactY, impactZ), copWall.normalX, copWall.normalZ)
+        }
         cop.speed *= -0.2
       }
     }
@@ -2297,6 +2653,7 @@ export class Game {
     } else {
       this.pauseOverlay.classList.add('hidden')
       this.lastFrame = performance.now()
+      this.lastRenderTime = performance.now()
     }
   }
 
@@ -2701,7 +3058,7 @@ export class Game {
 
   private updateCamera(alpha: number): void {
     const playerElevatedPos = this.inVehicle
-      ? new THREE.Vector3(this.player.root.position.x, this.player.root.position.y + this.player.climbLift, this.player.root.position.z)
+      ? this.player.root.position
       : this.character.root.position
     const position = this.inPlane
       ? this.plane.root.position
@@ -2768,7 +3125,13 @@ export class Game {
       }
     }
     this.cameraTarget.set(position.x + this.cameraOffset.x, position.y + this.cameraOffset.y, position.z + this.cameraOffset.z)
-    this.camera.position.lerp(this.cameraTarget, alpha)
+    if (isRobot) {
+      this.camera.position.y = this.cameraTarget.y
+      this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, this.cameraTarget.x, alpha)
+      this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, this.cameraTarget.z, alpha)
+    } else {
+      this.camera.position.lerp(this.cameraTarget, alpha)
+    }
     const lookAhead = this.cameraMode === 'quarter' ? 11 : this.cameraMode === 'cockpit' && this.inVehicle ? (isRobot ? 14 : 12) : (isRobot ? 8.5 : 5.2)
     const lookHeight = this.cameraMode === 'cockpit' && this.inVehicle ? (isRobot ? 4.8 : 1.56) : this.cameraMode === 'quarter' ? (isRobot ? 3.0 : 1.1) : (isRobot ? 3.6 : 1.3)
     this.lookTarget.set(position.x - Math.sin(yaw) * lookAhead, position.y + lookHeight, position.z - Math.cos(yaw) * lookAhead)
@@ -2950,6 +3313,8 @@ export class Game {
   }
 
   private updateMissionCards(): void {
+    const isPt = this.currentGameLang === 'pt'
+
     if (this.activeContractsCountEl) {
       this.activeContractsCountEl.textContent = this.missions.active.length.toString()
     }
@@ -2964,7 +3329,7 @@ export class Game {
       if (activeMissions.length === 0) {
         const empty = document.createElement('div')
         empty.className = 'mission-empty'
-        empty.textContent = 'TODAS AS MISSÕES FORAM CONCLUÍDAS! PARABÉNS!'
+        empty.textContent = isPt ? 'TODAS AS MISSÕES FORAM CONCLUÍDAS! PARABÉNS!' : 'ALL CONTRACTS HAVE BEEN COMPLETED! CONGRATULATIONS!'
         this.missionList.appendChild(empty)
         return
       }
@@ -2974,8 +3339,9 @@ export class Game {
         card.className = 'mission'
         const progress = Math.floor(mission.progress)
         const percent = Math.min(100, (mission.progress / mission.target) * 100)
+        const title = this.getTranslatedTitle(mission.id, mission.title)
         card.innerHTML = `
-          <div class="mission-title">${mission.title}</div>
+          <div class="mission-title">${title}</div>
           <div class="mission-reward">+$${mission.reward}</div>
           <div class="mission-progress">
             <div class="mission-track"><div class="mission-fill" style="width:${percent}%"></div></div>
@@ -2989,7 +3355,7 @@ export class Game {
       if (completedMissions.length === 0) {
         const empty = document.createElement('div')
         empty.className = 'mission-empty'
-        empty.textContent = 'NENHUMA MISSÃO CONCLUÍDA AINDA.\nCUMPRA OS CONTRATOS ATIVOS PELA CIDADE!'
+        empty.textContent = isPt ? 'NENHUMA MISSÃO CONCLUÍDA AINDA.\nCUMPRA OS CONTRATOS ATIVOS PELA CIDADE!' : 'NO COMPLETED CONTRACTS YET.\nFULFILL ACTIVE CONTRACTS AROUND THE CITY!'
         this.missionList.appendChild(empty)
         return
       }
@@ -2997,17 +3363,241 @@ export class Game {
       for (const mission of completedMissions) {
         const card = document.createElement('div')
         card.className = 'mission completed'
+        const title = this.getTranslatedTitle(mission.id, mission.title)
         card.innerHTML = `
-          <div class="mission-title"><span style="color:#4ade80;font-weight:bold;margin-right:5px;">✓</span>${mission.title}</div>
+          <div class="mission-title"><span style="color:#4ade80;font-weight:bold;margin-right:5px;">✓</span>${title}</div>
           <div class="mission-reward" style="color:#4ade80;">+$${mission.reward}</div>
           <div class="mission-progress">
             <div class="mission-track"><div class="mission-fill" style="width:100%;background:#4ade80;"></div></div>
-            <span class="mission-count" style="color:#4ade80;font-weight:bold;">CONCLUÍDO</span>
+            <span class="mission-count" style="color:#4ade80;font-weight:bold;">${isPt ? 'CONCLUÍDO' : 'COMPLETED'}</span>
           </div>
         `
         this.missionList.appendChild(card)
       }
     }
+  }
+
+  private getTranslatedTitle(id: string, defaultTitle: string): string {
+    const isEn = this.currentGameLang === 'en'
+    if (!isEn) return defaultTitle
+
+    const enTitles: Record<string, string> = {
+      'taxi-fares': 'Crazy Taxi: Take 3 passengers with radical stunts',
+      'speed-bomb': 'Speed Bomb: Stay above 75 km/h for 45s in the Bomb Car',
+      'rampage-police': 'Rampage Mode: Destroy 15 police cars in 60s',
+      'ramp-jumps': 'Perform 3 stunt jumps off the car hauler ramp',
+      'car-haul': 'Collect 5 cars using the car hauler truck',
+      'aerial-ace': 'Fly through 7 floating rings (plane)',
+      'king-kong': 'Defeat the King Kong Boss on top of the tower',
+      'monster-crush': 'Crush 10 cars with the Monster Truck',
+      'tanker-fuel': 'Deliver flammable fuel to the gas station',
+      'bus-commuters': 'Pick up 10 commuters with the bus',
+      'stretch-1': 'Drive 350 meters through the city',
+      'cash-1': 'Collect 4 scattered tokens',
+      'survivor-1': 'Survive for 45 seconds escaping the police',
+      'heat-1': 'Reach Wanted Level 3',
+      'close-pass': 'Close escape from 3 police cars',
+      'stretch-2': 'Drive 900 meters during the pursuit',
+      'heat-2': 'Reach Wanted Level 6',
+      'big-haul': 'Collect 9 tokens in the city',
+      'marathon': 'Survive for 100 seconds in the city',
+    }
+
+    return enTitles[id] || defaultTitle
+  }
+
+  private applyLanguage(): void {
+    const isPt = this.currentGameLang === 'pt'
+    const user = usersDB.getCurrentUser()
+
+    // Topbar buttons
+    if (this.shopBtn) this.shopBtn.textContent = isPt ? '🏪 LOJA & GARAGEM' : '🏪 SHOP & GARAGE'
+    if (this.leaderboardBtn) this.leaderboardBtn.textContent = isPt ? '🏆 RANKING' : '🏆 LEADERBOARD'
+    if (this.settingsButton) this.settingsButton.textContent = isPt ? '⚙️ AJUSTES' : '⚙️ SETTINGS'
+    if (this.pauseSettingsBtn) this.pauseSettingsBtn.textContent = isPt ? '⚙️ CONFIGURAÇÕES' : '⚙️ SETTINGS'
+    if (this.authButton) {
+      if (user && user.isGuest) {
+        this.authButton.textContent = isPt ? '👤 ANÔNIMO' : '👤 ANONYMOUS'
+      } else if (user && user.displayName) {
+        this.authButton.textContent = `👤 ${user.displayName.substring(0, 14)} [${isPt ? 'NV' : 'LV'} ${user.level}]`
+      } else {
+        this.authButton.textContent = isPt ? '👤 CONECTAR' : '👤 CONNECT'
+      }
+    }
+
+    // Run Stats labels
+    const levelLabelEl = document.querySelector('.level-stat .stat-label')
+    if (levelLabelEl) levelLabelEl.textContent = isPt ? 'NÍVEL' : 'LEVEL'
+    
+    if (this.levelValue && user) {
+      this.levelValue.textContent = `${isPt ? 'NV' : 'LV'} ${user.level}`
+    }
+
+    const distanceLabelEl = document.querySelector('.run-stats .stat:nth-child(3) .stat-label')
+    if (distanceLabelEl) distanceLabelEl.textContent = isPt ? 'DISTÂNCIA' : 'DISTANCE'
+
+    const timeLabelEl = document.querySelector('.run-stats .stat:nth-child(4) .stat-label')
+    if (timeLabelEl) timeLabelEl.textContent = isPt ? 'TEMPO' : 'TIME'
+
+    const cashLabelEl = document.querySelector('.cash-stat .stat-label')
+    if (cashLabelEl) cashLabelEl.textContent = isPt ? 'DINHEIRO' : 'CASH'
+
+    // Wanted panel
+    const wantedHeadingSpan = document.querySelector('.wanted-panel .wanted-heading span:nth-child(2)')
+    if (wantedHeadingSpan) wantedHeadingSpan.textContent = isPt ? 'PROCURADO' : 'WANTED'
+
+    const detentionHeadingSpan = document.querySelector('.capture-heading span:nth-child(1)')
+    if (detentionHeadingSpan) detentionHeadingSpan.textContent = isPt ? 'RISCO DE DETENÇÃO' : 'DETENTION RISK'
+
+    // Contracts panel
+    const contractsHeadingSpan = document.querySelector('.panel-heading .heading-left span:nth-child(2)')
+    if (contractsHeadingSpan) contractsHeadingSpan.textContent = isPt ? 'CONTRATOS' : 'CONTRACTS'
+
+    const tabActiveBtn = document.querySelector('#contracts-tab-active')
+    if (tabActiveBtn) {
+      const count = document.querySelector('#active-contracts-count')?.textContent || '0'
+      tabActiveBtn.innerHTML = isPt ? `ATIVAS (<span id="active-contracts-count">${count}</span>)` : `ACTIVE (<span id="active-contracts-count">${count}</span>)`
+    }
+    const tabCompletedBtn = document.querySelector('#contracts-tab-completed')
+    if (tabCompletedBtn) {
+      const count = document.querySelector('#completed-contracts-count')?.textContent || '0'
+      tabCompletedBtn.innerHTML = isPt ? `CONCLUÍDAS (<span id="completed-contracts-count">${count}</span>)` : `COMPLETED (<span id="completed-contracts-count">${count}</span>)`
+    }
+
+    // Start screen overlay
+    const startKicker = document.querySelector('#start-overlay .title-kicker')
+    if (startKicker) startKicker.innerHTML = isPt ? '<span></span> UMA CIDADE. DEZ NÍVEIS DE CAOS.' : '<span></span> ONE CITY. TEN LEVELS OF CHAOS.'
+
+    const startTitle = document.querySelector('#start-overlay h1')
+    if (startTitle) startTitle.innerHTML = isPt ? 'MOST<br><em>WANTED CAR.</em>' : 'MOST<br><em>WANTED CAR.</em>'
+
+    const startIntro = document.querySelector('#start-overlay .intro-copy')
+    if (startIntro) {
+      startIntro.innerHTML = isPt
+        ? 'Pegue a estrada com carros ou decole com o <b>Avião Bimotor</b> na pista larga do aeroporto. Atravesse os círculos flutuantes nos céus e despiste a polícia!'
+        : 'Hit the road with cars or take off with the <b>Twin-Engine Plane</b> on the airport runway. Fly through floating rings in the sky and escape the police!'
+    }
+
+    const startDetails = document.querySelector('#start-overlay .start-details')
+    if (startDetails) {
+      startDetails.innerHTML = isPt
+        ? '<span><b>01</b> DIRIJA & VOE</span><span><b>02</b> CÍRCULOS FLUTUANTES</span><span><b>03</b> SOBREVIVA</span>'
+        : '<span><b>01</b> DRIVE & FLY</span><span><b>02</b> FLOATING RINGS</span><span><b>03</b> SURVIVE</span>'
+    }
+
+    const startButton = document.querySelector('#start-button')
+    if (startButton) startButton.innerHTML = isPt ? 'INICIAR PERSEGUIÇÃO <span>↗</span>' : 'START PURSUIT <span>↗</span>'
+
+    const controlHint = document.querySelector('#start-overlay .control-hint')
+    if (controlHint) {
+      controlHint.innerHTML = isPt
+        ? 'WASD / SETAS DIRIGIR / PILOTAR <i>·</i> E ENTRAR NO CARRO OU AVIÃO <i>·</i> C CÂMERA <i>·</i> M MAPA <i>·</i> P PAUSA'
+        : 'WASD / ARROWS TO DRIVE / PILOT <i>·</i> E TO ENTER CAR OR PLANE <i>·</i> C CAMERA <i>·</i> M MAP <i>·</i> P PAUSE'
+    }
+
+    // Paused screen overlay
+    const pauseKicker = document.querySelector('#pause-overlay .title-kicker')
+    if (pauseKicker) pauseKicker.innerHTML = isPt ? '<span></span> PAUSA' : '<span></span> PAUSE'
+
+    const pauseTitle = document.querySelector('#pause-overlay h2')
+    if (pauseTitle) pauseTitle.innerHTML = isPt ? 'JOGO<br><em>PAUSADO.</em>' : 'GAME<br><em>PAUSED.</em>'
+
+    const pauseIntro = document.querySelector('#pause-overlay .intro-copy')
+    if (pauseIntro) {
+      pauseIntro.innerHTML = isPt
+        ? 'A perseguição está congelada. Ajuste sua estratégia ou respire fundo antes de retomar a fuga.'
+        : 'The pursuit is frozen. Adjust your strategy or take a deep breath before resuming your escape.'
+    }
+
+    const pauseResumeBtn = document.querySelector('#resume-button')
+    if (pauseResumeBtn) pauseResumeBtn.innerHTML = isPt ? 'CONTINUAR <span>▶</span>' : 'RESUME <span>▶</span>'
+
+    const pauseRestartBtn = document.querySelector('#restart-button')
+    if (pauseRestartBtn) pauseRestartBtn.innerHTML = isPt ? 'REINICIAR CORRIDA <span>↻</span>' : 'RESTART RUN <span>↻</span>'
+
+    const pauseControlHint = document.querySelector('#pause-overlay .control-hint')
+    if (pauseControlHint) pauseControlHint.textContent = isPt ? 'PRESSIONE P OU ESC PARA CONTINUAR' : 'PRESS P OR ESC TO CONTINUE'
+
+    // End screen overlay
+    const endKicker = document.querySelector('#end-overlay .title-kicker')
+    if (endKicker) endKicker.innerHTML = isPt ? '<span></span> FIM DE CORRIDA' : '<span></span> GAME OVER'
+
+    const endTitle = document.querySelector('#end-title')
+    if (endTitle) endTitle.innerHTML = isPt ? 'VOCÊ FOI<br><em>ALCANÇADO.</em>' : 'YOU WERE<br><em>CAUGHT.</em>'
+
+    const endSummary = document.querySelector('#end-summary')
+    if (endSummary) endSummary.textContent = isPt ? 'A cidade vai lembrar dessa.' : 'The city will remember this run.'
+
+    const retryButton = document.querySelector('#retry-button')
+    if (retryButton) retryButton.innerHTML = isPt ? 'TENTAR DE NOVO <span>↗</span>' : 'TRY AGAIN <span>↗</span>'
+
+    // Controls Hint bar (bottom)
+    const bottomControlsHint = document.querySelector('.controls-hint')
+    if (bottomControlsHint) {
+      bottomControlsHint.innerHTML = isPt
+        ? '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVER / DIRIGIR</span><span class="keycap space-key">SPACE</span><span>FREIO</span><span class="keycap camera-key">C</span><span>CÂMERA</span><span class="keycap action-key">E</span><span>ENTRAR / SAIR</span><span class="keycap map-key">M</span><span>MAPA</span><span class="keycap pause-key">P</span><span>PAUSAR</span>'
+        : '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVE / DRIVE</span><span class="keycap space-key">SPACE</span><span>BRAKE</span><span class="keycap camera-key">C</span><span>CAMERA</span><span class="keycap action-key">E</span><span>ENTER / EXIT</span><span class="keycap map-key">M</span><span>MAP</span><span class="keycap pause-key">P</span><span>PAUSE</span>'
+    }
+
+    // Settings Modal
+    const settingsKicker = document.querySelector('#settings-modal .title-kicker')
+    if (settingsKicker) settingsKicker.innerHTML = isPt ? '<span></span> PERFORMANCE & VÍDEO' : '<span></span> PERFORMANCE & VIDEO'
+
+    const settingsTitle = document.querySelector('#settings-modal h2')
+    if (settingsTitle) settingsTitle.textContent = isPt ? '⚙️ AJUSTES' : '⚙️ SETTINGS'
+
+    const settingsLabels = document.querySelectorAll('#settings-modal .settings-label')
+    const settingsHelps = document.querySelectorAll('#settings-modal .settings-help')
+    const settingsOptions = document.querySelectorAll('#settings-modal .settings-option-btn')
+
+    if (settingsLabels.length >= 6) {
+      settingsLabels[0].textContent = isPt ? 'LIMITAR TAXA DE QUADROS (FPS)' : 'LIMIT FRAME RATE (FPS)'
+      settingsLabels[1].textContent = isPt ? 'SOMBRAS PROJETADAS' : 'SHADOWS CAST'
+      settingsLabels[2].textContent = isPt ? 'ACELERAÇÃO AUTOMÁTICA' : 'AUTO ACCELERATION'
+      settingsLabels[3].textContent = isPt ? 'MODO DE DIREÇÃO NO CELULAR' : 'MOBILE STEERING MODE'
+      settingsLabels[4].textContent = isPt ? 'MODO DE DESIGN GRÁFICO' : 'GRAPHICS DESIGN MODE'
+      settingsLabels[5].textContent = isPt ? 'IDIOMA DO JOGO // GAME LANGUAGE' : 'GAME LANGUAGE'
+    }
+
+    if (settingsHelps.length >= 6) {
+      settingsHelps[0].textContent = isPt ? 'Nota: O jogo sempre inicia no menor FPS (30) para economizar bateria/energia.' : 'Note: The game always starts at the lowest FPS (30) to save battery/power.'
+      settingsHelps[1].textContent = isPt ? 'Desative as sombras projetadas se o jogo apresentar travamento.' : 'Disable shadows if the game is lagging.'
+      settingsHelps[2].textContent = isPt ? 'Acelera de forma automática quando você não estiver freando ou dando ré.' : 'Automatically accelerates when you are not braking or reversing.'
+      settingsHelps[3].textContent = isPt ? 'Escolha entre o joystick redondo com as 4 setas, sensor de inclinação do aparelho (giroscópio) ou toques nas laterais esquerda e direita da tela.' : 'Choose between the round joystick with 4 arrows, device tilt sensor (gyroscope), or touches on the left and right sides of the screen.'
+      settingsHelps[4].textContent = isPt ? 'Baixa: Voxels Low Poly sem Greeble. Média: Voxels com Greeble clássico. Alta: Greeble Voxels High Poly com Geometry Merging & Instanced Mesh.' : 'Low: Low Poly Voxels without Greeble. Medium: Classic Greeble Voxels. High: High Poly Greeble Voxels with Geometry Merging & Instanced Mesh.'
+      settingsHelps[5].textContent = isPt ? 'Escolha o idioma dos textos do jogo / Choose the game language.' : 'Choose the game language.'
+    }
+
+    // Shadow choices texts
+    settingsOptions.forEach(btn => {
+      const shadowAttr = btn.getAttribute('data-shadow')
+      if (shadowAttr === 'true') btn.textContent = isPt ? 'COM SOMBRAS' : 'WITH SHADOWS'
+      if (shadowAttr === 'false') btn.textContent = isPt ? 'SEM SOMBRAS' : 'NO SHADOWS'
+
+      const accelAttr = btn.getAttribute('data-accel')
+      if (accelAttr === 'true') btn.textContent = isPt ? 'LIGADA' : 'ON'
+      if (accelAttr === 'false') btn.textContent = isPt ? 'DESLIGADA' : 'OFF'
+
+      const graphicsAttr = btn.getAttribute('data-graphics')
+      if (graphicsAttr === 'low') btn.textContent = isPt ? 'BAIXA' : 'LOW'
+      if (graphicsAttr === 'medium') btn.textContent = isPt ? 'MÉDIA' : 'MEDIUM'
+      if (graphicsAttr === 'high') btn.textContent = isPt ? 'ALTA' : 'HIGH'
+
+      const modeAttr = btn.getAttribute('data-controls-mode')
+      if (modeAttr === 'joystick') btn.textContent = isPt ? '🕹️ JOYSTICK REDONDO' : '🕹️ ROUND JOYSTICK'
+      if (modeAttr === 'tilt') btn.textContent = isPt ? '📱 INCLINAÇÃO (SENSOR)' : '📱 TILT (SENSOR)'
+      if (modeAttr === 'touch') btn.textContent = isPt ? '👆 TOQUE ESQ / DIR' : '👆 TOUCH LEFT / RIGHT'
+
+      const langAttr = btn.getAttribute('data-lang')
+      if (langAttr === 'pt') btn.textContent = isPt ? '🇧🇷 PORTUGUÊS' : '🇧🇷 PORTUGUESE'
+      if (langAttr === 'en') btn.textContent = isPt ? '🇺🇸 ENGLISH' : '🇺🇸 ENGLISH'
+    })
+
+    if (this.closeSettingsBtn) this.closeSettingsBtn.textContent = isPt ? 'CONFIRMAR E SALVAR' : 'CONFIRM AND SAVE'
+
+    // Update auto-acceleration text on HUD if any
+    this.updateAutoAccelUI()
+    this.updateMissionCards()
   }
 
   private initStrandedCars(): void {
@@ -3678,6 +4268,16 @@ export class Game {
 
   private openShop(): void {
     if (!this.shopModal) return
+    this.wasPausedBeforeShop = this.paused
+    if (this.running && !this.ended && !this.paused) {
+      this.paused = true
+      this.input.clear()
+      this.sound.update(0, 0)
+      if (this.pauseButton) {
+        this.pauseButton.textContent = '▶'
+        this.pauseButton.setAttribute('aria-label', 'Continuar corrida')
+      }
+    }
     this.shopModal.classList.remove('hidden')
     this.updateShopCashDisplay()
     this.renderShop()
@@ -3686,6 +4286,15 @@ export class Game {
   private closeShop(): void {
     this.shopModal?.classList.add('hidden')
     this.rebuildPlayerVehicle()
+    if (this.running && !this.ended && !this.wasPausedBeforeShop) {
+      this.paused = false
+      this.lastFrame = performance.now()
+      this.lastRenderTime = performance.now()
+      if (this.pauseButton) {
+        this.pauseButton.textContent = '❚❚'
+        this.pauseButton.setAttribute('aria-label', 'Pausar corrida')
+      }
+    }
   }
 
   private switchShopTab(tab: 'vehicles' | 'engine' | 'armor' | 'paints' | 'decals' | 'parts'): void {
@@ -3949,11 +4558,13 @@ export class Game {
                   <div class="shop-item-action">
                     <div class="shop-item-price">$ ${pt.price.toLocaleString('pt-BR')}</div>
                     ${
-                      isEquipped
-                        ? `<button class="shop-select-btn is-selected" type="button" data-action="toggle-part" data-id="${pt.id}">✓ EQUIPADO (DESEQUIPAR)</button>`
-                        : isUnlocked
-                          ? `<button class="shop-select-btn" type="button" data-action="toggle-part" data-id="${pt.id}">INSTALAR NO CARRO</button>`
-                          : `<button class="shop-buy-btn" type="button" data-action="buy-part" data-id="${pt.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                      pt.isConsumable
+                        ? `<button class="shop-buy-btn" type="button" data-action="buy-part" data-id="${pt.id}" ${canAfford ? '' : 'disabled'}>USAR AGORA ↗</button>`
+                        : isEquipped
+                          ? `<button class="shop-select-btn is-selected" type="button" data-action="toggle-part" data-id="${pt.id}">✓ EQUIPADO (DESEQUIPAR)</button>`
+                          : isUnlocked
+                            ? `<button class="shop-select-btn" type="button" data-action="toggle-part" data-id="${pt.id}">INSTALAR NO CARRO</button>`
+                            : `<button class="shop-buy-btn" type="button" data-action="buy-part" data-id="${pt.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
                     }
                   </div>
                 </div>
@@ -4043,14 +4654,37 @@ export class Game {
             this.rebuildPlayerVehicle()
           }
         } else if (action === 'buy-part' && id) {
-          const res = usersDB.buyPart(id)
-          if (res.success) {
-            this.sound.effect('upgrade')
-            this.showToast(`🔧 PEÇA EXCLUSIVA INSTALADA!`)
-            if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
-            this.rebuildPlayerVehicle()
+          if (id === 'wanted_bribe' || id === 'wanted_clear') {
+            if (this.wanted.level === 0) {
+              this.showToast('Você não tem estrelas de procurado ativas no momento!')
+              if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = 'Nenhum nível de procurado ativo no momento.'
+              return
+            }
+            const res = usersDB.buyPart(id)
+            if (res.success) {
+              this.sound.effect('coin')
+              if (id === 'wanted_bribe') {
+                this.wanted.removeLevels(2)
+                this.showToast('⚖️ SUBORNO ACEITO: NÍVEL DE PROCURADO REDUZIDO EM -2 NÍVEIS!')
+                if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = 'Suborno pago às autoridades! Nível de procurado reduzido em -2.'
+              } else {
+                this.wanted.setLevel(0)
+                this.showToast('📜 ADVOGADO VIP: NÍVEL DE PROCURADO TOTALMENTE ZERADO!')
+                if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = 'Advogado VIP contratado! Cerco policial cancelado.'
+              }
+            } else {
+              this.showToast(res.message)
+            }
           } else {
-            this.showToast(res.message)
+            const res = usersDB.buyPart(id)
+            if (res.success) {
+              this.sound.effect('upgrade')
+              this.showToast(`🔧 PEÇA EXCLUSIVA INSTALADA!`)
+              if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
+              this.rebuildPlayerVehicle()
+            } else {
+              this.showToast(res.message)
+            }
           }
         } else if (action === 'toggle-part' && id) {
           const res = usersDB.toggleEquipPart(id)
@@ -4071,6 +4705,131 @@ export class Game {
     if (!this.leaderboardModal) return
     this.leaderboardModal.classList.remove('hidden')
     void this.loadDailyLeaderboardData()
+  }
+
+  private openSettings(): void {
+    if (!this.settingsModal) return
+
+    // Pause the game when opening settings so player is not hit or caught
+    this.wasPausedBeforeSettings = this.paused
+    if (this.running && !this.ended && !this.paused) {
+      this.paused = true
+      this.input.clear()
+      this.sound.update(0, 0)
+      if (this.pauseButton) {
+        this.pauseButton.textContent = '▶'
+        this.pauseButton.setAttribute('aria-label', 'Continuar corrida')
+      }
+    }
+    
+    // Update active class on FPS buttons based on current targetFps
+    const fpsButtons = this.fpsOptionsContainer?.querySelectorAll('.settings-option-btn')
+    fpsButtons?.forEach((btn) => {
+      const fpsVal = Number(btn.getAttribute('data-fps'))
+      if (fpsVal === this.targetFps) btn.classList.add('active')
+      else btn.classList.remove('active')
+    })
+
+    // Update active class on Shadow buttons based on renderer shadow status
+    const shadowEnabled = this.renderer.shadowMap.enabled
+    const shadowButtons = this.shadowOptionsContainer?.querySelectorAll('.settings-option-btn')
+    shadowButtons?.forEach((btn) => {
+      const isShadowVal = btn.getAttribute('data-shadow') === 'true'
+      if (isShadowVal === shadowEnabled) btn.classList.add('active')
+      else btn.classList.remove('active')
+    })
+
+    // Update active class on Auto-Acceleration buttons
+    const accelButtons = this.accelOptionsContainer?.querySelectorAll('.settings-option-btn')
+    accelButtons?.forEach((btn) => {
+      const isAccelVal = btn.getAttribute('data-accel') === 'true'
+      if (isAccelVal === this.autoAccelEnabled) btn.classList.add('active')
+      else btn.classList.remove('active')
+    })
+
+    // Update active class on Mobile Controls Mode buttons
+    const controlButtons = this.controlOptionsContainer?.querySelectorAll('.settings-option-btn')
+    controlButtons?.forEach((btn) => {
+      const modeVal = btn.getAttribute('data-controls-mode')
+      if (modeVal === this.mobileControlsMode) btn.classList.add('active')
+      else btn.classList.remove('active')
+    })
+
+    // Update active class on Graphics Mode buttons
+    const currentGraphicsMode = localStorage.getItem('smash_graphics_mode') || 'medium'
+    const graphicsButtons = this.graphicsOptionsContainer?.querySelectorAll('.settings-option-btn')
+    graphicsButtons?.forEach((btn) => {
+      const modeVal = btn.getAttribute('data-graphics')
+      if (modeVal === currentGraphicsMode) btn.classList.add('active')
+      else btn.classList.remove('active')
+    })
+
+    // Update active class on Language buttons
+    const langButtons = this.langOptionsContainer?.querySelectorAll('.settings-option-btn')
+    langButtons?.forEach((btn) => {
+      const langVal = btn.getAttribute('data-lang')
+      if (langVal === this.currentGameLang) btn.classList.add('active')
+      else btn.classList.remove('active')
+    })
+
+    this.settingsModal.classList.remove('hidden')
+  }
+
+  private closeSettings(): void {
+    this.settingsModal?.classList.add('hidden')
+    this.applyMobileControlsMode()
+    this.updateAutoAccelUI()
+
+    // Resume only if the game was not already paused manually by player before opening settings
+    if (this.running && !this.ended && !this.wasPausedBeforeSettings) {
+      this.paused = false
+      this.lastFrame = performance.now()
+      this.lastRenderTime = performance.now()
+      if (this.pauseButton) {
+        this.pauseButton.textContent = '❚❚'
+        this.pauseButton.setAttribute('aria-label', 'Pausar corrida')
+      }
+    }
+
+    const modeLabel = this.mobileControlsMode === 'joystick'
+      ? 'JOYSTICK REDONDO'
+      : this.mobileControlsMode === 'tilt'
+        ? 'SENSOR DE INCLINAÇÃO'
+        : 'TOQUE ESQ / DIR'
+    this.showToast(`⚙️ AJUSTES: ${this.targetFps} FPS · SOMBRAS ${this.renderer.shadowMap.enabled ? 'ON' : 'OFF'} · MODO ${modeLabel}`)
+  }
+
+  private applyMobileControlsMode(): void {
+    this.input.setControlMode(this.mobileControlsMode)
+    this.mobileControlsEl?.classList.toggle('mode-joystick', this.mobileControlsMode === 'joystick')
+    this.mobileControlsEl?.classList.toggle('mode-tilt', this.mobileControlsMode === 'tilt')
+    this.mobileControlsEl?.classList.toggle('mode-touch', this.mobileControlsMode === 'touch')
+  }
+
+  private toggleAutoAcceleration(): void {
+    this.autoAccelEnabled = !this.autoAccelEnabled
+    this.input.setAutoAccel(this.autoAccelEnabled)
+    localStorage.setItem('smash_auto_accel', String(this.autoAccelEnabled))
+    this.updateAutoAccelUI()
+    const isPt = this.currentGameLang === 'pt'
+    this.showToast(this.autoAccelEnabled 
+      ? (isPt ? '⚡ ACELERAÇÃO AUTOMÁTICA ATIVADA' : '⚡ AUTO ACCELERATION ACTIVATED') 
+      : (isPt ? '⚡ ACELERAÇÃO AUTOMÁTICA DESATIVADA' : '⚡ AUTO ACCELERATION DEACTIVATED')
+    )
+  }
+
+  private updateAutoAccelUI(): void {
+    if (this.autoAccelText) {
+      this.autoAccelText.textContent = this.autoAccelEnabled ? 'AUTO: ON' : 'AUTO: OFF'
+    }
+    this.mobileAutoAccelBtn?.classList.toggle('active', this.autoAccelEnabled)
+    this.mobileAccelerateBtn?.classList.toggle('auto-active', this.autoAccelEnabled)
+
+    const accelButtons = this.accelOptionsContainer?.querySelectorAll('.settings-option-btn')
+    accelButtons?.forEach((btn) => {
+      const isAccelVal = btn.getAttribute('data-accel') === 'true'
+      btn.classList.toggle('active', isAccelVal === this.autoAccelEnabled)
+    })
   }
 
   private switchLeaderboardTab(tab: 'xp' | 'cash'): void {
@@ -4154,6 +4913,7 @@ export class Game {
     this.camera.aspect = width / height
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
+    this.composer?.setSize(width, height)
   }
 
   private readonly onVisibilityChange = (): void => {
@@ -4204,6 +4964,7 @@ export class Game {
     this.traffic.dispose()
     this.busPassengers.dispose()
     this.sound.dispose()
+    this.composer?.dispose()
     this.renderer.dispose()
   }
 }

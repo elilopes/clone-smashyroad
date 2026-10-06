@@ -18,9 +18,69 @@ export class Sparks {
   private readonly sparkSprite = this.makeSparkSprite()
   private readonly smokeSprite = this.makeSmokeSprite()
   private readonly fireSprite = this.makeFireSprite()
+  private readonly waterSprite = this.makeWaterSprite()
 
   constructor(scene: THREE.Scene) {
     this.scene = scene
+  }
+
+  emitWaterSplash(position: THREE.Vector3, isCharacter = true): void {
+    const particleCount = isCharacter ? 6 : 14
+    const positions = new Float32Array(particleCount * 3)
+    const colors = new Float32Array(particleCount * 3)
+    const velocities: THREE.Vector3[] = []
+
+    const spreadRadius = isCharacter ? 0.09 : 0.65
+    const size = isCharacter ? 0.08 : 0.42
+
+    for (let index = 0; index < particleCount; index += 1) {
+      const angle = Math.random() * Math.PI * 2
+      const horizontalSpeed = isCharacter ? (0.15 + Math.random() * 0.35) : (1.1 + Math.random() * 2.2)
+      const verticalSpeed = isCharacter ? (0.28 + Math.random() * 0.45) : (1.4 + Math.random() * 2.4)
+
+      positions[index * 3] = position.x + (Math.random() - 0.5) * spreadRadius
+      positions[index * 3 + 1] = position.y - 0.1 + (Math.random() - 0.5) * 0.08
+      positions[index * 3 + 2] = position.z + (Math.random() - 0.5) * spreadRadius
+
+      velocities.push(new THREE.Vector3(
+        Math.cos(angle) * horizontalSpeed,
+        verticalSpeed,
+        Math.sin(angle) * horizontalSpeed,
+      ))
+
+      // Cor aquática suave: azul claro / espuma branca
+      const tint = Math.random()
+      colors[index * 3] = 0.85 + tint * 0.15
+      colors[index * 3 + 1] = 0.93 + tint * 0.07
+      colors[index * 3 + 2] = 1.0
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const material = new THREE.PointsMaterial({
+      size,
+      map: this.waterSprite,
+      vertexColors: true,
+      transparent: true,
+      opacity: isCharacter ? 0.75 : 0.88,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    })
+    const points = new THREE.Points(geometry, material)
+    points.frustumCulled = false
+    points.renderOrder = 5
+    this.scene.add(points)
+    this.bursts.push({
+      points,
+      positions,
+      velocities,
+      age: 0,
+      lifetime: isCharacter ? 0.38 : 0.52,
+      gravity: 8.5,
+      drag: 0.6,
+    })
   }
 
   emit(position: THREE.Vector3): void {
@@ -283,6 +343,7 @@ export class Sparks {
     this.sparkSprite.dispose()
     this.smokeSprite.dispose()
     this.fireSprite.dispose()
+    this.waterSprite.dispose()
   }
 
   private makeSparkSprite(): THREE.CanvasTexture {
@@ -335,5 +396,149 @@ export class Sparks {
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     return texture
+  }
+
+  private makeWaterSprite(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas')
+    canvas.width = 32
+    canvas.height = 32
+    const context = canvas.getContext('2d')!
+    const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16)
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.98)')
+    gradient.addColorStop(0.3, 'rgba(186, 230, 253, 0.88)')
+    gradient.addColorStop(0.65, 'rgba(56, 189, 248, 0.5)')
+    gradient.addColorStop(1, 'rgba(14, 165, 233, 0)')
+    context.fillStyle = gradient
+    context.fillRect(0, 0, 32, 32)
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.colorSpace = THREE.SRGBColorSpace
+    return texture
+  }
+
+  emitMasonryDebris(position: THREE.Vector3, normalX: number, normalZ: number): void {
+    const particleCount = 28
+    const positions = new Float32Array(particleCount * 3)
+    const colors = new Float32Array(particleCount * 3)
+    const velocities: THREE.Vector3[] = []
+
+    for (let index = 0; index < particleCount; index += 1) {
+      const angle = (Math.random() - 0.5) * Math.PI * 0.8
+      const cosA = Math.cos(angle)
+      const sinA = Math.sin(angle)
+      const dirX = normalX * cosA - normalZ * sinA
+      const dirZ = normalX * sinA + normalZ * cosA
+      const speed = 2.5 + Math.random() * 6.5
+
+      positions[index * 3] = position.x + (Math.random() - 0.5) * 0.5
+      positions[index * 3 + 1] = position.y + (Math.random() - 0.5) * 0.5
+      positions[index * 3 + 2] = position.z + (Math.random() - 0.5) * 0.5
+
+      velocities.push(new THREE.Vector3(
+        dirX * speed,
+        2.2 + Math.random() * 4.5,
+        dirZ * speed
+      ))
+
+      const colorType = Math.random()
+      if (colorType > 0.6) {
+        colors[index * 3] = 0.72 + Math.random() * 0.18
+        colors[index * 3 + 1] = 0.28 + Math.random() * 0.12
+        colors[index * 3 + 2] = 0.18 + Math.random() * 0.1
+      } else {
+        const g = 0.4 + Math.random() * 0.4
+        colors[index * 3] = g
+        colors[index * 3 + 1] = g
+        colors[index * 3 + 2] = g
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const material = new THREE.PointsMaterial({
+      size: 0.85,
+      map: this.sparkSprite,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      sizeAttenuation: true,
+    })
+    const points = new THREE.Points(geometry, material)
+    points.frustumCulled = false
+    points.renderOrder = 5
+    this.scene.add(points)
+    this.bursts.push({
+      points,
+      positions,
+      velocities,
+      age: 0,
+      lifetime: 0.75,
+      gravity: 12.0,
+      drag: 0.85,
+    })
+
+    this.emitSmoke(position, 2.5)
+  }
+
+  emitCarCrush(position: THREE.Vector3): void {
+    const particleCount = 32
+    const positions = new Float32Array(particleCount * 3)
+    const colors = new Float32Array(particleCount * 3)
+    const velocities: THREE.Vector3[] = []
+
+    for (let index = 0; index < particleCount; index += 1) {
+      const angle = Math.random() * Math.PI * 2
+      const speed = 3.0 + Math.random() * 7.0
+      positions[index * 3] = position.x + (Math.random() - 0.5) * 0.8
+      positions[index * 3 + 1] = position.y + 0.3 + (Math.random() - 0.5) * 0.4
+      positions[index * 3 + 2] = position.z + (Math.random() - 0.5) * 0.8
+
+      velocities.push(new THREE.Vector3(
+        Math.cos(angle) * speed,
+        2.5 + Math.random() * 4.8,
+        Math.sin(angle) * speed
+      ))
+
+      const isSpark = Math.random() > 0.4
+      if (isSpark) {
+        colors[index * 3] = 1.0
+        colors[index * 3 + 1] = 0.85 + Math.random() * 0.15
+        colors[index * 3 + 2] = 0.2 + Math.random() * 0.4
+      } else {
+        colors[index * 3] = 0.2 + Math.random() * 0.3
+        colors[index * 3 + 1] = 0.2 + Math.random() * 0.3
+        colors[index * 3 + 2] = 0.2 + Math.random() * 0.3
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const material = new THREE.PointsMaterial({
+      size: 0.9,
+      map: this.sparkSprite,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.98,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    })
+    const points = new THREE.Points(geometry, material)
+    points.frustumCulled = false
+    points.renderOrder = 5
+    this.scene.add(points)
+    this.bursts.push({
+      points,
+      positions,
+      velocities,
+      age: 0,
+      lifetime: 0.65,
+      gravity: 11.0,
+      drag: 0.8,
+    })
+
+    this.emitSmoke(position, 2.0)
   }
 }

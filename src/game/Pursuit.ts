@@ -171,6 +171,42 @@ export class Pursuit {
       const car = unit.car
       if (car.exploded) continue
 
+      // Physical collision between police car and character when on foot
+      if (onFoot) {
+        const carX = car.root.position.x
+        const carZ = car.root.position.z
+        const px = playerPosition.x
+        const pz = playerPosition.z
+        const dx = px - carX
+        const dz = pz - carZ
+        const dist = Math.hypot(dx, dz)
+        const minDist = 2.54 // police car radius (2.2) + stickperson radius (0.34)
+        if (dist < minDist && dist > 0.001) {
+          const overlap = minDist - dist
+          const nx = dx / dist
+          const nz = dz / dist
+
+          // Push the character's position so the police car physically bumps the character!
+          playerPosition.x += nx * overlap
+          playerPosition.z += nz * overlap
+
+          // Speed response on the police car
+          car.speed = Math.min(car.speed * 0.4, 4)
+          unit.stunned = Math.max(unit.stunned, 0.6)
+
+          // Emit crash spark sparks, but NO DAMAGE/HARM to the player (sem dano)
+          unit.sparkCooldown = Math.max(0, unit.sparkCooldown - dt)
+          if (unit.sparkCooldown === 0) {
+            collisionPoints.push(new THREE.Vector3(
+              (px + carX) / 2,
+              0.6,
+              (pz + carZ) / 2
+            ))
+            unit.sparkCooldown = 0.22
+          }
+        }
+      }
+
       const vehicleCollision = player.collideWith(car, dt)
       if (vehicleCollision) isColliding = true
       unit.sparkCooldown = Math.max(0, unit.sparkCooldown - dt)
@@ -254,8 +290,18 @@ export class Pursuit {
     }
   }
 
+  private graphicsMode: 'low' | 'medium' | 'high' = 'medium'
+
+  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+    this.graphicsMode = mode
+    for (const unit of this.units) {
+      unit.car.setGraphicsMode(mode)
+    }
+  }
+
   private spawnPolice(player: THREE.Vector3, level: number): void {
     const car = new Car(this.scene, { color: level > 6 ? 0x252a30 : 0xf0ede3, police: true, scale: 0.96, mass: 1.19 })
+    car.setGraphicsMode(this.graphicsMode)
     const side = (Math.random() - 0.5) * 52
     let streetX = Math.round((player.x + side) / 48) * 48 + (Math.random() - 0.5) * 2
     let spawnZ = player.z + 75 + Math.random() * 40

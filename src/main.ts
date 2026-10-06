@@ -8,9 +8,9 @@ app.innerHTML = `
     <div id="game-root" class="game-root" aria-label="Cidade 3D do jogo"></div>
 
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Smash City home">
-        <span class="brand-mark">SC</span>
-        <span class="brand-copy"><strong>SMASH CITY</strong><small>WANTED // DISTRICT 01</small></span>
+      <a class="brand" href="#" aria-label="Most Wanted Car home">
+        <span class="brand-mark">MWC</span>
+        <span class="brand-copy"><strong>MOST WANTED CAR</strong><small>DISTRICT 01</small></span>
       </a>
       <div class="run-stats">
         <div class="stat level-stat"><span class="stat-label">NÍVEL</span><strong id="level-value">NV 1</strong></div>
@@ -25,6 +25,7 @@ app.innerHTML = `
       </div>
       <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Veículos, Upgrades e Garagem">🏪 LOJA & GARAGEM</button>
       <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro">🏆 RANKING</button>
+      <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS e Sombras">⚙️ AJUSTES</button>
       <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
       <button id="camera-button" class="mode-button" type="button" aria-pressed="false" aria-label="Câmera 3D traseira ativada; alternar para visão três quartos" title="Alternar câmera (C)">3D</button>
       <button id="pause-button" class="icon-button pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo (P / ESC)">❚❚</button>
@@ -303,7 +304,7 @@ app.innerHTML = `
         
         <div id="profile-card-section" class="profile-card-section">
           <div class="profile-header-row">
-            <span class="profile-user-name" id="profile-user-name">Jogador Anônimo</span>
+            <span class="profile-user-name" id="profile-user-name">ANÔNIMO</span>
             <span class="sync-badge sync-badge-guest" id="profile-sync-badge">⚪ Anônimo</span>
           </div>
           <div class="profile-stats-grid">
@@ -335,6 +336,74 @@ app.innerHTML = `
         <button id="sync-now-btn" class="secondary-button sync-now-btn hidden" type="button">🔄 SINCRONIZAR COM FIRESTORE AGORA</button>
         <button id="sign-out-btn" class="secondary-button signout-btn hidden" type="button">🚪 DESCONECTAR DA CONTA</button>
         <button id="close-auth-modal-btn" class="secondary-button" type="button" style="margin-top: 10px;">FECHAR PAINEL</button>
+      </div>
+    </div>
+
+    <!-- CONFIGURAÇÕES MODAL -->
+    <div id="settings-modal" class="settings-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Ajustes Gráficos">
+      <div class="settings-card" style="text-align: center;">
+        <div class="title-kicker"><span></span> PERFORMANCE & VÍDEO</div>
+        <h2 style="font-size: 24px; color: #facc15; margin: 6px 0 14px;">⚙️ AJUSTES</h2>
+        
+        <div class="settings-group" style="margin-top: 16px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">LIMITAR TAXA DE QUADROS (FPS)</label>
+          <div class="settings-options" id="fps-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <button class="settings-option-btn active" data-fps="30" type="button">30 FPS</button>
+            <button class="settings-option-btn" data-fps="60" type="button">60 FPS</button>
+            <button class="settings-option-btn" data-fps="90" type="button">90 FPS</button>
+            <button class="settings-option-btn" data-fps="120" type="button">120 FPS</button>
+          </div>
+          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Nota: O jogo sempre inicia no menor FPS (30) para economizar bateria/energia.</span>
+        </div>
+
+        <div class="settings-group" style="margin-top: 20px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">SOMBRAS PROJETADAS</label>
+          <div class="settings-options" id="shadow-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <button class="settings-option-btn active" data-shadow="true" type="button">COM SOMBRAS</button>
+            <button class="settings-option-btn" data-shadow="false" type="button">SEM SOMBRAS</button>
+          </div>
+          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Desative as sombras projetadas se o jogo apresentar travamento.</span>
+        </div>
+
+        <div class="settings-group" style="margin-top: 20px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">ACELERAÇÃO AUTOMÁTICA</label>
+          <div class="settings-options" id="accel-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <button class="settings-option-btn" data-accel="true" type="button">LIGADA</button>
+            <button class="settings-option-btn active" data-accel="false" type="button">DESLIGADA</button>
+          </div>
+          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Acelera de forma automática quando você não estiver freando ou dando ré.</span>
+        </div>
+
+        <div class="settings-group" style="margin-top: 20px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">MODO DE DIREÇÃO NO CELULAR</label>
+          <div class="settings-options" id="control-options-container" style="display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+            <button class="settings-option-btn active" data-controls-mode="joystick" type="button">🕹️ JOYSTICK REDONDO</button>
+            <button class="settings-option-btn" data-controls-mode="tilt" type="button">📱 INCLINAÇÃO (SENSOR)</button>
+            <button class="settings-option-btn" data-controls-mode="touch" type="button">👆 TOQUE ESQ / DIR</button>
+          </div>
+          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Escolha entre o joystick redondo com as 4 setas, sensor de inclinação do aparelho (giroscópio) ou toques nas laterais esquerda e direita da tela.</span>
+        </div>
+
+        <div class="settings-group" style="margin-top: 20px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">MODO DE DESIGN GRÁFICO</label>
+          <div class="settings-options" id="graphics-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <button class="settings-option-btn" data-graphics="low" type="button">BAIXA</button>
+            <button class="settings-option-btn active" data-graphics="medium" type="button">MÉDIA</button>
+            <button class="settings-option-btn" data-graphics="high" type="button">ALTA</button>
+          </div>
+          <span class="settings-help" id="graphics-settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Baixa: Voxels Low Poly com Culled Meshing & Instanced Mesh (sem faces ocultas). Média: Voxels com Greeble clássico. Alta: Greeble Voxels High Poly com Geometry Merging & Instanced Mesh.</span>
+        </div>
+
+        <div class="settings-group" style="margin-top: 20px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">IDIOMA DO JOGO // GAME LANGUAGE</label>
+          <div class="settings-options" id="lang-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <button class="settings-option-btn" data-lang="pt" type="button">🇧🇷 PORTUGUÊS</button>
+            <button class="settings-option-btn" data-lang="en" type="button">🇺🇸 ENGLISH</button>
+          </div>
+          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Escolha o idioma dos textos do jogo / Choose the game language.</span>
+        </div>
+
+        <button id="close-settings-btn" class="primary-button" type="button" style="margin-top: 24px; width: 100%;">CONFIRMAR E SALVAR</button>
       </div>
     </div>
 
@@ -413,7 +482,7 @@ app.innerHTML = `
 
     <section id="start-overlay" class="overlay">
       <div class="title-kicker"><span></span> UMA CIDADE. DEZ NÍVEIS DE CAOS.</div>
-      <h1>SMASH<br><em>THE ROAD.</em></h1>
+      <h1>MOST<br><em>WANTED CAR.</em></h1>
       <p class="intro-copy">Pegue a estrada com carros ou decole com o <b>Avião Bimotor</b> na pista larga do aeroporto. Atravesse os círculos flutuantes nos céus e despiste a polícia!</p>
       <div class="start-details">
         <span><b>01</b> DIRIJA & VOE</span><span><b>02</b> CÍRCULOS FLUTUANTES</span><span><b>03</b> SOBREVIVA</span>
@@ -446,17 +515,67 @@ app.innerHTML = `
       </div>
       <div class="pause-actions">
         <button id="resume-button" class="primary-button" type="button">CONTINUAR <span>▶</span></button>
+        <button id="pause-settings-button" class="secondary-button" type="button">⚙️ CONFIGURAÇÕES</button>
         <button id="restart-button" class="secondary-button" type="button">REINICIAR CORRIDA <span>↻</span></button>
       </div>
       <p class="control-hint">PRESSIONE P OU ESC PARA CONTINUAR</p>
     </section>
 
     <div class="controls-hint"><span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVER / DIRIGIR</span><span class="keycap space-key">SPACE</span><span>FREIO</span><span class="keycap camera-key">C</span><span>CÂMERA</span><span class="keycap action-key">E</span><span>ENTRAR / SAIR</span><span class="keycap map-key">M</span><span>MAPA</span><span class="keycap pause-key">P</span><span>PAUSAR</span></div>
-    <div class="mobile-controls" aria-label="Controles de direção">
-      <button class="mobile-control steer-left" data-control="left" type="button" aria-label="Virar à esquerda">‹</button>
-      <button class="mobile-control handbrake" data-control="handbrake" type="button" aria-label="Freio de mão">⤓</button>
-      <div class="mobile-right-controls"><button class="mobile-control" data-control="reverse" type="button" aria-label="Ré">−</button><button class="mobile-control accelerate" data-control="accelerate" type="button" aria-label="Acelerar">↑</button></div>
-      <button class="mobile-control steer-right" data-control="right" type="button" aria-label="Virar à direita">›</button>
+
+    <!-- TOUCH ZONES (MODO 3: TOQUE ESQUERDA / DIREITA) -->
+    <div id="touch-zones" class="touch-zones hidden" aria-hidden="true">
+      <div id="touch-zone-left" class="touch-zone touch-zone-left">
+        <div class="touch-indicator-icon">◀</div>
+        <span class="touch-indicator-label">VIRAR ESQUERDA</span>
+      </div>
+      <div id="touch-zone-right" class="touch-zone touch-zone-right">
+        <div class="touch-indicator-icon">▶</div>
+        <span class="touch-indicator-label">VIRAR DIREITA</span>
+      </div>
+    </div>
+
+    <!-- TILT HUD INDICATOR (MODO 2: SENSOR DE INCLINAÇÃO) -->
+    <div id="tilt-indicator" class="tilt-indicator hidden" aria-live="polite">
+      <div class="tilt-badge">📱 SENSOR DE INCLINAÇÃO</div>
+      <div class="tilt-bar">
+        <span class="tilt-arrow-left">◀ ESQ</span>
+        <div class="tilt-track"><div id="tilt-bubble" class="tilt-bubble"></div></div>
+        <span class="tilt-arrow-right">DIR ▶</span>
+      </div>
+    </div>
+
+    <!-- CONTROLES MOBILE -->
+    <div class="mobile-controls" aria-label="Controles de pilotagem no celular">
+      <!-- MODO 1: JOYSTICK VIRTUAL REDONDO COM 4 SETAS -->
+      <div id="mobile-joystick" class="mobile-joystick" aria-label="Joystick direcional">
+        <div class="joystick-ring">
+          <span id="joystick-arrow-up" class="joystick-dir joystick-up">▲</span>
+          <span id="joystick-arrow-down" class="joystick-dir joystick-down">▼</span>
+          <span id="joystick-arrow-left" class="joystick-dir joystick-left">◀</span>
+          <span id="joystick-arrow-right" class="joystick-dir joystick-right">▶</span>
+          <div id="joystick-knob" class="joystick-knob">
+            <div class="knob-core"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTÕES DE DIREITA: ACELERAR, FREIO, RÉ E ACELERAÇÃO AUTOMÁTICA -->
+      <div class="mobile-right-controls">
+        <button id="mobile-auto-accel-btn" class="mobile-auto-accel-btn" type="button" aria-label="Alternar Aceleração Automática">
+          <span class="auto-bolt">⚡</span>
+          <strong id="auto-accel-text">AUTO: OFF</strong>
+        </button>
+
+        <div class="mobile-driving-btns">
+          <button class="mobile-control handbrake" data-control="handbrake" type="button" aria-label="Freio de mão" title="Freio de mão">⤓</button>
+          <button class="mobile-control reverse" data-control="reverse" type="button" aria-label="Marcha ré e freio" title="Ré">−</button>
+          <button id="mobile-accelerate-btn" class="mobile-control accelerate" data-control="accelerate" type="button" aria-label="Acelerar" title="Acelerar">
+            <span class="accel-sym">↑</span>
+            <small class="accel-txt">ACELERAR</small>
+          </button>
+        </div>
+      </div>
     </div>
     <button id="vehicle-button" class="vehicle-button hidden" type="button" aria-label="Sair do carro (E)">SAIR DO CARRO · E</button>
     <button id="hydraulic-jump-btn" class="hydraulic-jump-btn hidden" type="button" aria-label="Salto com Suspensão Hidráulica (ESPAÇO)">🦘 SALTO HIDRÁULICO · ESPAÇO</button>

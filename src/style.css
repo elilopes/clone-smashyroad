@@ -310,14 +310,15 @@ button { font: inherit; }
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(86vw, 620px);
-  height: min(86vw, 620px);
-  max-height: 84vh;
-  border: none;
-  border-radius: 22px;
-  background: rgba(12, 16, 14, 0.96);
-  backdrop-filter: blur(24px);
-  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.95), 0 0 0 100vmax rgba(0, 0, 0, 0.65);
+  width: min(94vw, 860px);
+  height: min(94vw, 860px);
+  max-height: 88vh;
+  max-width: 88vh;
+  border: 2px solid rgba(255, 93, 49, 0.75);
+  border-radius: 24px;
+  background: rgba(10, 14, 12, 0.98);
+  backdrop-filter: blur(28px);
+  box-shadow: 0 36px 120px rgba(0, 0, 0, 0.98), 0 0 0 100vmax rgba(0, 0, 0, 0.78), 0 0 30px rgba(255, 93, 49, 0.25);
   z-index: 100;
   cursor: default;
   animation: minimapModalPop .22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1132,6 +1133,8 @@ button { font: inherit; }
   transform: scale(0.96);
 }
 .mobile-controls { display: none; }
+.touch-zones { display: none; }
+.tilt-indicator { display: none; }
 .vehicle-button { position: absolute; z-index: 4; left: 4.2vw; bottom: 61px; min-height: 35px; padding: 0 12px; border: 1px solid rgba(255,93,49,.68); color: var(--paper); background: rgba(17,20,18,.78); font: 9px/1 var(--mono); letter-spacing: .04em; cursor: pointer; backdrop-filter: blur(10px); transition: color .18s, background .18s, transform .18s; }
 .vehicle-button:hover { transform: translateY(-2px); color: #111412; background: var(--orange); }
 
@@ -1171,15 +1174,291 @@ button { font: inherit; }
   .minimap-compass { font-size: 8px; top: 3px; }
   .minimap-label { font-size: 6px; bottom: 4px; }
   .corner-label { top: 286px; right: 15px; font-size: 7px; }
-  .mobile-controls { position: absolute; z-index: 4; inset: auto 15px 15px; height: 70px; display: flex; align-items: end; justify-content: space-between; pointer-events: none; }
-  .vehicle-button { z-index: 5; left: 15px; bottom: 96px; min-height: 34px; padding: 0 9px; font-size: 8px; }
-  .mobile-control { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid rgba(245,242,233,.35); border-radius: 50%; color: var(--paper); background: rgba(17,20,18,.52); font: 24px/1 var(--display); pointer-events: auto; touch-action: none; user-select: none; }
-  .mobile-control:active, .mobile-control.pressed { color: #111412; border-color: var(--orange); background: var(--orange); }
-  .steer-left { margin-bottom: 0; }
-  .steer-right { margin-left: 5px; }
-  .handbrake { width: 39px; height: 39px; margin: 0 auto 4px; font-size: 17px; opacity: .78; }
-  .mobile-right-controls { display: flex; align-items: end; gap: 5px; margin-left: auto; }
-  .accelerate { width: 58px; height: 58px; border-color: rgba(255,93,49,.7); background: rgba(120,44,28,.54); }
+  .mobile-controls { position: absolute; z-index: 4; inset: auto 15px 15px; height: 130px; display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
+  
+  /* MODO 1: JOYSTICK REDONDO SEMI-TRANSPARENTE */
+  .mobile-joystick {
+    width: 124px;
+    height: 124px;
+    border-radius: 50%;
+    background: rgba(17, 20, 18, 0.45);
+    backdrop-filter: blur(8px);
+    border: 2px solid rgba(255, 93, 49, 0.4);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), inset 0 0 16px rgba(0, 0, 0, 0.45);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+  }
+  .mobile-controls.mode-tilt .mobile-joystick,
+  .mobile-controls.mode-touch .mobile-joystick {
+    display: none !important;
+  }
+  .joystick-ring {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .joystick-dir {
+    position: absolute;
+    font: 11px/1 var(--display);
+    color: rgba(245, 242, 233, 0.6);
+    pointer-events: none;
+    transition: color .14s, transform .14s, text-shadow .14s;
+    user-select: none;
+  }
+  .joystick-up { top: 6px; left: 50%; transform: translateX(-50%); }
+  .joystick-down { bottom: 6px; left: 50%; transform: translateX(-50%); }
+  .joystick-left { left: 8px; top: 50%; transform: translateY(-50%); }
+  .joystick-right { right: 8px; top: 50%; transform: translateY(-50%); }
+  .joystick-dir.active {
+    color: #ff5d31;
+    transform: translate(-50%, 0) scale(1.3);
+    text-shadow: 0 0 10px #ff5d31;
+  }
+  .joystick-left.active { transform: translate(0, -50%) scale(1.3); }
+  .joystick-right.active { transform: translate(0, -50%) scale(1.3); }
+  .joystick-knob {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 93, 49, 0.82), rgba(28, 28, 30, 0.88));
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+    touch-action: none;
+  }
+  .knob-core {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #facc15;
+    box-shadow: 0 0 6px #facc15;
+  }
+
+  /* MODO 2: TILT HUD INDICATOR */
+  .tilt-indicator:not(.hidden) {
+    display: flex;
+    position: absolute;
+    z-index: 4;
+    top: 76px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    background: rgba(17, 20, 18, 0.68);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(250, 204, 21, 0.35);
+    border-radius: 20px;
+    pointer-events: none;
+    user-select: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .tilt-badge {
+    font: 700 9px var(--mono);
+    color: #facc15;
+    letter-spacing: .06em;
+  }
+  .tilt-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 700 8px var(--mono);
+    color: #94a3b8;
+  }
+  .tilt-track {
+    width: 86px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.18);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tilt-bubble {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #facc15;
+    box-shadow: 0 0 8px #facc15;
+    position: absolute;
+    transition: transform .05s linear;
+  }
+
+  /* MODO 3: TOUCH ZONES */
+  .touch-zones:not(.hidden) {
+    display: flex;
+    position: absolute;
+    z-index: 3;
+    inset: 70px 0 95px 0;
+    pointer-events: none;
+  }
+  .touch-zone {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    transition: background .12s;
+  }
+  .touch-zone-left {
+    border-right: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .touch-zone-right {
+    border-left: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .touch-zone.active {
+    background: rgba(255, 93, 49, 0.1);
+  }
+  .touch-indicator-icon {
+    font: 36px/1 var(--display);
+    color: rgba(245, 242, 233, 0.22);
+    transition: color .14s, transform .14s, text-shadow .14s;
+  }
+  .touch-zone.active .touch-indicator-icon {
+    color: #ff5d31;
+    transform: scale(1.25);
+    text-shadow: 0 0 16px rgba(255, 93, 49, 0.65);
+  }
+  .touch-indicator-label {
+    font: 700 9px/1 var(--mono);
+    color: rgba(245, 242, 233, 0.3);
+    margin-top: 6px;
+    letter-spacing: .08em;
+  }
+  .touch-zone.active .touch-indicator-label {
+    color: rgba(255, 93, 49, 0.95);
+  }
+
+  /* LADO DIREITO: BOTÕES DE ACELERAÇÃO E DIREÇÃO */
+  .mobile-right-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 7px;
+    margin-left: auto;
+    pointer-events: none;
+  }
+  .mobile-auto-accel-btn {
+    height: 32px;
+    padding: 0 11px;
+    border-radius: 16px;
+    background: rgba(17, 20, 18, 0.65);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(245, 242, 233, 0.28);
+    color: #94a3b8;
+    font: 700 9px var(--mono);
+    letter-spacing: .05em;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    transition: all .18s;
+    cursor: pointer;
+  }
+  .mobile-auto-accel-btn .auto-bolt {
+    font-size: 11px;
+    color: #facc15;
+  }
+  .mobile-auto-accel-btn.active {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.22);
+    color: #4ade80;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+  }
+  .mobile-auto-accel-btn.active .auto-bolt {
+    color: #4ade80;
+    text-shadow: 0 0 8px #4ade80;
+  }
+  .mobile-driving-btns {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .mobile-control {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(245, 242, 233, 0.3);
+    border-radius: 50%;
+    color: var(--paper);
+    background: rgba(17, 20, 18, 0.55);
+    backdrop-filter: blur(8px);
+    font: 20px/1 var(--display);
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    transition: transform .12s, background .12s, border-color .12s;
+  }
+  .mobile-control:active, .mobile-control.pressed {
+    color: #111412;
+    border-color: var(--orange);
+    background: var(--orange);
+    transform: scale(0.94);
+  }
+  .handbrake {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+    opacity: .85;
+    margin-bottom: 2px;
+  }
+  .reverse {
+    width: 46px;
+    height: 46px;
+    font-size: 22px;
+  }
+  .accelerate {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    border-color: rgba(255, 93, 49, 0.7);
+    background: rgba(255, 93, 49, 0.35);
+    backdrop-filter: blur(8px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  }
+  .accel-sym {
+    font: 20px/1 var(--display);
+    font-weight: bold;
+  }
+  .accel-txt {
+    font: 700 7px var(--mono);
+    letter-spacing: .04em;
+    margin-top: 1px;
+    opacity: .9;
+  }
+  .accelerate.auto-active {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.28);
+    box-shadow: 0 0 14px rgba(34, 197, 94, 0.4);
+    color: #4ade80;
+  }
+  .vehicle-button { z-index: 5; left: 15px; bottom: 142px; min-height: 34px; padding: 0 9px; font-size: 8px; }
   .corner-label { max-width: 115px; text-align: right; }
 }
 
@@ -1462,10 +1741,23 @@ button { font: inherit; }
 }
 
 /* Auth Modal Overlay */
-.auth-modal {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.auth-modal.hidden {
+  display: none !important;
+}
+.auth-modal:not(.hidden) {
+  position: fixed !important;
+  z-index: 500 !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  transform: none !important;
+  top: 0 !important;
+  left: 0 !important;
+  background: rgba(9, 14, 12, 0.85) !important;
+  backdrop-filter: blur(14px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 /* Level & XP HUD Stats */
 .level-stat strong {
@@ -1667,10 +1959,23 @@ button { font: inherit; }
 .leaderboard-btn:hover {
   background: rgba(250, 204, 21, 0.28) !important;
 }
-.leaderboard-modal {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.leaderboard-modal.hidden {
+  display: none !important;
+}
+.leaderboard-modal:not(.hidden) {
+  position: fixed !important;
+  z-index: 500 !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  transform: none !important;
+  top: 0 !important;
+  left: 0 !important;
+  background: rgba(9, 14, 12, 0.85) !important;
+  backdrop-filter: blur(14px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 .leaderboard-card {
   width: 90%;
@@ -2112,5 +2417,47 @@ button { font: inherit; }
 .hydraulic-jump-btn:active {
   transform: translateX(-50%) scale(0.95);
   background: #facc15;
+}
+
+/* Settings Modal & Options Styling */
+.settings-modal.hidden {
+  display: none !important;
+}
+.settings-modal:not(.hidden) {
+  position: fixed !important;
+  z-index: 500 !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  transform: none !important;
+  top: 0 !important;
+  left: 0 !important;
+  background: rgba(9, 14, 12, 0.85) !important;
+  backdrop-filter: blur(14px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.settings-option-btn {
+  flex: 1;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  border-radius: 6px;
+  font: 800 11px var(--mono, monospace);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.settings-option-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.settings-option-btn.active {
+  background: rgba(250, 204, 21, 0.18) !important;
+  border-color: #facc15 !important;
+  color: #facc15 !important;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.15);
 }
 

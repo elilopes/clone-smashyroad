@@ -8,6 +8,7 @@ export class StickPerson {
   readonly root = new THREE.Group()
   yaw = 0
   speed = 0
+  groundElevation = 0
   private walkPhase = 0
   private readonly torso: Segment
   private readonly limbs: Segment[]
@@ -75,7 +76,7 @@ export class StickPerson {
       this.speed *= -0.12
     }
 
-    this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : 0
+    this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : (this.groundElevation || 0)
 
     if (Math.abs(this.speed) > 0.35) this.walkPhase += dt * (5 + Math.abs(this.speed) * 0.72)
     else this.walkPhase *= Math.max(0, 1 - dt * 7)
@@ -117,7 +118,7 @@ export class StickPerson {
       this.root.position.z = oldZ
     }
 
-    this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : 0
+    this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : (this.groundElevation || 0)
 
     this.walkPhase += dt * (5 + Math.abs(this.speed) * 0.72)
     this.animateLimbs(Math.sin(this.walkPhase) * Math.min(1, Math.abs(this.speed) / 2.2))

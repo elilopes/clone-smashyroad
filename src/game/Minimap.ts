@@ -38,8 +38,8 @@ export class Minimap {
     this.expanded = force !== undefined ? force : !this.expanded
     this.shell.classList.toggle('expanded', this.expanded)
     if (this.expanded) {
-      this.canvas.width = 600
-      this.canvas.height = 600
+      this.canvas.width = 900
+      this.canvas.height = 900
       if (this.toggleButton) {
         this.toggleButton.textContent = '✕'
         this.toggleButton.setAttribute('aria-label', 'Fechar mapa')
@@ -82,7 +82,7 @@ export class Minimap {
     const cy = height / 2
     const isExpanded = this.expanded
     const radius = isExpanded ? Math.min(width, height) / 2 - 8 : cx - 4
-    const scale = isExpanded ? 0.28 : 0.54 // Na visão normal expandida mostra ~300m de raio
+    const scale = isExpanded ? 0.42 : 0.54 // Na visão expandida do modal mostra o mapa em alta definição com 900px
     const viewRange = radius / scale
 
     ctx.clearRect(0, 0, width, height)
@@ -526,6 +526,137 @@ export class Minimap {
       ctx.rotate(-Math.PI / 2)
       ctx.fillText(`RIO // LIMITE ${label}`, 0, 3)
       ctx.restore()
+
+      // Render Sand Dunes (Dunas de Areia) and Ocean on the radar map
+      if (label === 'OESTE' && xMin > 0) {
+        const oceanWestX = cx + (-1540 - player.x) * scale
+        if (oceanWestX > 0) {
+          // Draw Ocean from left edge to shoreline
+          ctx.fillStyle = '#207ca8' // Vibrant river/ocean water blue
+          ctx.fillRect(0, 0, oceanWestX, canvasHeight)
+
+          // Draw Desert Dunes from shoreline to river's left bank
+          ctx.fillStyle = '#b45309'
+          ctx.fillRect(oceanWestX, 0, xMin - oceanWestX, canvasHeight)
+
+          // Glowing blue shoreline transition
+          ctx.strokeStyle = '#38bdf8'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(oceanWestX, 0)
+          ctx.lineTo(oceanWestX, canvasHeight)
+          ctx.stroke()
+
+          // Draw dune ridges only in the actual desert width
+          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
+          ctx.lineWidth = 1.5
+          const desertW = xMin - oceanWestX
+          for (let y = 30; y < canvasHeight; y += 40) {
+            ctx.beginPath()
+            ctx.arc(oceanWestX + desertW * 0.5, y, Math.max(10, desertW * 0.4), -0.6, 0.6)
+            ctx.stroke()
+          }
+
+          ctx.save()
+          ctx.fillStyle = '#fef08a'
+          ctx.font = '700 9px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('🏜️ DUNAS OESTE', Math.max(oceanWestX + 45, oceanWestX + desertW * 0.5), canvasHeight - 16)
+          ctx.restore()
+
+          ctx.save()
+          ctx.fillStyle = '#ffffff'
+          ctx.font = '700 9px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('🌊 MAR OESTE', oceanWestX * 0.5, canvasHeight - 16)
+          ctx.restore()
+        } else {
+          // Entire area is sand desert
+          ctx.fillStyle = '#b45309'
+          ctx.fillRect(0, 0, xMin, canvasHeight)
+
+          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
+          ctx.lineWidth = 1.5
+          for (let y = 30; y < canvasHeight; y += 40) {
+            ctx.beginPath()
+            ctx.arc(xMin * 0.5, y, Math.max(10, xMin * 0.4), -0.6, 0.6)
+            ctx.stroke()
+          }
+
+          ctx.save()
+          ctx.fillStyle = '#fef08a'
+          ctx.font = '700 9px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('🏜️ DUNAS DE AREIA OESTE', Math.max(40, xMin * 0.5), canvasHeight - 16)
+          ctx.restore()
+        }
+      }
+
+      if (label === 'LESTE' && xMax < this.canvas.width) {
+        const oceanEastX = cx + (1540 - player.x) * scale
+        if (oceanEastX < this.canvas.width) {
+          const desertW = oceanEastX - xMax
+
+          // Draw Desert Dunes from river's right bank to shoreline
+          ctx.fillStyle = '#b45309'
+          ctx.fillRect(xMax, 0, desertW, canvasHeight)
+
+          // Draw Ocean from shoreline to right edge
+          ctx.fillStyle = '#207ca8'
+          ctx.fillRect(oceanEastX, 0, this.canvas.width - oceanEastX, canvasHeight)
+
+          // Glowing blue shoreline transition
+          ctx.strokeStyle = '#38bdf8'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(oceanEastX, 0)
+          ctx.lineTo(oceanEastX, canvasHeight)
+          ctx.stroke()
+
+          // Draw dune ridges only in the actual desert width
+          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
+          ctx.lineWidth = 1.5
+          for (let y = 30; y < canvasHeight; y += 40) {
+            ctx.beginPath()
+            ctx.arc(xMax + desertW * 0.5, y, Math.max(10, desertW * 0.4), -0.6, 0.6)
+            ctx.stroke()
+          }
+
+          ctx.save()
+          ctx.fillStyle = '#fef08a'
+          ctx.font = '700 9px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('🏜️ DUNAS LESTE', Math.min(oceanEastX - 45, xMax + desertW * 0.5), canvasHeight - 16)
+          ctx.restore()
+
+          ctx.save()
+          ctx.fillStyle = '#ffffff'
+          ctx.font = '700 9px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('🌊 MAR LESTE', oceanEastX + (this.canvas.width - oceanEastX) * 0.5, canvasHeight - 16)
+          ctx.restore()
+        } else {
+          // Entire area is sand desert
+          const desertW = this.canvas.width - xMax
+          ctx.fillStyle = '#b45309'
+          ctx.fillRect(xMax, 0, desertW, canvasHeight)
+
+          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
+          ctx.lineWidth = 1.5
+          for (let y = 30; y < canvasHeight; y += 40) {
+            ctx.beginPath()
+            ctx.arc(xMax + desertW * 0.5, y, Math.max(10, desertW * 0.4), -0.6, 0.6)
+            ctx.stroke()
+          }
+
+          ctx.save()
+          ctx.fillStyle = '#fef08a'
+          ctx.font = '700 9px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('🏜️ DUNAS DE AREIA LESTE', Math.min(this.canvas.width - 40, xMax + desertW * 0.5), canvasHeight - 16)
+          ctx.restore()
+        }
+      }
     }
   }
 

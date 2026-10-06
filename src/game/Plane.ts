@@ -363,6 +363,7 @@ export class Plane {
     input: DriveInput,
     dt: number,
     checkCollision3D: (x: number, y: number, z: number, radius: number) => boolean,
+    resolveCollision3D?: (x: number, y: number, z: number, radius: number) => { x: number; z: number; collided: boolean },
   ): boolean {
     if (this.exploded) return false
 
@@ -393,6 +394,15 @@ export class Plane {
       this.root.position.x += forwardX * this.speed * dt
       this.root.position.z += forwardZ * this.speed * dt
       this.root.position.y = 0
+
+      if (resolveCollision3D) {
+        const res = resolveCollision3D(this.root.position.x, 1.0, this.root.position.z, this.collisionRadius)
+        if (res.collided) {
+          this.root.position.x = res.x
+          this.root.position.z = res.z
+          this.speed *= 0.88
+        }
+      }
 
       if (this.stateTimer >= 3.0) {
         this.state = 'flying'
@@ -442,6 +452,15 @@ export class Plane {
       this.root.position.x += forwardX * this.speed * dt
       this.root.position.z += forwardZ * this.speed * dt
       this.root.position.y = this.altitude
+
+      if (resolveCollision3D) {
+        const res = resolveCollision3D(this.root.position.x, this.altitude + 1.0, this.root.position.z, this.collisionRadius)
+        if (res.collided) {
+          this.root.position.x = res.x
+          this.root.position.z = res.z
+          this.speed *= 0.88
+        }
+      }
 
       this.updateTransform()
 
@@ -493,6 +512,29 @@ export class Plane {
     this.consecutiveRings = 0
     this.root.visible = true
     this.setPosition(x, z, yaw, 0)
+  }
+
+  private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
+
+  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+    const isLow = mode === 'low'
+    this.root.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = !isLow
+        obj.receiveShadow = !isLow
+        if (isLow) {
+          if (!this.originalMaterials.has(obj)) {
+            this.originalMaterials.set(obj, obj.material)
+          }
+          const stdMat = this.originalMaterials.get(obj) as THREE.MeshStandardMaterial
+          if (stdMat && stdMat.color) {
+            obj.material = new THREE.MeshBasicMaterial({ color: stdMat.color })
+          }
+        } else if (this.originalMaterials.has(obj)) {
+          obj.material = this.originalMaterials.get(obj)!
+        }
+      }
+    })
   }
 
   dispose(): void {

@@ -246,6 +246,29 @@ export class Tank {
     return { hitRegistered: true, isNewExplosion: false, hits: this.hits }
   }
 
+  private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
+
+  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+    const isLow = mode === 'low'
+    this.root.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = !isLow
+        obj.receiveShadow = !isLow
+        if (isLow) {
+          if (!this.originalMaterials.has(obj)) {
+            this.originalMaterials.set(obj, obj.material)
+          }
+          const stdMat = this.originalMaterials.get(obj) as THREE.MeshStandardMaterial
+          if (stdMat && stdMat.color) {
+            obj.material = new THREE.MeshBasicMaterial({ color: stdMat.color })
+          }
+        } else if (this.originalMaterials.has(obj)) {
+          obj.material = this.originalMaterials.get(obj)!
+        }
+      }
+    })
+  }
+
   dispose(): void {
     this.scene.remove(this.root)
     this.root.traverse((obj) => {

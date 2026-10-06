@@ -109,6 +109,7 @@ export interface ShopPartItem {
   price: number
   description: string
   effect: string
+  isConsumable?: boolean
 }
 
 export const SHOP_CATALOG = {
@@ -253,6 +254,24 @@ export const SHOP_CATALOG = {
 
   parts: [
     {
+      id: 'wanted_bribe',
+      name: 'Suborno Policial (-2 Níveis)',
+      icon: '⚖️',
+      price: 1500,
+      description: 'Pague propina às autoridades para cancelar 2 estrelas do seu nível de procurado durante a corrida!',
+      effect: 'Reduz o Nível de Procurado em -2 estrelas imediatamente',
+      isConsumable: true,
+    },
+    {
+      id: 'wanted_clear',
+      name: 'Advogado Criminalista VIP (Zerar Procurado)',
+      icon: '📜',
+      price: 3500,
+      description: 'Contrate um super advogado VIP para limpar 100% da sua ficha de procurado e suspender o cerco policial!',
+      effect: 'Zera completamente o Nível de Procurado (0 Estrelas) imediatamente',
+      isConsumable: true,
+    },
+    {
       id: 'nitro_booster',
       name: 'Super Nitro Booster Duplo',
       icon: '🚀',
@@ -313,7 +332,7 @@ export function getXpRequiredForLevel(level: number): number {
 function createDefaultGuestProfile(): UserProfile {
   return {
     uid: 'guest_' + Math.random().toString(36).substring(2, 9),
-    displayName: 'Jogador Anônimo',
+    displayName: 'ANÔNIMO',
     provider: 'guest',
     isGuest: true,
     level: 1,
@@ -910,6 +929,27 @@ class UserDatabaseManager {
   buyPart(partId: string): { success: boolean; message: string } {
     const item = SHOP_CATALOG.parts.find((p) => p.id === partId)
     if (!item) return { success: false, message: 'Peça não encontrada.' }
+
+    if (item.isConsumable) {
+      if (this.currentUser.cash < item.price) {
+        return {
+          success: false,
+          message: `Saldo insuficiente! Necessário: $ ${item.price.toLocaleString('pt-BR')}.`,
+        }
+      }
+      this.currentUser.cash -= item.price
+      this.currentUser.updatedAt = Date.now()
+
+      if (!this.currentUser.isGuest) {
+        this.currentUser.pendingSync = true
+        this.saveLocalProfile(this.currentUser)
+        void this.syncPendingChanges()
+      } else {
+        this.saveLocalProfile(this.currentUser)
+      }
+
+      return { success: true, message: `Serviço ${item.name} adquirido!` }
+    }
 
     if (this.currentUser.unlockedParts.includes(partId)) {
       return { success: false, message: 'Você já possui esta peça!' }

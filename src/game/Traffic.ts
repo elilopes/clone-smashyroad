@@ -189,6 +189,7 @@ export class Traffic {
     const colors = kind === 'bus' ? 0xe0a824 : kind === 'fuel_tanker' ? 0xf0f3f6 : kind === 'car_hauler' ? 0x2563eb : kind === 'taxi' ? 0xfacc15 : paintColors[Math.floor(Math.random() * paintColors.length)]
     const scale = kind === 'bicycle' ? 0.88 : (kind === 'truck' || kind === 'bus' || kind === 'fuel_tanker' || kind === 'car_hauler') ? 0.98 : 1
     const car = new Car(this.scene, { kind, color: colors, scale })
+    car.setGraphicsMode(this.graphicsMode)
     if (kind === 'bicycle') car.setRiderVisible(true)
     const yaw = this.heading(axis, direction)
     car.setPosition(x, z, yaw)
@@ -545,6 +546,15 @@ export class Traffic {
       0.92,
       (first.root.position.z + second.root.position.z) / 2,
     )
+  }
+
+  private graphicsMode: 'low' | 'medium' | 'high' = 'medium'
+
+  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+    this.graphicsMode = mode
+    for (const unit of this.units) {
+      unit.car.setGraphicsMode(mode)
+    }
   }
 
   dispose(): void {

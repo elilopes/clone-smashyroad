@@ -1,14 +1,15 @@
 import * as THREE from 'three'
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 const BLOCK = 48
 const ROAD_WIDTH = 15
 const CHUNK_DEPTH = 192
-const CITY_ROAD_MIN = -7
-const CITY_ROAD_MAX = 7
-const WORLD_HALF_WIDTH = 345
-const RIVER_WIDTH = 62
-const RIVER_LEFT_X = -379
-const RIVER_RIGHT_X = 379
+const CITY_ROAD_MIN = -12
+const CITY_ROAD_MAX = 12
+const WORLD_HALF_WIDTH = 620
+const RIVER_WIDTH = 68
+const RIVER_LEFT_X = -670
+const RIVER_RIGHT_X = 670
 
 export const TRAFFIC_LIGHT_INTERSECTIONS = [
   { x: -48, z: 0 },
@@ -33,12 +34,15 @@ export interface LagoonInfo {
   radius: number
 }
 
+export type GraphicsDesignMode = 'low' | 'medium' | 'high'
+
 type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }
 type Coin = { mesh: THREE.Mesh; x: number; z: number; alive: boolean }
 type BuildingVisual = { matrix: THREE.Matrix4; color: THREE.Color; bounds: Bounds; faded: boolean; roofMatrix?: THREE.Matrix4; roofColor?: THREE.Color }
 type CityChunk = {
   group: THREE.Group
   bounds: Bounds[]
+  dunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number }[]
   coins: Coin[]
   groundMaterial: THREE.MeshStandardMaterial
   buildingVisuals: BuildingVisual[]
@@ -102,6 +106,17 @@ export class City {
   private readonly treeTrunkMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3e28, roughness: 0.92 })
   private readonly treeFoliageMaterial = new THREE.MeshStandardMaterial({ color: 0x3f8a3d, roughness: 0.84 })
 
+  // Sand Dune and Desert Materials
+  private readonly sandMaterial = new THREE.MeshStandardMaterial({ color: 0xebbe60, roughness: 0.94, metalness: 0.05 })
+  private readonly sandDarkMaterial = new THREE.MeshStandardMaterial({ color: 0xd6a347, roughness: 0.92 })
+  private readonly cactusMaterial = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.88 })
+  private readonly palmTrunkMaterial = new THREE.MeshStandardMaterial({ color: 0x7c5230, roughness: 0.9 })
+  private readonly palmFrondMaterial = new THREE.MeshStandardMaterial({ color: 0x388e3c, roughness: 0.85 })
+  private readonly beachTentRed = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.8 })
+  private readonly beachTentWhite = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.8 })
+  private readonly beachTentBlue = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.8 })
+  private readonly coconutMaterial = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.9 })
+
   // River and Embankment Materials
   private readonly riverWaterMaterial = new THREE.MeshStandardMaterial({ color: 0x217d9e, roughness: 0.1, metalness: 0.36, transparent: true, opacity: 0.88 })
   private readonly lagoonWaterMaterial = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.08, metalness: 0.45, transparent: false, opacity: 1.0 })
@@ -152,6 +167,48 @@ export class City {
   private readonly garageBeaconMat = new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 2.5, roughness: 0.2 })
   private readonly garageSignMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 1.8, roughness: 0.2 })
 
+  // High-Poly Greeble Materials (Geometry Merging & Instanced Mesh)
+  private readonly waterTowerMaterial = new THREE.MeshStandardMaterial({ color: 0x85532d, roughness: 0.85, metalness: 0.25 })
+  private readonly hvacMaterial = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.55, metalness: 0.45 })
+  private readonly telecomMaterial = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.6 })
+  private readonly solarPanelMaterial = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.25, metalness: 0.75 })
+  private readonly fireEscapeMaterial = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, metalness: 0.6 })
+  private readonly acUnitMaterial = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.65 })
+  private readonly balconyMaterial = new THREE.MeshStandardMaterial({ color: 0xa8a29e, roughness: 0.85 })
+
+  // High-Poly Greeble Merged Geometries (Created via BufferGeometryUtils.mergeGeometries)
+  private readonly sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1)
+  private readonly sharedCulledBoxGeometry = this.createCulledBoxGeometry()
+  private readonly sharedConeGeometry = new THREE.ConeGeometry(0.72, 1, 4)
+
+  private createCulledBoxGeometry(): THREE.BufferGeometry {
+    const geo = new THREE.BoxGeometry(1, 1, 1)
+    const norm = geo.attributes.normal
+    const index = geo.index
+    if (index) {
+      const newIndices: number[] = []
+      for (let i = 0; i < index.count; i += 6) {
+        const vIdx = index.getX(i)
+        const ny = norm.getY(vIdx)
+        // Cull bottom face (facing -Y) since all voxel buildings & sidewalks sit flush on ground
+        if (ny < -0.5) continue
+        for (let j = 0; j < 6; j++) newIndices.push(index.getX(i + j))
+      }
+      geo.setIndex(newIndices)
+    }
+    return geo
+  }
+  private readonly waterTowerMergedGeo: THREE.BufferGeometry
+  private readonly hvacChillerMergedGeo: THREE.BufferGeometry
+  private readonly telecomMastMergedGeo: THREE.BufferGeometry
+  private readonly solarPanelMergedGeo: THREE.BufferGeometry
+  private readonly fireEscapeMergedGeo: THREE.BufferGeometry
+  private readonly acUnitMergedGeo: THREE.BufferGeometry
+  private readonly balconyMergedGeo: THREE.BufferGeometry
+  private readonly sharedGeometries: Set<THREE.BufferGeometry>
+
+  private graphicsMode: GraphicsDesignMode = 'medium'
+
   constructor(scene: THREE.Scene) {
     this.scene = scene
     this.ground = new THREE.Mesh(
@@ -170,7 +227,198 @@ export class City {
     this.fadedRoofMaterial = this.makeFadedMaterial(this.roofBatchMaterial)
     this.fadedHouseMaterial = this.makeFadedMaterial(this.houseBatchMaterial)
     this.fadedHouseRoofMaterial = this.makeFadedMaterial(this.houseRoofMaterial)
+
+    // Build High Poly Merged Greeble Geometries using Geometry Merging
+    this.waterTowerMergedGeo = this.createWaterTowerGeometry()
+    this.hvacChillerMergedGeo = this.createHVACGeometry()
+    this.telecomMastMergedGeo = this.createTelecomGeometry()
+    this.solarPanelMergedGeo = this.createSolarPanelGeometry()
+    this.fireEscapeMergedGeo = this.createFireEscapeGeometry()
+    this.acUnitMergedGeo = this.createACUnitGeometry()
+    this.balconyMergedGeo = this.createBalconyGeometry()
+
+    this.sharedGeometries = new Set([
+      this.coinGeometry,
+      this.sharedBoxGeometry,
+      this.sharedConeGeometry,
+      this.waterTowerMergedGeo,
+      this.hvacChillerMergedGeo,
+      this.telecomMastMergedGeo,
+      this.solarPanelMergedGeo,
+      this.fireEscapeMergedGeo,
+      this.acUnitMergedGeo,
+      this.balconyMergedGeo,
+    ])
+
     this.selectRandomKingKongLocation()
+  }
+
+  setGraphicsMode(mode: GraphicsDesignMode, playerZ: number = 0): void {
+    if (this.graphicsMode === mode) return
+    this.graphicsMode = mode
+    this.clear()
+    this.ensureAround(playerZ)
+  }
+
+  getGraphicsMode(): GraphicsDesignMode {
+    return this.graphicsMode
+  }
+
+  // Geometry Merging Helper: High-Poly Water Tower
+  private createWaterTowerGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    const tank = new THREE.CylinderGeometry(1.4, 1.4, 2.2, 12)
+    tank.translate(0, 3.2, 0)
+    geoms.push(tank)
+
+    const lid = new THREE.ConeGeometry(1.6, 0.7, 12)
+    lid.translate(0, 4.65, 0)
+    geoms.push(lid)
+
+    for (let i = 0; i < 4; i++) {
+      const angle = (i * Math.PI) / 2 + Math.PI / 4
+      const leg = new THREE.BoxGeometry(0.16, 2.4, 0.16)
+      leg.translate(Math.cos(angle) * 1.1, 1.2, Math.sin(angle) * 1.1)
+      geoms.push(leg)
+    }
+
+    const base = new THREE.BoxGeometry(2.6, 0.14, 2.6)
+    base.translate(0, 2.35, 0)
+    geoms.push(base)
+
+    const pipe = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6)
+    pipe.translate(0.5, 1.2, 0.5)
+    geoms.push(pipe)
+
+    return BufferGeometryUtils.mergeGeometries(geoms)
+  }
+
+  // Geometry Merging Helper: High-Poly HVAC Chiller
+  private createHVACGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    const body = new THREE.BoxGeometry(2.4, 1.2, 1.6)
+    body.translate(0, 0.6, 0)
+    geoms.push(body)
+
+    const fan1 = new THREE.CylinderGeometry(0.45, 0.45, 0.25, 10)
+    fan1.translate(-0.6, 1.3, 0)
+    geoms.push(fan1)
+
+    const fan2 = new THREE.CylinderGeometry(0.45, 0.45, 0.25, 10)
+    fan2.translate(0.6, 1.3, 0)
+    geoms.push(fan2)
+
+    const duct = new THREE.BoxGeometry(0.5, 0.8, 1.2)
+    duct.translate(-1.1, 0.6, 0)
+    geoms.push(duct)
+
+    return BufferGeometryUtils.mergeGeometries(geoms)
+  }
+
+  // Geometry Merging Helper: High-Poly Telecom Mast & Satellite Dish
+  private createTelecomGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    const mast = new THREE.CylinderGeometry(0.1, 0.18, 5.0, 6)
+    mast.translate(0, 2.5, 0)
+    geoms.push(mast)
+
+    const dish = new THREE.SphereGeometry(0.7, 8, 8, 0, Math.PI * 2, 0, Math.PI * 0.4)
+    dish.rotateX(Math.PI / 3)
+    dish.translate(0.4, 3.8, 0)
+    geoms.push(dish)
+
+    const bar1 = new THREE.BoxGeometry(1.6, 0.08, 0.08)
+    bar1.translate(0, 4.4, 0)
+    geoms.push(bar1)
+
+    const beacon = new THREE.SphereGeometry(0.15, 8, 8)
+    beacon.translate(0, 5.1, 0)
+    geoms.push(beacon)
+
+    return BufferGeometryUtils.mergeGeometries(geoms)
+  }
+
+  // Geometry Merging Helper: High-Poly Solar Panel Rack
+  private createSolarPanelGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    for (let i = 0; i < 3; i++) {
+      const panel = new THREE.BoxGeometry(1.4, 0.08, 2.2)
+      panel.rotateX(Math.PI / 7)
+      panel.translate((i - 1) * 1.6, 0.6, 0)
+      geoms.push(panel)
+
+      const leg1 = new THREE.BoxGeometry(0.08, 0.8, 0.08)
+      leg1.translate((i - 1) * 1.6 - 0.5, 0.4, -0.8)
+      geoms.push(leg1)
+
+      const leg2 = new THREE.BoxGeometry(0.08, 0.8, 0.08)
+      leg2.translate((i - 1) * 1.6 + 0.5, 0.4, -0.8)
+      geoms.push(leg2)
+    }
+    return BufferGeometryUtils.mergeGeometries(geoms)
+  }
+
+  // Geometry Merging Helper: High-Poly Fire Escape Stairway
+  private createFireEscapeGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    const platform = new THREE.BoxGeometry(1.4, 0.1, 1.0)
+    platform.translate(0, 0, 0)
+    geoms.push(platform)
+
+    const railFront = new THREE.BoxGeometry(1.4, 0.8, 0.06)
+    railFront.translate(0, 0.4, 0.47)
+    geoms.push(railFront)
+
+    const railSide1 = new THREE.BoxGeometry(0.06, 0.8, 1.0)
+    railSide1.translate(-0.67, 0.4, 0)
+    geoms.push(railSide1)
+
+    const railSide2 = new THREE.BoxGeometry(0.06, 0.8, 1.0)
+    railSide2.translate(0.67, 0.4, 0)
+    geoms.push(railSide2)
+
+    const ladder = new THREE.BoxGeometry(0.4, 3.2, 0.08)
+    ladder.rotateZ(Math.PI / 9)
+    ladder.translate(0, -1.5, 0.3)
+    geoms.push(ladder)
+
+    return BufferGeometryUtils.mergeGeometries(geoms)
+  }
+
+  // Geometry Merging Helper: High-Poly AC Window Unit
+  private createACUnitGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    const body = new THREE.BoxGeometry(0.75, 0.55, 0.7)
+    body.translate(0, 0, 0)
+    geoms.push(body)
+
+    const grill = new THREE.BoxGeometry(0.65, 0.4, 0.06)
+    grill.translate(0, 0, 0.36)
+    geoms.push(grill)
+
+    return BufferGeometryUtils.mergeGeometries(geoms)
+  }
+
+  // Geometry Merging Helper: High-Poly Voxel Balcony
+  private createBalconyGeometry(): THREE.BufferGeometry {
+    const geoms: THREE.BufferGeometry[] = []
+    const floor = new THREE.BoxGeometry(2.4, 0.15, 1.2)
+    floor.translate(0, 0, 0)
+    geoms.push(floor)
+
+    const railing = new THREE.BoxGeometry(2.4, 0.8, 0.08)
+    railing.translate(0, 0.45, 0.56)
+    geoms.push(railing)
+
+    const sideRailing1 = new THREE.BoxGeometry(0.08, 0.8, 1.2)
+    sideRailing1.translate(-1.16, 0.45, 0)
+    geoms.push(sideRailing1)
+
+    const sideRailing2 = new THREE.BoxGeometry(0.08, 0.8, 1.2)
+    sideRailing2.translate(1.16, 0.45, 0)
+    geoms.push(sideRailing2)
+
+    return BufferGeometryUtils.mergeGeometries(geoms)
   }
 
   private makeFadedMaterial(material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
@@ -219,6 +467,7 @@ export class City {
   private createChunk(index: number): void {
     const group = new THREE.Group()
     const bounds: Bounds[] = []
+    const chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number }[] = []
     const chunkCoins: Coin[] = []
     const random = randomFrom((index + 10091) * 785839)
     const zStart = index * CHUNK_DEPTH
@@ -231,7 +480,7 @@ export class City {
     blockGround.receiveShadow = true
     group.add(blockGround)
 
-    const laneMarkCount = (CITY_ROAD_MAX - CITY_ROAD_MIN + 1) * 16 + 5 * 50
+    const laneMarkCount = (CITY_ROAD_MAX - CITY_ROAD_MIN + 1) * 16 + 5 * 110
     const laneMarks = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.025, 3.5), this.lanePaint, laneMarkCount)
     const matrix = new THREE.Matrix4()
     const position = new THREE.Vector3()
@@ -239,7 +488,7 @@ export class City {
     const rotation = new THREE.Quaternion()
     let markIndex = 0
 
-    // 1. Longitudinal Avenues (15 major avenues from -7 to +7)
+    // 1. Longitudinal Avenues (25 major avenues from -12 to +12)
     for (let road = CITY_ROAD_MIN; road <= CITY_ROAD_MAX; road += 1) {
       const roadX = road * BLOCK
       this.addRoad(group, new THREE.PlaneGeometry(ROAD_WIDTH, CHUNK_DEPTH), roadX, zMiddle)
@@ -247,11 +496,11 @@ export class City {
         position.set(roadX, 0.03, zStart + dash * 12 + 4)
         scale.set(0.13, 1, 1)
         matrix.compose(position, rotation, scale)
-        laneMarks.setMatrixAt(markIndex++, matrix)
+        if (markIndex < laneMarkCount) laneMarks.setMatrixAt(markIndex++, matrix)
       }
     }
 
-    // 2. Latitudinal Cross Streets across the city
+    // 2. Latitudinal Cross Streets across the expanded city
     for (let road = 0; road <= CHUNK_DEPTH / BLOCK; road += 1) {
       const roadZ = zStart + road * BLOCK
       this.addRoad(group, new THREE.PlaneGeometry(WORLD_HALF_WIDTH * 2, ROAD_WIDTH), 0, roadZ)
@@ -259,16 +508,16 @@ export class City {
       // Adicionar semáforos se for um dos 4 cruzamentos escolhidos
       if (roadZ === 0 || roadZ === 48) {
         for (const blockX of [-1, 1]) {
-          const roadX = blockX * BLOCK // -48 ou 48
+          const roadX = blockX * BLOCK
           this.buildTrafficLightMeshes(group, roadX, roadZ)
         }
       }
 
-      for (let dash = 0; dash < 50; dash += 1) {
+      for (let dash = 0; dash < 90; dash += 1) {
         position.set(-WORLD_HALF_WIDTH + dash * 14 + 5, 0.03, roadZ)
         scale.set(3.3, 1, 0.13 / 3.5)
         matrix.compose(position, rotation, scale)
-        laneMarks.setMatrixAt(markIndex++, matrix)
+        if (markIndex < laneMarkCount) laneMarks.setMatrixAt(markIndex++, matrix)
       }
     }
     laneMarks.instanceMatrix.needsUpdate = true
@@ -284,19 +533,44 @@ export class City {
       this.addBridge(group, RIVER_RIGHT_X, roadZ, RIVER_WIDTH, ROAD_WIDTH, bounds)
     }
 
-    const buildingCapacity = 75
-    const boxGeometry = new THREE.BoxGeometry(1, 1, 1)
-    const buildings = new THREE.InstancedMesh(boxGeometry, this.buildingBatchMaterial, buildingCapacity)
-    const fadedBuildings = new THREE.InstancedMesh(boxGeometry, this.fadedBuildingMaterial, buildingCapacity)
-    const houses = new THREE.InstancedMesh(boxGeometry, this.houseBatchMaterial, buildingCapacity)
-    const fadedHouses = new THREE.InstancedMesh(boxGeometry, this.fadedHouseMaterial, buildingCapacity)
-    const roofInstances = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), this.roofBatchMaterial, buildingCapacity)
-    const fadedRoofInstances = new THREE.InstancedMesh(roofInstances.geometry, this.fadedRoofMaterial, buildingCapacity)
-    const houseRoofs = new THREE.InstancedMesh(new THREE.ConeGeometry(0.72, 1, 4), this.houseRoofMaterial, buildingCapacity)
-    const fadedHouseRoofs = new THREE.InstancedMesh(houseRoofs.geometry, this.fadedHouseRoofMaterial, buildingCapacity)
-    const houseDetails = new THREE.InstancedMesh(boxGeometry, this.houseWindowMaterial, buildingCapacity * 2)
-    const houseDoors = new THREE.InstancedMesh(boxGeometry, this.houseDoorMaterial, buildingCapacity)
-    const sidewalks = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), this.sidewalk, buildingCapacity)
+    // 4. Sand Dunes Fields (Dunas de Areia a Leste e Oeste)
+    this.buildSandDuneFields(group, zStart, zMiddle, bounds, random, chunkDunes)
+
+    const buildingCapacity = 160
+    const isLow = this.graphicsMode === 'low'
+    const isHigh = this.graphicsMode === 'high'
+
+    const geoToUse = isLow ? this.sharedCulledBoxGeometry : this.sharedBoxGeometry
+
+    const buildings = new THREE.InstancedMesh(geoToUse, this.buildingBatchMaterial, buildingCapacity)
+    const fadedBuildings = new THREE.InstancedMesh(geoToUse, this.fadedBuildingMaterial, buildingCapacity)
+    const houses = new THREE.InstancedMesh(geoToUse, this.houseBatchMaterial, buildingCapacity)
+    const fadedHouses = new THREE.InstancedMesh(geoToUse, this.fadedHouseMaterial, buildingCapacity)
+    const roofInstances = new THREE.InstancedMesh(geoToUse, this.roofBatchMaterial, buildingCapacity)
+    const fadedRoofInstances = new THREE.InstancedMesh(geoToUse, this.fadedRoofMaterial, buildingCapacity)
+    const houseRoofs = new THREE.InstancedMesh(this.sharedConeGeometry, this.houseRoofMaterial, buildingCapacity)
+    const fadedHouseRoofs = new THREE.InstancedMesh(this.sharedConeGeometry, this.fadedHouseRoofMaterial, buildingCapacity)
+    const houseDetails = new THREE.InstancedMesh(geoToUse, this.houseWindowMaterial, buildingCapacity * 2)
+    const houseDoors = new THREE.InstancedMesh(geoToUse, this.houseDoorMaterial, buildingCapacity)
+    const sidewalks = new THREE.InstancedMesh(geoToUse, this.sidewalk, buildingCapacity)
+
+    // High-Poly Greeble Instanced Meshes (Geometry Merging & Instanced Mesh for 'high' mode)
+    const highWaterTowers = isHigh ? new THREE.InstancedMesh(this.waterTowerMergedGeo, this.waterTowerMaterial, 40) : null
+    const highHVACUnits = isHigh ? new THREE.InstancedMesh(this.hvacChillerMergedGeo, this.hvacMaterial, 60) : null
+    const highTelecomMasts = isHigh ? new THREE.InstancedMesh(this.telecomMastMergedGeo, this.telecomMaterial, 40) : null
+    const highSolarPanels = isHigh ? new THREE.InstancedMesh(this.solarPanelMergedGeo, this.solarPanelMaterial, 50) : null
+    const highFireEscapes = isHigh ? new THREE.InstancedMesh(this.fireEscapeMergedGeo, this.fireEscapeMaterial, 60) : null
+    const highACUnits = isHigh ? new THREE.InstancedMesh(this.acUnitMergedGeo, this.acUnitMaterial, 180) : null
+    const highBalconies = isHigh ? new THREE.InstancedMesh(this.balconyMergedGeo, this.balconyMaterial, 120) : null
+
+    let highWaterTowerIndex = 0
+    let highHVACIndex = 0
+    let highTelecomIndex = 0
+    let highSolarIndex = 0
+    let highFireEscapeIndex = 0
+    let highACIndex = 0
+    let highBalconyIndex = 0
+
     buildings.castShadow = true
     buildings.receiveShadow = true
     houses.castShadow = true
@@ -320,6 +594,15 @@ export class City {
     sidewalks.receiveShadow = true
     houseDetails.castShadow = false
     houseDoors.castShadow = true
+
+    if (highWaterTowers) { highWaterTowers.castShadow = true; highWaterTowers.receiveShadow = true }
+    if (highHVACUnits) { highHVACUnits.castShadow = true; highHVACUnits.receiveShadow = true }
+    if (highTelecomMasts) { highTelecomMasts.castShadow = true; highTelecomMasts.receiveShadow = true }
+    if (highSolarPanels) { highSolarPanels.castShadow = true; highSolarPanels.receiveShadow = true }
+    if (highFireEscapes) { highFireEscapes.castShadow = true; highFireEscapes.receiveShadow = true }
+    if (highACUnits) { highACUnits.castShadow = true; highACUnits.receiveShadow = true }
+    if (highBalconies) { highBalconies.castShadow = true; highBalconies.receiveShadow = true }
+
     const buildingVisuals: BuildingVisual[] = []
     const houseVisuals: BuildingVisual[] = []
     let buildingIndex = 0
@@ -409,17 +692,20 @@ export class City {
           visual.roofMatrix = matrix.clone()
           visual.roofColor = roofInstanceColor
 
-          position.set(x - width * 0.25, 2.8, z + depth / 2 + 0.11)
-          scale.set(2.15, 1.6, 0.16)
-          matrix.compose(position, rotation, scale)
-          houseDetails.setMatrixAt(detailIndex++, matrix)
-          position.set(x + width * 0.25, 2.8, z + depth / 2 + 0.11)
-          matrix.compose(position, rotation, scale)
-          houseDetails.setMatrixAt(detailIndex++, matrix)
-          position.set(x, 1.35, z + depth / 2 + 0.12)
-          scale.set(1.55, 2.6, 0.19)
-          matrix.compose(position, rotation, scale)
-          houseDoors.setMatrixAt(doorIndex++, matrix)
+          if (!isLow) {
+            position.set(x - width * 0.25, 2.8, z + depth / 2 + 0.11)
+            scale.set(2.15, 1.6, 0.16)
+            matrix.compose(position, rotation, scale)
+            houseDetails.setMatrixAt(detailIndex++, matrix)
+            position.set(x + width * 0.25, 2.8, z + depth / 2 + 0.11)
+            scale.set(2.15, 1.6, 0.16)
+            matrix.compose(position, rotation, scale)
+            houseDetails.setMatrixAt(detailIndex++, matrix)
+            position.set(x, 1.35, z + depth / 2 + 0.12)
+            scale.set(1.55, 2.6, 0.19)
+            matrix.compose(position, rotation, scale)
+            houseDoors.setMatrixAt(doorIndex++, matrix)
+          }
         } else {
           const paletteIndex = Math.floor(random() * this.buildingMaterials.length)
           const color = this.buildingMaterials[paletteIndex].color.clone()
@@ -427,7 +713,8 @@ export class City {
           buildingVisuals.push(visual)
           buildings.setMatrixAt(buildingIndex, visual.matrix)
           buildings.setColorAt(buildingIndex++, color)
-          if (random() > 0.62) {
+
+          if (!isLow && random() > 0.62) {
             position.set(x + width * 0.12, height + 0.8, z - depth * 0.1)
             scale.set(width * 0.36, 1 + random() * 2, depth * 0.4)
             matrix.compose(position, rotation, scale)
@@ -436,6 +723,65 @@ export class City {
             roofInstances.setColorAt(roofIndex++, roofColor)
             visual.roofMatrix = matrix.clone()
             visual.roofColor = roofColor
+          }
+
+          // HIGH GRAPHICS: High-Poly Merged Greebles & Instanced Meshes
+          if (isHigh && height > 14) {
+            const greebleRoll = random()
+            if (greebleRoll < 0.35 && highWaterTowers && highWaterTowerIndex < 40) {
+              position.set(x + (random() - 0.5) * (width * 0.35), height + 0.05, z + (random() - 0.5) * (depth * 0.35))
+              scale.set(1.15, 1.15, 1.15)
+              matrix.compose(position, rotation, scale)
+              highWaterTowers.setMatrixAt(highWaterTowerIndex++, matrix)
+            } else if (greebleRoll < 0.70 && highHVACUnits && highHVACIndex < 60) {
+              position.set(x + (random() - 0.5) * (width * 0.35), height + 0.05, z + (random() - 0.5) * (depth * 0.35))
+              scale.set(1.2, 1.2, 1.2)
+              matrix.compose(position, rotation, scale)
+              highHVACUnits.setMatrixAt(highHVACIndex++, matrix)
+            } else if (highTelecomMasts && highTelecomIndex < 40) {
+              position.set(x + (random() - 0.5) * (width * 0.2), height + 0.05, z + (random() - 0.5) * (depth * 0.2))
+              scale.set(1.25, 1.25, 1.25)
+              matrix.compose(position, rotation, scale)
+              highTelecomMasts.setMatrixAt(highTelecomIndex++, matrix)
+            }
+
+            if (width > 17 && depth > 17 && highSolarPanels && highSolarIndex < 50) {
+              position.set(x - width * 0.22, height + 0.05, z - depth * 0.22)
+              scale.set(1.1, 1.1, 1.1)
+              matrix.compose(position, rotation, scale)
+              highSolarPanels.setMatrixAt(highSolarIndex++, matrix)
+            }
+
+            // Facade AC compressor units
+            if (highACUnits && highACIndex < 176) {
+              const acCount = 2 + Math.floor(random() * 3)
+              for (let ac = 0; ac < acCount; ac += 1) {
+                const acY = 4.0 + (height - 8.0) * (ac / Math.max(1, acCount - 1))
+                position.set(x + (random() - 0.5) * (width * 0.7), acY, z + depth / 2 + 0.38)
+                scale.set(1.0, 1.0, 1.0)
+                matrix.compose(position, rotation, scale)
+                highACUnits.setMatrixAt(highACIndex++, matrix)
+              }
+            }
+
+            // Exterior Fire Escapes & Balconies
+            if (height > 22) {
+              if (highFireEscapes && highFireEscapeIndex < 60) {
+                position.set(x + width / 2 + 0.05, height * 0.55, z + (random() - 0.5) * (depth * 0.4))
+                scale.set(1.0, 1.0, 1.0)
+                const fireEscapeRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
+                matrix.compose(position, fireEscapeRot, scale)
+                highFireEscapes.setMatrixAt(highFireEscapeIndex++, matrix)
+              }
+              if (highBalconies && highBalconyIndex < 118) {
+                for (let bY = 7.0; bY < height - 4.0; bY += 6.5) {
+                  position.set(x + (random() - 0.5) * (width * 0.4), bY, z + depth / 2 + 0.6)
+                  scale.set(1.0, 1.0, 1.0)
+                  matrix.compose(position, rotation, scale)
+                  highBalconies.setMatrixAt(highBalconyIndex++, matrix)
+                }
+              }
+            }
           }
         }
         bounds.push(buildingBounds)
@@ -450,12 +796,14 @@ export class City {
     houseDetails.count = detailIndex
     houseDoors.count = doorIndex
     sidewalks.count = sidewalkIndex
+
     buildings.visible = buildingIndex > 0
     houses.visible = houseIndex > 0
     roofInstances.visible = roofIndex > 0
     houseRoofs.visible = houseRoofIndex > 0
     houseDetails.visible = detailIndex > 0
     houseDoors.visible = doorIndex > 0
+
     buildings.instanceMatrix.needsUpdate = true
     houses.instanceMatrix.needsUpdate = true
     roofInstances.instanceMatrix.needsUpdate = true
@@ -471,7 +819,44 @@ export class City {
     if (fadedRoofInstances.instanceColor) fadedRoofInstances.instanceColor.needsUpdate = true
     if (houseRoofs.instanceColor) houseRoofs.instanceColor.needsUpdate = true
     if (fadedHouseRoofs.instanceColor) fadedHouseRoofs.instanceColor.needsUpdate = true
+
     group.add(sidewalks, buildings, fadedBuildings, houses, fadedHouses, roofInstances, fadedRoofInstances, houseRoofs, fadedHouseRoofs, houseDetails, houseDoors)
+
+    if (highWaterTowers && highWaterTowerIndex > 0) {
+      highWaterTowers.count = highWaterTowerIndex
+      highWaterTowers.instanceMatrix.needsUpdate = true
+      group.add(highWaterTowers)
+    }
+    if (highHVACUnits && highHVACIndex > 0) {
+      highHVACUnits.count = highHVACIndex
+      highHVACUnits.instanceMatrix.needsUpdate = true
+      group.add(highHVACUnits)
+    }
+    if (highTelecomMasts && highTelecomIndex > 0) {
+      highTelecomMasts.count = highTelecomIndex
+      highTelecomMasts.instanceMatrix.needsUpdate = true
+      group.add(highTelecomMasts)
+    }
+    if (highSolarPanels && highSolarIndex > 0) {
+      highSolarPanels.count = highSolarIndex
+      highSolarPanels.instanceMatrix.needsUpdate = true
+      group.add(highSolarPanels)
+    }
+    if (highFireEscapes && highFireEscapeIndex > 0) {
+      highFireEscapes.count = highFireEscapeIndex
+      highFireEscapes.instanceMatrix.needsUpdate = true
+      group.add(highFireEscapes)
+    }
+    if (highACUnits && highACIndex > 0) {
+      highACUnits.count = highACIndex
+      highACUnits.instanceMatrix.needsUpdate = true
+      group.add(highACUnits)
+    }
+    if (highBalconies && highBalconyIndex > 0) {
+      highBalconies.count = highBalconyIndex
+      highBalconies.instanceMatrix.needsUpdate = true
+      group.add(highBalconies)
+    }
 
     for (let coinIndex = 0; coinIndex < 5; coinIndex += 1) {
       const road = Math.floor(random() * 7) - 3
@@ -488,7 +873,7 @@ export class City {
     this.root.add(group)
     this.colliders.push(...bounds)
     this.coins.push(...chunkCoins)
-    this.chunks.set(index, { group, bounds, coins: chunkCoins, groundMaterial: green, buildingVisuals, houseVisuals, buildings, fadedBuildings, roofInstances, fadedRoofInstances, houses, fadedHouses, houseRoofs, fadedHouseRoofs })
+    this.chunks.set(index, { group, bounds, dunes: chunkDunes, coins: chunkCoins, groundMaterial: green, buildingVisuals, houseVisuals, buildings, fadedBuildings, roofInstances, fadedRoofInstances, houses, fadedHouses, houseRoofs, fadedHouseRoofs })
   }
 
   private addRoad(group: THREE.Group, geometry: THREE.PlaneGeometry, x: number, z: number): void {
@@ -1329,20 +1714,283 @@ export class City {
       })
     }
 
-    // 4. Outer Natural Riverbank
-    const outerEdgeX = side === 'west' ? centerX - width / 2 - 2 : centerX + width / 2 + 2
-    const outerBank = new THREE.Mesh(new THREE.BoxGeometry(8, 3.2, depth), this.outerBankMaterial)
-    outerBank.position.set(outerEdgeX, -0.2, centerZ)
-    group.add(outerBank)
+    // 4. Smooth Sand Shoreline Transition onto Dunes (No blocking wall!)
+    const outerEdgeX = side === 'west' ? centerX - width / 2 - 4 : centerX + width / 2 + 4
+    const sandTransition = new THREE.Mesh(new THREE.PlaneGeometry(16, depth), this.sandMaterial)
+    sandTransition.rotation.x = -Math.PI / 2
+    sandTransition.position.set(outerEdgeX, -0.11, centerZ)
+    sandTransition.receiveShadow = true
+    group.add(sandTransition)
+  }
 
-    bounds.push({
-      minX: side === 'west' ? outerEdgeX - 5 : outerEdgeX - 1,
-      maxX: side === 'west' ? outerEdgeX + 1 : outerEdgeX + 5,
-      minZ: centerZ - depth / 2,
-      maxZ: centerZ + depth / 2,
-      minY: -2,
-      maxY: 10,
-    })
+  private buildSandDuneFields(
+    group: THREE.Group,
+    zStart: number,
+    _zMiddle: number,
+    bounds: Bounds[],
+    random: () => number,
+    chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number }[]
+  ): void {
+    const sandBaseMat = this.sandMaterial
+
+    // West Desert Sand Ground
+    const westSandGround = new THREE.Mesh(new THREE.PlaneGeometry(850, CHUNK_DEPTH), sandBaseMat)
+    westSandGround.rotation.x = -Math.PI / 2
+    westSandGround.position.set(-1120, -0.11, zStart + CHUNK_DEPTH / 2)
+    westSandGround.receiveShadow = true
+    group.add(westSandGround)
+
+    // East Desert Sand Ground
+    const eastSandGround = new THREE.Mesh(new THREE.PlaneGeometry(850, CHUNK_DEPTH), sandBaseMat)
+    eastSandGround.rotation.x = -Math.PI / 2
+    eastSandGround.position.set(1120, -0.11, zStart + CHUNK_DEPTH / 2)
+    eastSandGround.receiveShadow = true
+    group.add(eastSandGround)
+
+    // Ocean Water Beyond Sand Dunes (x < -1540 and x > 1540)
+    const oceanWest = new THREE.Mesh(new THREE.PlaneGeometry(1600, CHUNK_DEPTH), this.riverWaterMaterial)
+    oceanWest.rotation.x = -Math.PI / 2
+    oceanWest.position.set(-2340, -0.18, zStart + CHUNK_DEPTH / 2)
+    oceanWest.receiveShadow = true
+    group.add(oceanWest)
+
+    const oceanEast = new THREE.Mesh(new THREE.PlaneGeometry(1600, CHUNK_DEPTH), this.riverWaterMaterial)
+    oceanEast.rotation.x = -Math.PI / 2
+    oceanEast.position.set(2340, -0.18, zStart + CHUNK_DEPTH / 2)
+    oceanEast.receiveShadow = true
+    group.add(oceanEast)
+
+    const duneCountPerSide = 14
+    const duneGeo = new THREE.SphereGeometry(1, 16, 12)
+
+    const createDunesSide = (sideXCenter: number) => {
+      for (let i = 0; i < duneCountPerSide; i++) {
+        const dx = sideXCenter + (random() - 0.5) * 650
+        const dz = zStart + 12 + random() * (CHUNK_DEPTH - 24)
+
+        // Leave bridge exit roads clear so vehicles drive straight into desert
+        const roadZ = Math.round(dz / BLOCK) * BLOCK
+        if (Math.abs(dz - roadZ) < 18) continue
+
+        const scaleX = 22 + random() * 40
+        const scaleY = 3.5 + random() * 9.5
+        const scaleZ = 28 + random() * 48
+
+        const duneMesh = new THREE.Mesh(duneGeo, random() > 0.4 ? this.sandMaterial : this.sandDarkMaterial)
+        duneMesh.position.set(dx, -scaleY * 0.22, dz)
+        duneMesh.scale.set(scaleX, scaleY, scaleZ)
+        duneMesh.rotation.y = random() * Math.PI
+        duneMesh.rotation.z = (random() - 0.5) * 0.12
+        duneMesh.receiveShadow = true
+        duneMesh.castShadow = true
+        group.add(duneMesh)
+
+        chunkDunes.push({ dx, dz, scaleX, scaleY, scaleZ })
+
+        // Generate multiple detailed objects per dune to populate the beach/sand environment
+        const objCount = 1 + Math.floor(random() * 3)
+        for (let j = 0; j < objCount; j++) {
+          const plantX = dx + (random() - 0.5) * (scaleX * 0.7)
+          const plantZ = dz + (random() - 0.5) * (scaleZ * 0.7)
+
+          // Calculate exact dune surface height so they never float or sink
+          const nx = (plantX - dx) / scaleX
+          const nz = (plantZ - dz) / scaleZ
+          const normDistSq = nx * nx + nz * nz
+          let plantY = -0.11
+          if (normDistSq < 0.98) {
+            plantY = -scaleY * 0.22 + scaleY * Math.sqrt(1 - normDistSq)
+          }
+
+          const roll = random()
+          if (roll < 0.45) {
+            // ==========================================
+            // DETAILED CURVED COCONUT TREE (COQUEIRO)
+            // ==========================================
+            const coconutTree = new THREE.Group()
+            coconutTree.position.set(plantX, plantY, plantZ)
+
+            // Curved trunk from 4 linked leaning cylinder segments
+            const segmentsCount = 4
+            const segmentHeight = 1.3
+            const baseRadius = 0.32
+            let currPos = new THREE.Vector3(0, 0, 0)
+            const tiltAngle = (random() - 0.5) * 0.35 + 0.38 // lean towards beach/ocean
+            const tiltDir = sideXCenter < 0 ? 1 : -1 // Lean away from town center
+
+            for (let s = 0; s < segmentsCount; s++) {
+              const segGeo = new THREE.CylinderGeometry(baseRadius * (1 - (s + 1) * 0.15), baseRadius * (1 - s * 0.15), segmentHeight, 7)
+              const segMesh = new THREE.Mesh(segGeo, this.palmTrunkMaterial)
+              segMesh.castShadow = true
+
+              const nextPos = currPos.clone().add(new THREE.Vector3(
+                Math.sin(tiltAngle * tiltDir) * segmentHeight * 0.5,
+                Math.cos(tiltAngle) * segmentHeight,
+                (random() - 0.5) * 0.12
+              ))
+
+              segMesh.position.copy(currPos).add(nextPos).multiplyScalar(0.5)
+              const dir = nextPos.clone().sub(currPos)
+              segMesh.scale.y = dir.length()
+              segMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
+              coconutTree.add(segMesh)
+
+              currPos.copy(nextPos)
+            }
+
+            // Green crown of 6 palm fronds leaning outward and down
+            const frondCount = 6
+            for (let f = 0; f < frondCount; f++) {
+              const angle = (f / frondCount) * Math.PI * 2
+              const frondGeo = new THREE.BoxGeometry(0.28, 0.06, 2.0)
+              const frondMesh = new THREE.Mesh(frondGeo, this.palmFrondMaterial)
+              frondMesh.castShadow = true
+
+              frondMesh.position.copy(currPos).add(new THREE.Vector3(
+                Math.cos(angle) * 0.8,
+                -0.1,
+                Math.sin(angle) * 0.8
+              ))
+
+              frondMesh.rotation.y = -angle + Math.PI / 2
+              frondMesh.rotation.x = 0.32
+              coconutTree.add(frondMesh)
+            }
+
+            // 3 Brown Coconuts hanging directly below the fronds
+            const coconutCount = 3
+            for (let c = 0; c < coconutCount; c++) {
+              const cAngle = (c / coconutCount) * Math.PI * 2
+              const cocoGeo = new THREE.SphereGeometry(0.2, 6, 6)
+              const cocoMesh = new THREE.Mesh(cocoGeo, this.coconutMaterial)
+              cocoMesh.position.copy(currPos).add(new THREE.Vector3(
+                Math.cos(cAngle) * 0.25,
+                -0.18,
+                Math.sin(cAngle) * 0.25
+              ))
+              cocoMesh.castShadow = true
+              coconutTree.add(cocoMesh)
+            }
+
+            group.add(coconutTree)
+
+            // PUSH SOLID COLLIDER FOR COCONUT TREE
+            bounds.push({
+              minX: plantX - 0.7,
+              maxX: plantX + 0.7,
+              minZ: plantZ - 0.7,
+              maxZ: plantZ + 0.7,
+              minY: plantY,
+              maxY: plantY + 5.2,
+            })
+
+          } else if (roll < 0.80) {
+            // ==========================================
+            // DETAILED STRIPED BEACH STALL (BARRACA DE PRAIA)
+            // ==========================================
+            const beachStall = new THREE.Group()
+            beachStall.position.set(plantX, plantY, plantZ)
+
+            // Tent configuration
+            const useRed = random() > 0.5
+            const stripeMatA = useRed ? this.beachTentRed : this.beachTentBlue
+            const stripeMatB = this.beachTentWhite
+
+            // 4 slender support poles
+            const poleH = 2.4
+            const poleOffsets = [
+              [-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]
+            ]
+            for (const [px, pz] of poleOffsets) {
+              const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, poleH, 6)
+              const poleMesh = new THREE.Mesh(poleGeo, this.palmTrunkMaterial)
+              poleMesh.position.set(px, poleH * 0.5, pz)
+              poleMesh.castShadow = true
+              beachStall.add(poleMesh)
+            }
+
+            // Striped shade canopy from 5 colored panels
+            const stripeCount = 5
+            const stripeWidth = 0.56
+            for (let s = 0; s < stripeCount; s++) {
+              const mat = s % 2 === 0 ? stripeMatA : stripeMatB
+              const stripeGeo = new THREE.BoxGeometry(stripeWidth, 0.12, 2.6)
+              const stripeMesh = new THREE.Mesh(stripeGeo, mat)
+              stripeMesh.position.set(-1.12 + s * stripeWidth, poleH + 0.06, 0)
+              stripeMesh.castShadow = true
+              beachStall.add(stripeMesh)
+            }
+
+            // Little wood table in the middle
+            const tableH = 0.75
+            const tableTopGeo = new THREE.CylinderGeometry(0.65, 0.7, 0.08, 10)
+            const tableTop = new THREE.Mesh(tableTopGeo, this.palmTrunkMaterial)
+            tableTop.position.set(0, tableH, 0)
+            tableTop.castShadow = true
+            beachStall.add(tableTop)
+
+            const tableLegGeo = new THREE.CylinderGeometry(0.08, 0.08, tableH, 6)
+            const tableLeg = new THREE.Mesh(tableLegGeo, this.palmTrunkMaterial)
+            tableLeg.position.set(0, tableH * 0.5, 0)
+            tableLeg.castShadow = true
+            beachStall.add(tableLeg)
+
+            // Two cute wooden stools under the canopy
+            const stoolGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.4, 8)
+            for (const sz of [-0.7, 0.7]) {
+              const stool = new THREE.Mesh(stoolGeo, this.coconutMaterial)
+              stool.position.set(0, 0.2, sz)
+              stool.castShadow = true
+              beachStall.add(stool)
+            }
+
+            group.add(beachStall)
+
+            // PUSH SOLID COLLIDER FOR BEACH STALL
+            bounds.push({
+              minX: plantX - 1.4,
+              maxX: plantX + 1.4,
+              minZ: plantZ - 1.4,
+              maxZ: plantZ + 1.4,
+              minY: plantY,
+              maxY: plantY + 2.8,
+            })
+
+          } else {
+            // ==========================================
+            // DESERT CACTUS
+            // ==========================================
+            const cactusGroup = new THREE.Group()
+            cactusGroup.position.set(plantX, plantY, plantZ)
+
+            const cactus = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 3.2, 6), this.cactusMaterial)
+            cactus.position.y = 1.6
+            cactus.castShadow = true
+            cactusGroup.add(cactus)
+
+            const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.8, 6), this.cactusMaterial)
+            arm.rotation.z = Math.PI / 2
+            arm.position.y = 2.2
+            cactusGroup.add(arm)
+
+            group.add(cactusGroup)
+
+            // PUSH SOLID COLLIDER FOR CACTUS
+            bounds.push({
+              minX: plantX - 0.6,
+              maxX: plantX + 0.6,
+              minZ: plantZ - 0.6,
+              maxZ: plantZ + 0.6,
+              minY: plantY,
+              maxY: plantY + 3.2,
+            })
+          }
+        }
+      }
+    }
+
+    createDunesSide(-1120)
+    createDunesSide(1120)
   }
 
   private addBridge(
@@ -1353,15 +2001,15 @@ export class City {
     roadWidth: number,
     bounds: Bounds[],
   ): void {
-    // 1. Asphalt Roadway Deck
-    const bridgeRoad = new THREE.Mesh(new THREE.PlaneGeometry(width, roadWidth), this.asphalt)
+    // 1. Asphalt Roadway Deck extending seamlessly past river onto Sand Dunes
+    const bridgeRoad = new THREE.Mesh(new THREE.PlaneGeometry(width + 32, roadWidth), this.asphalt)
     bridgeRoad.rotation.x = -Math.PI / 2
     bridgeRoad.position.set(centerX, 0.02, centerZ)
     bridgeRoad.receiveShadow = true
     group.add(bridgeRoad)
 
     // 2. Concrete Bridge Deck Structure
-    const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(width, 0.85, roadWidth + 0.8), this.embankmentMaterial)
+    const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(width + 32, 0.85, roadWidth + 0.8), this.embankmentMaterial)
     bridgeDeck.position.set(centerX, -0.42, centerZ)
     bridgeDeck.receiveShadow = true
     group.add(bridgeDeck)
@@ -1394,11 +2042,11 @@ export class City {
   }
 
   isRiver(x: number, z: number): boolean {
-    const inWest = x <= -348 && x >= -410
-    const inEast = x >= 348 && x <= 410
+    const inWest = x <= RIVER_LEFT_X + RIVER_WIDTH / 2 && x >= RIVER_LEFT_X - RIVER_WIDTH / 2
+    const inEast = x <= RIVER_RIGHT_X + RIVER_WIDTH / 2 && x >= RIVER_RIGHT_X - RIVER_WIDTH / 2
     if (!inWest && !inEast) return false
     const roadZ = Math.round(z / BLOCK) * BLOCK
-    if (Math.abs(z - roadZ) <= ROAD_WIDTH / 2 + 0.6) return false
+    if (Math.abs(z - roadZ) <= ROAD_WIDTH / 2 + 1.2) return false
     return true
   }
 
@@ -1490,7 +2138,7 @@ export class City {
     return false
   }
 
-  resolveCollision(x: number, z: number, radius: number): { x: number; z: number; collided: boolean; normalX: number; normalZ: number } {
+  resolveCollision(x: number, z: number, radius: number, y?: number): { x: number; z: number; collided: boolean; normalX: number; normalZ: number } {
     let resolvedX = x
     let resolvedZ = z
     let anyCollision = false
@@ -1500,6 +2148,12 @@ export class City {
     // 2 passes to handle corners where two buildings meet
     for (let iter = 0; iter < 2; iter += 1) {
       for (const box of this.colliders) {
+        // If y is specified, check if the object is vertically outside this building box (e.g. above it).
+        // If y is higher than the building top (box.maxY) or lower than the building bottom (box.minY), skip this building collider!
+        if (y !== undefined) {
+          if (y - radius > box.maxY || y + radius < box.minY) continue
+        }
+
         const clampedX = THREE.MathUtils.clamp(resolvedX, box.minX, box.maxX)
         const clampedZ = THREE.MathUtils.clamp(resolvedZ, box.minZ, box.maxZ)
         const dx = resolvedX - clampedX
@@ -1567,16 +2221,39 @@ export class City {
     return this.colliders
   }
 
+  getDuneHeightAt(x: number, z: number): number {
+    let maxHeight = 0
+    for (const chunk of this.chunks.values()) {
+      for (const d of chunk.dunes) {
+        const nx = (x - d.dx) / d.scaleX
+        const nz = (z - d.dz) / d.scaleZ
+        const normDistSq = nx * nx + nz * nz
+        if (normDistSq < 0.98) {
+          const cy = -d.scaleY * 0.22
+          const ySurface = cy + d.scaleY * Math.sqrt(1 - normDistSq)
+          if (ySurface > maxHeight) {
+            maxHeight = ySurface
+          }
+        }
+      }
+    }
+    return maxHeight
+  }
+
+  isWater(x: number, z: number): boolean {
+    return this.isInWater(x, z)
+  }
+
   isInWater(x: number, z: number): boolean {
     const absX = Math.abs(x)
-    if (absX >= 348 && absX <= 410) {
-      const bridgeZ = Math.abs(THREE.MathUtils.euclideanModulo(z + 7.5, BLOCK) - 7.5)
-      if (bridgeZ < 8.0) {
-        return false
-      }
-      return true
-    }
 
+    // 1. Ocean Water beyond Sand Dunes (x <= -1540 or x >= 1540)
+    if (absX >= 1540) return true
+
+    // 2. River Water
+    if (this.isRiver(x, z)) return true
+
+    // 3. Lagoons
     const currentBlockX = Math.round((x - BLOCK / 2) / BLOCK)
     const currentBlockZ = Math.round((z - BLOCK / 2) / BLOCK) * BLOCK + BLOCK / 2
     for (let bx = currentBlockX - 1; bx <= currentBlockX + 1; bx += 1) {
@@ -1598,12 +2275,91 @@ export class City {
 
   clear(): void {
     for (const [index, chunk] of this.chunks) this.removeChunk(index, chunk)
+    for (const wall of this.wallDeformations) {
+      this.root.remove(wall)
+    }
+    this.wallDeformations.length = 0
+  }
+
+  private wallDeformations: THREE.Group[] = []
+  private wallCraterGeo?: THREE.BufferGeometry
+  private readonly wallCraterMat = new THREE.MeshStandardMaterial({
+    color: 0x1c1f24,
+    roughness: 0.95,
+    metalness: 0.2,
+  })
+  private readonly wallBrickMat = new THREE.MeshStandardMaterial({
+    color: 0x7c2d12,
+    roughness: 0.9,
+  })
+
+  private getWallCraterGeometry(): THREE.BufferGeometry {
+    if (this.wallCraterGeo) return this.wallCraterGeo
+    const geo = new THREE.CylinderGeometry(1.35, 0.25, 0.65, 14, 3)
+    geo.rotateX(Math.PI / 2)
+    const pos = geo.attributes.position
+    for (let i = 0; i < pos.count; i++) {
+      const z = pos.getZ(i)
+      if (z < 0) {
+        pos.setZ(i, z * 1.85)
+        pos.setX(i, pos.getX(i) * 0.68)
+        pos.setY(i, pos.getY(i) * 0.68)
+      } else {
+        pos.setX(i, pos.getX(i) * (1.0 + (Math.random() - 0.5) * 0.25))
+        pos.setY(i, pos.getY(i) * (1.0 + (Math.random() - 0.5) * 0.25))
+      }
+    }
+    geo.computeVertexNormals()
+    this.wallCraterGeo = geo
+    return geo
+  }
+
+  addWallDeformation(x: number, y: number, z: number, normalX: number, normalZ: number, force = 1.0): void {
+    if (this.graphicsMode !== 'high') return
+    for (const wall of this.wallDeformations) {
+      const dx = wall.position.x - x
+      const dz = wall.position.z - z
+      if (dx * dx + dz * dz < 2.5) return
+    }
+
+    const group = new THREE.Group()
+    group.position.set(x, Math.max(0.6, y), z)
+    const yaw = Math.atan2(normalX, normalZ)
+    group.rotation.y = yaw
+
+    const scaleF = THREE.MathUtils.clamp(force * 0.85, 0.8, 2.2)
+    const craterMesh = new THREE.Mesh(this.getWallCraterGeometry(), this.wallCraterMat)
+    craterMesh.scale.set(scaleF, scaleF, scaleF * 0.8)
+    craterMesh.castShadow = true
+    craterMesh.receiveShadow = true
+    group.add(craterMesh)
+
+    for (let b = 0; b < 6; b++) {
+      const angle = (b / 6) * Math.PI * 2
+      const rx = Math.cos(angle) * 0.95 * scaleF
+      const ry = Math.sin(angle) * 0.8 * scaleF
+      const brick = new THREE.Mesh(this.sharedBoxGeometry, Math.random() > 0.5 ? this.wallCraterMat : this.wallBrickMat)
+      brick.scale.set(0.35 + Math.random() * 0.35, 0.25 + Math.random() * 0.25, 0.35 + Math.random() * 0.3)
+      brick.position.set(rx, ry, -0.15)
+      brick.rotation.set(Math.random() * 0.5, Math.random() * 0.5, Math.random() * 0.5)
+      group.add(brick)
+    }
+
+    this.root.add(group)
+    this.wallDeformations.push(group)
+
+    if (this.wallDeformations.length > 60) {
+      const oldest = this.wallDeformations.shift()
+      if (oldest) this.root.remove(oldest)
+    }
   }
 
   private removeChunk(index: number, chunk: CityChunk): void {
     this.root.remove(chunk.group)
     chunk.group.traverse((object) => {
-      if (object instanceof THREE.Mesh && object.geometry !== this.coinGeometry) object.geometry.dispose()
+      if (object instanceof THREE.Mesh && !this.sharedGeometries.has(object.geometry)) {
+        object.geometry.dispose()
+      }
     })
     chunk.groundMaterial.dispose()
     this.colliders.splice(0, this.colliders.length, ...this.colliders.filter((bound) => !chunk.bounds.includes(bound)))
@@ -1787,5 +2543,24 @@ export class City {
     this.airportRoofMat.dispose()
     this.buildingMaterials[0].map?.dispose()
     for (const material of this.buildingMaterials) material.dispose()
+    this.sandMaterial.dispose()
+    this.sandDarkMaterial.dispose()
+    this.cactusMaterial.dispose()
+    this.palmTrunkMaterial.dispose()
+    this.palmFrondMaterial.dispose()
+    this.beachTentRed.dispose()
+    this.beachTentWhite.dispose()
+    this.beachTentBlue.dispose()
+    this.coconutMaterial.dispose()
+    this.waterTowerMaterial.dispose()
+    this.hvacMaterial.dispose()
+    this.telecomMaterial.dispose()
+    this.solarPanelMaterial.dispose()
+    this.fireEscapeMaterial.dispose()
+    this.acUnitMaterial.dispose()
+    this.balconyMaterial.dispose()
+    for (const geo of this.sharedGeometries) {
+      geo.dispose()
+    }
   }
 }

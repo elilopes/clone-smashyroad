@@ -3,12 +3,10 @@ const LEVEL_THRESHOLDS = [0, 7, 17, 31, 48, 68, 91, 118, 148, 181, 218]
 export class WantedSystem {
   heat = 0
   level = 0
-  private calmTime = 0
 
   reset(): void {
     this.heat = 0
     this.level = 0
-    this.calmTime = 0
   }
 
   addHeat(amount: number): boolean {
@@ -42,16 +40,9 @@ export class WantedSystem {
     return this.level < before
   }
 
-  update(dt: number, speed: number): boolean {
-    const before = this.level
-    if (this.level > 0 && speed < 4) {
-      this.calmTime += dt
-      if (this.calmTime > 7) this.heat = Math.max(0, this.heat - dt * 1.25)
-    } else {
-      this.calmTime = 0
-    }
-    this.refreshLevel()
-    return this.level !== before
+  update(_dt: number, _speed: number): boolean {
+    // Automatic decay disabled per rules: Wanted level can only be reduced by purchasing items in the Shop.
+    return false
   }
 
   get progress(): number {

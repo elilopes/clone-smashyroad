@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 export interface DriveInput {
   throttle: number
@@ -123,6 +124,8 @@ export class Car {
   yaw = 0
   climbLift = 0
   climbPitch = 0
+  groundElevation = 0
+  dunePitch = 0
   isCrushed = false
   readonly mass: number
   readonly kind: VehicleKind
@@ -318,21 +321,89 @@ export class Car {
       ...(pEmissive ? { emissive: pEmissive, emissiveIntensity: pEmissiveIntensity } : {}),
     })
 
+    const currentGMode = (localStorage.getItem('smash_graphics_mode') as 'low' | 'medium' | 'high') || 'medium'
+    this.graphicsMode = currentGMode
+
     this.root.scale.setScalar(this.scale)
     this.root.add(this.truckGroup)
     this.root.add(this.robotGroup)
     this.buildBody(this.police)
     this.buildCustomAddons()
     this.scene.add(this.root)
+
+    this.setGraphicsMode(currentGMode)
   }
 
-  private addBox(size: [number, number, number], y: number, material: THREE.Material, x = 0, z = 0): THREE.Mesh {
+  private graphicsMode: 'low' | 'medium' | 'high' = 'medium'
+  private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
+
+  private addBox(size: [number, number, number], y: number, material: THREE.Material, x = 0, z = 0, isDetail = false): THREE.Mesh {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
     mesh.position.set(x, y, z)
     mesh.castShadow = true
     mesh.receiveShadow = true
+    mesh.userData.boxSize = size
+    if (isDetail) mesh.userData.isDetail = true
     this.root.add(mesh)
     return mesh
+  }
+
+  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+    this.graphicsMode = mode
+    const isLow = mode === 'low'
+    const isHigh = mode === 'high'
+
+    this.root.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        // Remova as sombras dos objetos no modo low
+        obj.castShadow = !isLow
+        obj.receiveShadow = !isLow
+
+        // Remova os detalhes dos veículos no modo low
+        if (obj.userData.isDetail) {
+          obj.visible = !isLow
+        }
+
+        // Remova a iluminação nos veículos (MeshBasicMaterial unlit no modo low)
+        if (isLow) {
+          if (!this.originalMaterials.has(obj)) {
+            this.originalMaterials.set(obj, obj.material)
+          }
+          const mat = this.originalMaterials.get(obj) as THREE.MeshStandardMaterial
+          if (mat && mat.color) {
+            obj.material = new THREE.MeshBasicMaterial({
+              color: mat.color,
+              map: mat.map ?? null,
+              transparent: mat.transparent,
+              opacity: mat.opacity,
+            })
+          }
+        } else {
+          // Restore standard lit material for medium / high
+          if (this.originalMaterials.has(obj)) {
+            obj.material = this.originalMaterials.get(obj)!
+          }
+        }
+
+        // Cantos arredondados (RoundedBoxGeometry) no modo High para os veículos
+        if (obj.userData.boxSize) {
+          const [w, h, d] = obj.userData.boxSize as [number, number, number]
+          const currentIsRounded = obj.userData.isRounded === true
+
+          if (isHigh && !currentIsRounded) {
+            const minDim = Math.min(w, h, d)
+            const radius = Math.min(0.12, minDim * 0.25)
+            if (obj.geometry) obj.geometry.dispose()
+            obj.geometry = new RoundedBoxGeometry(w, h, d, 2, radius)
+            obj.userData.isRounded = true
+          } else if (!isHigh && currentIsRounded) {
+            if (obj.geometry) obj.geometry.dispose()
+            obj.geometry = new THREE.BoxGeometry(w, h, d)
+            obj.userData.isRounded = false
+          }
+        }
+      }
+    })
   }
 
   private buildBody(police: boolean): void {
@@ -379,13 +450,13 @@ export class Car {
 
       // 2. Cab (Cabine moderna branca/prata do caminhão similar à imagem)
       this.addBox([2.4, 1.76, 2.15], 1.58, this.bodyMaterial, 0, -2.5)
-      this.addBox([2.32, 0.46, 1.85], 2.65, this.bodyMaterial, 0, -2.4) // Defletor aerodinâmico de teto
+      this.addBox([2.32, 0.46, 1.85], 2.65, this.bodyMaterial, 0, -2.4, true) // Defletor aerodinâmico de teto (aerofólio)
       const windshield = this.addBox([1.96, 0.74, 0.09], 1.82, glassMaterial, 0, -3.58)
       windshield.rotation.x = -0.14
       this.addBox([0.08, 0.58, 0.98], 1.82, glassMaterial, -1.21, -2.45)
       this.addBox([0.08, 0.58, 0.98], 1.82, glassMaterial, 1.21, -2.45)
-      this.addBox([2.46, 0.44, 0.24], 0.68, chassisMat, 0, -3.56) // Para-choque frontal
-      this.addBox([2.34, 0.38, 0.12], 1.05, new THREE.MeshStandardMaterial({ color: 0x111416, roughness: 0.9 }), 0, -3.58) // Grade frontal
+      this.addBox([2.46, 0.44, 0.24], 0.68, chassisMat, 0, -3.56, true) // Para-choque frontal
+      this.addBox([2.34, 0.38, 0.12], 1.05, new THREE.MeshStandardMaterial({ color: 0x111416, roughness: 0.9 }), 0, -3.58, true) // Grade frontal
 
       // 3. Round Fuel Tank Body (Carroceria Redonda / Tanque Cilíndrico de Combustível Inflamável)
       const tankSilverMat = new THREE.MeshStandardMaterial({
@@ -419,16 +490,17 @@ export class Car {
       // 4. Distinctive Livery Stripes (Faixas verde e laranja de risco igual à foto de referência)
       const stripeOrangeMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.38 })
       const stripeGreenMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.38 })
-      this.addBox([2.48, 0.14, 5.0], 2.15, stripeOrangeMat, 0, 1.05)
-      this.addBox([2.48, 0.34, 5.0], 1.9, stripeGreenMat, 0, 1.05)
+      this.addBox([2.48, 0.14, 5.0], 2.15, stripeOrangeMat, 0, 1.05, true)
+      this.addBox([2.48, 0.34, 5.0], 1.9, stripeGreenMat, 0, 1.05, true)
 
-      // 5. Catwalk and Manhole Hatches on Top (Passadiço superior e bocas de visita)
+      // 5. Catwalk and Manhole Hatches on Top (Passadiço superior e bocas de visita - barras em cima)
       const walkwayMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7, metalness: 0.4 })
-      this.addBox([0.76, 0.08, 4.8], 3.04, walkwayMat, 0, 1.05)
+      this.addBox([0.76, 0.08, 4.8], 3.04, walkwayMat, 0, 1.05, true)
       for (let h = -1; h <= 1; h += 1) {
         const hatch = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.14, 12), walkwayMat)
         hatch.position.set(0, 3.12, 1.05 + h * 1.5)
         hatch.castShadow = true
+        hatch.userData.isDetail = true
         this.root.add(hatch)
       }
 
@@ -440,16 +512,17 @@ export class Car {
         const pipeMesh = new THREE.Mesh(pipeGeo, pipeMat)
         pipeMesh.position.set(side * 1.28, 0.96, 1.05)
         pipeMesh.castShadow = true
+        pipeMesh.userData.isDetail = true
         this.root.add(pipeMesh)
       }
 
       // 7. Hazard Diamond Placard (Placa de Risco de Combustível Inflamável 33 / 1203)
       const hazardPlacardMat = new THREE.MeshStandardMaterial({ color: 0xff4d00, emissive: 0xcc2200, emissiveIntensity: 0.45 })
       for (const side of [-1, 1]) {
-        const placard = this.addBox([0.06, 0.38, 0.38], 1.52, hazardPlacardMat, side * 1.26, 2.7)
+        const placard = this.addBox([0.06, 0.38, 0.38], 1.52, hazardPlacardMat, side * 1.26, 2.7, true)
         placard.rotation.x = Math.PI / 4
       }
-      const rearPlacard = this.addBox([0.38, 0.38, 0.06], 1.52, hazardPlacardMat, 0.6, 3.7)
+      const rearPlacard = this.addBox([0.38, 0.38, 0.06], 1.52, hazardPlacardMat, 0.6, 3.7, true)
       rearPlacard.rotation.z = Math.PI / 4
     } else if (this.kind === 'truck') {
       const trimMat = new THREE.MeshStandardMaterial({ color: 0x1e2329, roughness: 0.8, metalness: 0.3 })
@@ -458,15 +531,15 @@ export class Car {
 
       // 1. Heavy Box Chassis Frame & Mudflaps
       this.addBox([2.45, 0.52, 6.7], 0.62, trimMat, 0, 0.1)
-      this.addBox([2.48, 0.44, 0.28], 0.68, trimMat, 0, -3.32) // Front heavy push bumper
-      this.addBox([2.48, 0.44, 0.28], 0.68, trimMat, 0, 3.42) // Rear bumper
+      this.addBox([2.48, 0.44, 0.28], 0.68, trimMat, 0, -3.32, true) // Front heavy push bumper
+      this.addBox([2.48, 0.44, 0.28], 0.68, trimMat, 0, 3.42, true) // Rear bumper
 
       // 2. Cab with Tiberian Sun Voxel Chamfer & Aerodynamic Roof Deflector
       this.addBox([2.34, 1.48, 2.05], 1.52, this.bodyMaterial, 0, -2.18) // Main cab
       this.addBox([2.38, 0.28, 1.65], 2.38, this.bodyMaterial, 0, -2.18) // Cab upper taper
-      this.addBox([2.26, 0.45, 1.4], 2.74, this.bodyMaterial, 0, -2.05) // Aero roof deflector
-      this.addBox([0.08, 0.45, 1.2], 2.74, this.bodyMaterial, -1.14, -2.05) // Side air wing L
-      this.addBox([0.08, 0.45, 1.2], 2.74, this.bodyMaterial, 1.14, -2.05) // Side air wing R
+      this.addBox([2.26, 0.45, 1.4], 2.74, this.bodyMaterial, 0, -2.05, true) // Aero roof deflector (aerofólio)
+      this.addBox([0.08, 0.45, 1.2], 2.74, this.bodyMaterial, -1.14, -2.05, true) // Side air wing L
+      this.addBox([0.08, 0.45, 1.2], 2.74, this.bodyMaterial, 1.14, -2.05, true) // Side air wing R
 
       // Windshield & Side Windows
       const windshield = this.addBox([1.92, 0.72, 0.09], 1.76, glassMaterial, 0, -3.22)
@@ -475,16 +548,16 @@ export class Car {
       this.addBox([0.08, 0.58, 1.02], 1.76, glassMaterial, 1.18, -2.15)
 
       // Heavy Front Grille with Horizontal Louvers & Headlight Bezels
-      this.addBox([2.15, 0.52, 0.12], 1.12, trimMat, 0, -3.22)
-      this.addBox([1.65, 0.42, 0.06], 1.12, chromeMat, 0, -3.24)
+      this.addBox([2.15, 0.52, 0.12], 1.12, trimMat, 0, -3.22, true)
+      this.addBox([1.65, 0.42, 0.06], 1.12, chromeMat, 0, -3.24, true)
       for (let g = -1; g <= 1; g += 1) {
-        this.addBox([1.55, 0.04, 0.08], 1.12 + g * 0.12, trimMat, 0, -3.25)
+        this.addBox([1.55, 0.04, 0.08], 1.12 + g * 0.12, trimMat, 0, -3.25, true)
       }
 
       // Side Mirrors on Angled Mounts
       for (const sm of [-1.24, 1.24]) {
-        this.addBox([0.16, 0.38, 0.18], 1.82, trimMat, sm, -2.7)
-        this.addBox([0.04, 0.32, 0.12], 1.82, glassMaterial, sm + (sm > 0 ? 0.08 : -0.08), -2.7)
+        this.addBox([0.16, 0.38, 0.18], 1.82, trimMat, sm, -2.7, true)
+        this.addBox([0.04, 0.32, 0.12], 1.82, glassMaterial, sm + (sm > 0 ? 0.08 : -0.08), -2.7, true)
       }
 
       // Dual Side Diesel Cylindrical Tanks & Underbody Toolboxes
@@ -493,32 +566,34 @@ export class Car {
         tankGeo.rotateX(Math.PI / 2)
         const dTank = new THREE.Mesh(tankGeo, chromeMat)
         dTank.position.set(side * 1.22, 0.68, -0.7)
+        dTank.userData.isDetail = true
         this.root.add(dTank)
-        this.addBox([0.38, 0.45, 1.1], 0.68, trimMat, side * 1.2, 0.95) // Utility toolbox
+        this.addBox([0.38, 0.45, 1.1], 0.68, trimMat, side * 1.2, 0.95, true) // Utility toolbox
       }
 
-      // Dual Vertical Chrome Exhaust Stacks with Perforated Heat Guards
+      // Dual Vertical Chrome Exhaust Stacks with Perforated Heat Guards (escapamentos)
       for (const ex of [-1.15, 1.15]) {
         const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 10), chromeMat)
         stack.position.set(ex, 2.35, -1.1)
+        stack.userData.isDetail = true
         this.root.add(stack)
       }
 
       // 3. Corrugated Heavy Cargo Container with Structural Rib Greebles
       this.addBox([2.42, 2.32, 4.3], 1.98, cargoMat, 0, 1.25)
       // Top corner reinforcement caps
-      this.addBox([2.46, 0.14, 4.34], 3.16, trimMat, 0, 1.25)
+      this.addBox([2.46, 0.14, 4.34], 3.16, trimMat, 0, 1.25, true)
       // Vertical corrugation rib greebles along sides
       for (let r = -1.8; r <= 1.8; r += 0.45) {
-        this.addBox([0.06, 2.2, 0.14], 1.98, trimMat, -1.22, 1.25 + r)
-        this.addBox([0.06, 2.2, 0.14], 1.98, trimMat, 1.22, 1.25 + r)
+        this.addBox([0.06, 2.2, 0.14], 1.98, trimMat, -1.22, 1.25 + r, true)
+        this.addBox([0.06, 2.2, 0.14], 1.98, trimMat, 1.22, 1.25 + r, true)
       }
-      // Rear Cargo Double Doors with Locking Cam Bars & Handles
-      this.addBox([2.36, 2.2, 0.08], 1.98, trimMat, 0, 3.41)
-      this.addBox([0.08, 2.1, 0.12], 1.98, chromeMat, -0.4, 3.42) // Lock bar L
-      this.addBox([0.08, 2.1, 0.12], 1.98, chromeMat, 0.4, 3.42) // Lock bar R
-      this.addBox([0.18, 0.08, 0.14], 1.6, chromeMat, -0.4, 3.43) // Handle L
-      this.addBox([0.18, 0.08, 0.14], 1.6, chromeMat, 0.4, 3.43) // Handle R
+      // Rear Cargo Double Doors with Locking Cam Bars & Handles (alça de abrir a porta / trincos)
+      this.addBox([2.36, 2.2, 0.08], 1.98, trimMat, 0, 3.41, true)
+      this.addBox([0.08, 2.1, 0.12], 1.98, chromeMat, -0.4, 3.42, true) // Lock bar L
+      this.addBox([0.08, 2.1, 0.12], 1.98, chromeMat, 0.4, 3.42, true) // Lock bar R
+      this.addBox([0.18, 0.08, 0.14], 1.6, chromeMat, -0.4, 3.43, true) // Handle L
+      this.addBox([0.18, 0.08, 0.14], 1.6, chromeMat, 0.4, 3.43, true) // Handle R
     } else if (this.kind === 'bus') {
       const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.85 })
       const busRoofMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.75 })
@@ -527,44 +602,45 @@ export class Car {
       // 1. Bus Monocoque Hull with Tiberian Sun Aerodynamic Chamfer
       this.addBox([2.54, 2.05, 8.0], 1.48, this.bodyMaterial, 0, 0)
       this.addBox([2.48, 0.22, 7.8], 2.58, busRoofMat, 0, 0) // Roof cap
-      this.addBox([2.58, 0.12, 7.9], 0.88, trimMat, 0, 0) // Side impact rub rails
+      this.addBox([2.58, 0.12, 7.9], 0.88, trimMat, 0, 0, true) // Side impact rub rails
 
       // Front Beveled Aerodynamic Nose & Lower Bumper
-      this.addBox([2.56, 0.48, 0.32], 0.72, trimMat, 0, -4.02)
+      this.addBox([2.56, 0.48, 0.32], 0.72, trimMat, 0, -4.02, true)
       this.addBox([2.5, 0.52, 0.24], 1.15, this.bodyMaterial, 0, -4.0)
 
       // Electronic LED Destination Marquee Display ("LINHA 101 // CENTRO")
-      this.addBox([1.65, 0.24, 0.08], 2.24, marqueeMat, 0, -4.02)
+      this.addBox([1.65, 0.24, 0.08], 2.24, marqueeMat, 0, -4.02, true)
 
       // Panoramic Windshield with Center Wiper Bar
       const windshield = this.addBox([2.38, 0.88, 0.09], 1.68, glassMaterial, 0, -4.01)
       windshield.rotation.x = -0.1
-      this.addBox([0.06, 0.65, 0.12], 1.68, trimMat, 0, -4.02) // Wiper arm
+      this.addBox([0.06, 0.65, 0.12], 1.68, trimMat, 0, -4.02, true) // Wiper arm
 
       // Side Continuous Tinted Window Band with Structural Pillars
       this.addBox([0.08, 0.78, 6.8], 1.76, glassMaterial, -1.28, 0.2)
       this.addBox([0.08, 0.78, 6.8], 1.76, glassMaterial, 1.28, 0.2)
       for (let p = -2.8; p <= 3.2; p += 1.4) {
-        this.addBox([0.1, 0.82, 0.14], 1.76, trimMat, -1.28, p)
-        this.addBox([0.1, 0.82, 0.14], 1.76, trimMat, 1.28, p)
+        this.addBox([0.1, 0.82, 0.14], 1.76, trimMat, -1.28, p, true)
+        this.addBox([0.1, 0.82, 0.14], 1.76, trimMat, 1.28, p, true)
       }
 
-      // Passenger Door Indents (Front & Middle Dual Folding Doors)
-      this.addBox([0.12, 1.62, 0.85], 1.35, trimMat, 1.28, -2.6)
-      this.addBox([0.12, 1.62, 0.85], 1.35, trimMat, 1.28, 0.5)
+      // Passenger Door Indents (Front & Middle Dual Folding Doors - maçanetas/portas)
+      this.addBox([0.12, 1.62, 0.85], 1.35, trimMat, 1.28, -2.6, true)
+      this.addBox([0.12, 1.62, 0.85], 1.35, trimMat, 1.28, 0.5, true)
 
       // Rear Tinted Window & Engine Vent Louvers
       this.addBox([2.2, 0.72, 0.09], 1.76, glassMaterial, 0, 4.01)
-      this.addBox([2.1, 0.45, 0.08], 1.05, trimMat, 0, 4.01) // Rear engine grill
+      this.addBox([2.1, 0.45, 0.08], 1.05, trimMat, 0, 4.01, true) // Rear engine grill
       for (let el = -1; el <= 1; el += 1) {
-        this.addBox([1.8, 0.05, 0.1], 1.05 + el * 0.12, new THREE.MeshStandardMaterial({ color: 0x090b0d }), 0, 4.02)
+        this.addBox([1.8, 0.05, 0.1], 1.05 + el * 0.12, new THREE.MeshStandardMaterial({ color: 0x090b0d }), 0, 4.02, true)
       }
 
-      // Dual Roof HVAC Air Conditioning Units with Fan Intake Vents
+      // Dual Roof HVAC Air Conditioning Units with Fan Intake Vents (equipamento no teto)
       for (const acZ of [-1.5, 1.8]) {
-        this.addBox([1.65, 0.32, 1.5], 2.82, trimMat, 0, acZ)
+        this.addBox([1.65, 0.32, 1.5], 2.82, trimMat, 0, acZ, true)
         const fanMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 14), new THREE.MeshStandardMaterial({ color: 0x0f172a }))
         fanMesh.position.set(0, 2.99, acZ)
+        fanMesh.userData.isDetail = true
         this.root.add(fanMesh)
       }
     } else if (this.kind === 'pickup') {
@@ -574,27 +650,27 @@ export class Car {
 
       // 1. Lower Chassis, Stepped Front Bumper with Chin Bash Plate
       this.addBox([2.24, 0.52, 5.0], 0.68, this.bodyMaterial, 0, 0)
-      this.addBox([2.32, 0.38, 0.28], 0.66, trimMat, 0, -2.52) // Front bumper
-      this.addBox([1.4, 0.18, 0.32], 0.48, chromeMat, 0, -2.54) // Bash plate
+      this.addBox([2.32, 0.38, 0.28], 0.66, trimMat, 0, -2.52, true) // Front bumper
+      this.addBox([1.4, 0.18, 0.32], 0.48, chromeMat, 0, -2.54, true) // Bash plate
 
       // 2. Beveled Cowl-Induction Hood Scoop & Grille
       this.addBox([2.18, 0.48, 1.65], 1.15, this.bodyMaterial, 0, -1.65)
-      this.addBox([1.0, 0.16, 0.9], 1.42, this.bodyMaterial, 0, -1.65) // Cowl induction scoop
-      this.addBox([0.92, 0.1, 0.06], 1.42, trimMat, 0, -2.12) // Scoop intake vent
+      this.addBox([1.0, 0.16, 0.9], 1.42, this.bodyMaterial, 0, -1.65, true) // Cowl induction scoop
+      this.addBox([0.92, 0.1, 0.06], 1.42, trimMat, 0, -2.12, true) // Scoop intake vent
 
       // Flared Voxel Wheel Arches (Fender Flares)
       for (const side of [-1, 1]) {
-        this.addBox([0.16, 0.42, 1.1], 0.88, trimMat, side * 1.14, -1.45)
-        this.addBox([0.16, 0.42, 1.1], 0.88, trimMat, side * 1.14, 1.45)
+        this.addBox([0.16, 0.42, 1.1], 0.88, trimMat, side * 1.14, -1.45, true)
+        this.addBox([0.16, 0.42, 1.1], 0.88, trimMat, side * 1.14, 1.45, true)
       }
 
       // Heavy Front Billet Grille
-      this.addBox([1.75, 0.44, 0.08], 1.08, chromeMat, 0, -2.5)
+      this.addBox([1.75, 0.44, 0.08], 1.08, chromeMat, 0, -2.5, true)
 
       // 3. Extended Cab with Sun Visor
       this.addBox([1.94, 0.88, 2.15], 1.42, this.bodyMaterial, 0, -0.45)
       this.addBox([1.98, 0.14, 2.1], 1.88, this.bodyMaterial, 0, -0.45) // Roof cap
-      this.addBox([1.92, 0.12, 0.25], 1.88, trimMat, 0, -1.55) // Front sun visor
+      this.addBox([1.92, 0.12, 0.25], 1.88, trimMat, 0, -1.55, true) // Front sun visor
 
       // Windshield & Glass
       const windshield = this.addBox([1.66, 0.62, 0.09], 1.46, glassMaterial, 0, -1.48)
@@ -604,30 +680,30 @@ export class Car {
       const rearGlass = this.addBox([1.58, 0.48, 0.09], 1.48, glassMaterial, 0, 0.58)
       rearGlass.rotation.x = 0.12
 
-      // Side Tubular Utility Running Boards
+      // Side Tubular Utility Running Boards (saias laterais / estribos)
       for (const side of [-1, 1]) {
-        this.addBox([0.16, 0.08, 1.8], 0.45, chromeMat, side * 1.12, -0.3)
+        this.addBox([0.16, 0.08, 1.8], 0.45, chromeMat, side * 1.12, -0.3, true)
       }
 
-      // 4. Heavy-Gauge Roll Bar / Headache Rack with LED Light Pod Bar
-      this.addBox([1.88, 0.08, 0.08], 2.05, trimMat, 0, 0.72)
-      this.addBox([0.08, 0.85, 0.08], 1.62, trimMat, -0.88, 0.72)
-      this.addBox([0.08, 0.85, 0.08], 1.62, trimMat, 0.88, 0.72)
-      this.addBox([0.08, 0.08, 1.1], 1.62, trimMat, -0.88, 1.25) // Diagonal strut L
-      this.addBox([0.08, 0.08, 1.1], 1.62, trimMat, 0.88, 1.25) // Diagonal strut R
+      // 4. Heavy-Gauge Roll Bar / Headache Rack with LED Light Pod Bar (barras pretas em cima)
+      this.addBox([1.88, 0.08, 0.08], 2.05, trimMat, 0, 0.72, true)
+      this.addBox([0.08, 0.85, 0.08], 1.62, trimMat, -0.88, 0.72, true)
+      this.addBox([0.08, 0.85, 0.08], 1.62, trimMat, 0.88, 0.72, true)
+      this.addBox([0.08, 0.08, 1.1], 1.62, trimMat, -0.88, 1.25, true) // Diagonal strut L
+      this.addBox([0.08, 0.08, 1.1], 1.62, trimMat, 0.88, 1.25, true) // Diagonal strut R
 
       // LED Light Pod Bar on Roll Bar
       const ledPodMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfacc15, emissiveIntensity: 1.8 })
       for (const lpx of [-0.6, -0.2, 0.2, 0.6]) {
-        this.addBox([0.22, 0.14, 0.12], 2.14, ledPodMat, lpx, 0.72)
+        this.addBox([0.22, 0.14, 0.12], 2.14, ledPodMat, lpx, 0.72, true)
       }
 
       // 5. Cargo Bed & Tailgate
       this.addBox([0.22, 0.62, 1.85], 1.22, this.bodyMaterial, -0.98, 1.55)
       this.addBox([0.22, 0.62, 1.85], 1.22, this.bodyMaterial, 0.98, 1.55)
       this.addBox([1.82, 0.15, 1.8], 0.95, bedLinerMat, 0, 1.55) // Diamond-plate bed floor
-      this.addBox([2.18, 0.62, 0.16], 1.22, this.bodyMaterial, 0, 2.48) // Tailgate
-      this.addBox([2.26, 0.35, 0.24], 0.66, trimMat, 0, 2.54) // Rear bumper
+      this.addBox([2.18, 0.62, 0.16], 1.22, this.bodyMaterial, 0, 2.48, true) // Tailgate
+      this.addBox([2.26, 0.35, 0.24], 0.66, trimMat, 0, 2.54, true) // Rear bumper
     } else if (this.kind === 'suv') {
       const trimMat = new THREE.MeshStandardMaterial({ color: 0x1e242a, roughness: 0.8, metalness: 0.35 })
       const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.85 })
@@ -635,24 +711,24 @@ export class Car {
 
       // 1. Heavy SUV Body with Tiberian Sun Stepped Voxel Bevels
       this.addBox([2.38, 0.58, 4.8], 0.72, this.bodyMaterial, 0, 0)
-      this.addBox([2.44, 0.42, 0.28], 0.68, trimMat, 0, -2.42) // Front rugged bumper
-      this.addBox([1.6, 0.22, 0.32], 0.5, chromeMat, 0, -2.44) // Front bash plate
-      this.addBox([2.44, 0.42, 0.28], 0.68, trimMat, 0, 2.42) // Rear bumper
+      this.addBox([2.44, 0.42, 0.28], 0.68, trimMat, 0, -2.42, true) // Front rugged bumper
+      this.addBox([1.6, 0.22, 0.32], 0.5, chromeMat, 0, -2.44, true) // Front bash plate
+      this.addBox([2.44, 0.42, 0.28], 0.68, trimMat, 0, 2.42, true) // Rear bumper
 
       // 2. Beveled Hood Scoop & Front Grille
       this.addBox([2.26, 0.45, 1.7], 1.18, this.bodyMaterial, 0, -1.45)
-      this.addBox([0.85, 0.14, 0.85], 1.42, this.bodyMaterial, 0, -1.45) // Hood scoop
-      this.addBox([0.78, 0.08, 0.06], 1.42, trimMat, 0, -1.88) // Scoop intake mesh
+      this.addBox([0.85, 0.14, 0.85], 1.42, this.bodyMaterial, 0, -1.45, true) // Hood scoop
+      this.addBox([0.78, 0.08, 0.06], 1.42, trimMat, 0, -1.88, true) // Scoop intake mesh
 
       // Flared Voxel Wheel Arches
       for (const side of [-1, 1]) {
-        this.addBox([0.16, 0.44, 1.15], 0.9, trimMat, side * 1.21, -1.45)
-        this.addBox([0.16, 0.44, 1.15], 0.9, trimMat, side * 1.21, 1.45)
+        this.addBox([0.16, 0.44, 1.15], 0.9, trimMat, side * 1.21, -1.45, true)
+        this.addBox([0.16, 0.44, 1.15], 0.9, trimMat, side * 1.21, 1.45, true)
       }
 
       // Chrome Multi-Slot Grille & Bull Bar
-      this.addBox([1.8, 0.46, 0.08], 1.1, chromeMat, 0, -2.4)
-      this.addBox([1.4, 0.5, 0.08], 0.88, trimMat, 0, -2.52) // Center bull bar
+      this.addBox([1.8, 0.46, 0.08], 1.1, chromeMat, 0, -2.4, true)
+      this.addBox([1.4, 0.5, 0.08], 0.88, trimMat, 0, -2.52, true) // Center bull bar
 
       // 3. SUV Cabin Greenhouse
       this.addBox([2.08, 0.98, 2.95], 1.48, this.bodyMaterial, 0, 0.12)
@@ -663,18 +739,24 @@ export class Car {
       windshield.rotation.x = -0.24
       this.addBox([0.08, 0.54, 2.4], 1.52, glassMaterial, -1.05, 0.15)
       this.addBox([0.08, 0.54, 2.4], 1.52, glassMaterial, 1.05, 0.15)
-      const rearGlass = this.addBox([1.78, 0.56, 0.09], 1.52, glassMaterial, 0, 1.58)
-      rearGlass.rotation.x = 0.2
-
-      // Side Tubular Rock Sliders / Steps
-      for (const side of [-1, 1]) {
-        this.addBox([0.18, 0.08, 2.4], 0.48, trimMat, side * 1.18, 0.1)
+      if (this.graphicsMode !== 'high') {
+        const rearGlass = this.addBox([1.78, 0.56, 0.09], 1.52, glassMaterial, 0, 1.58)
+        rearGlass.rotation.x = 0.2
+      }
+      if (this.graphicsMode === 'high') {
+        const suvHatch = this.addBox([2.02, 0.52, 1.38], 1.38, this.bodyMaterial, 0, 1.88)
+        suvHatch.rotation.x = -0.74 // Slanted diagonal tailgate connecting roof to bumper smoothly!
       }
 
-      // 4. Rugged Safari Roof Rack with Auxiliary Spotlights
-      this.addBox([1.75, 0.12, 2.2], 2.12, rackMat, 0, 0.18)
+      // Side Tubular Rock Sliders / Steps (saias laterais)
+      for (const side of [-1, 1]) {
+        this.addBox([0.18, 0.08, 2.4], 0.48, trimMat, side * 1.18, 0.1, true)
+      }
+
+      // 4. Rugged Safari Roof Rack with Auxiliary Spotlights (barras pretas em cima / rack)
+      this.addBox([1.75, 0.12, 2.2], 2.12, rackMat, 0, 0.18, true)
       for (let cb = -0.8; cb <= 0.8; cb += 0.4) {
-        this.addBox([1.65, 0.06, 0.06], 2.15, rackMat, 0, 0.18 + cb)
+        this.addBox([1.65, 0.06, 0.06], 2.15, rackMat, 0, 0.18 + cb, true)
       }
       // 4 Roof Spotlights
       const spotMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfacc15, emissiveIntensity: 2.0 })
@@ -682,6 +764,7 @@ export class Car {
         const spot = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12), spotMat)
         spot.rotation.x = Math.PI / 2
         spot.position.set(sx, 2.22, -0.95)
+        spot.userData.isDetail = true
         this.root.add(spot)
       }
 
@@ -690,12 +773,14 @@ export class Car {
       spareTire.rotation.x = Math.PI / 2
       spareTire.position.set(0.35, 1.35, 2.58)
       spareTire.castShadow = true
+      spareTire.userData.isDetail = true
       this.root.add(spareTire)
       const spareRim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 10), chromeMat)
       spareRim.rotation.x = Math.PI / 2
       spareRim.position.set(0.35, 1.35, 2.58)
+      spareRim.userData.isDetail = true
       this.root.add(spareRim)
-      this.addBox([0.14, 0.95, 0.08], 1.45, rackMat, -0.75, 2.48) // Rear access ladder
+      this.addBox([0.14, 0.95, 0.08], 1.45, rackMat, -0.75, 2.48, true) // Rear access ladder
     } else {
       // SEDAN (Civilian & Police) with Tiberian Sun Greeble Voxel Aesthetic
       const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.75, metalness: 0.4 })
@@ -703,57 +788,65 @@ export class Car {
 
       // 1. Sleek Stepped Voxel Body with Front Chin Splitter
       this.addBox([2.18, 0.52, 4.35], 0.68, this.bodyMaterial, 0, 0)
-      this.addBox([2.24, 0.28, 0.25], 0.58, trimMat, 0, -2.18) // Front bumper chin splitter
-      this.addBox([2.24, 0.28, 0.25], 0.58, trimMat, 0, 2.18) // Rear bumper diffuser
+      this.addBox([2.24, 0.28, 0.25], 0.58, trimMat, 0, -2.18, true) // Front bumper chin splitter
+      this.addBox([2.24, 0.28, 0.25], 0.58, trimMat, 0, 2.18, true) // Rear bumper diffuser
 
       // 2. Beveled Hood with Center Power Bulge & Twin Louvers
       this.addBox([2.04, 0.38, 1.45], 1.05, this.bodyMaterial, 0, -1.25)
-      this.addBox([0.75, 0.12, 0.95], 1.25, this.bodyMaterial, 0, -1.25) // Power bulge
-      this.addBox([0.22, 0.04, 0.45], 1.26, trimMat, -0.55, -1.25) // Louver L
-      this.addBox([0.22, 0.04, 0.45], 1.26, trimMat, 0.55, -1.25) // Louver R
+      this.addBox([0.75, 0.12, 0.95], 1.25, this.bodyMaterial, 0, -1.25, true) // Power bulge
+      this.addBox([0.22, 0.04, 0.45], 1.26, trimMat, -0.55, -1.25, true) // Louver L
+      this.addBox([0.22, 0.04, 0.45], 1.26, trimMat, 0.55, -1.25, true) // Louver R
 
       // Flared Voxel Wheel Arches
       for (const side of [-1, 1]) {
-        this.addBox([0.14, 0.38, 0.95], 0.82, this.bodyMaterial, side * 1.11, -1.25)
-        this.addBox([0.14, 0.38, 0.95], 0.82, this.bodyMaterial, side * 1.11, 1.25)
+        this.addBox([0.14, 0.38, 0.95], 0.82, this.bodyMaterial, side * 1.11, -1.25, true)
+        this.addBox([0.14, 0.38, 0.95], 0.82, this.bodyMaterial, side * 1.11, 1.25, true)
       }
 
       // Radiator Grille & Lower Air Intake Mesh
-      this.addBox([1.5, 0.36, 0.08], 0.95, chromeMat, 0, -2.18)
-      this.addBox([1.3, 0.18, 0.08], 0.62, trimMat, 0, -2.19) // Lower intake
+      this.addBox([1.5, 0.36, 0.08], 0.95, chromeMat, 0, -2.18, true)
+      this.addBox([1.3, 0.18, 0.08], 0.62, trimMat, 0, -2.19, true) // Lower intake
 
-      // 3. Fastback Cabin Greenhouse & Roof Strakes
+      // 3. Fastback Cabin Greenhouse & Roof Strakes (barras pretas em cima)
       this.addBox([1.82, 0.72, 2.18], 1.28, this.bodyMaterial, 0, 0.12)
       this.addBox([1.84, 0.12, 2.15], 1.66, this.bodyMaterial, 0, 0.12) // Roof cap
-      this.addBox([0.06, 0.06, 1.8], 1.74, trimMat, -0.45, 0.12) // Aero roof strake L
-      this.addBox([0.06, 0.06, 1.8], 1.74, trimMat, 0.45, 0.12) // Aero roof strake R
+      this.addBox([0.06, 0.06, 1.8], 1.74, trimMat, -0.45, 0.12, true) // Aero roof strake L (barra no teto)
+      this.addBox([0.06, 0.06, 1.8], 1.74, trimMat, 0.45, 0.12, true) // Aero roof strake R (barra no teto)
 
       // Windshield & Windows
       const windshield = this.addBox([1.62, 0.58, 0.09], 1.32, glassMaterial, 0, -0.62)
       windshield.rotation.x = -0.3
       this.addBox([0.08, 0.48, 1.6], 1.32, glassMaterial, -0.92, 0.12)
       this.addBox([0.08, 0.48, 1.6], 1.32, glassMaterial, 0.92, 0.12)
-      const rearGlass = this.addBox([1.58, 0.52, 0.09], 1.32, glassMaterial, 0, 0.88)
-      rearGlass.rotation.x = 0.32
-
-      // Side Aerodynamic Rocker Skirts & Door Handles
-      for (const side of [-1, 1]) {
-        this.addBox([0.14, 0.12, 1.95], 0.48, trimMat, side * 1.08, 0)
-        this.addBox([0.06, 0.08, 0.18], 0.95, trimMat, side * 1.1, -0.15)
-        this.addBox([0.06, 0.08, 0.18], 0.95, trimMat, side * 1.1, 0.35)
-        // Side Mirrors on Angled Mounts
-        this.addBox([0.18, 0.12, 0.14], 1.18, this.bodyMaterial, side * 1.05, -0.72)
-        this.addBox([0.04, 0.09, 0.11], 1.18, glassMaterial, side * 1.15, -0.72)
+      if (this.graphicsMode !== 'high') {
+        const rearGlass = this.addBox([1.58, 0.52, 0.09], 1.32, glassMaterial, 0, 0.88)
+        rearGlass.rotation.x = 0.32
       }
 
-      // 4. Rear Trunk Deck with Integrated Lip Spoiler & Twin Chrome Exhausts
-      this.addBox([1.95, 0.38, 1.05], 0.98, this.bodyMaterial, 0, 1.55)
-      this.addBox([1.98, 0.12, 0.28], 1.22, trimMat, 0, 2.05) // Rear lip spoiler
-      // Dual Chrome Exhaust Tips
+      // Side Aerodynamic Rocker Skirts & Door Handles (saias laterais & alça/maçaneta da porta)
+      for (const side of [-1, 1]) {
+        this.addBox([0.14, 0.12, 1.95], 0.48, trimMat, side * 1.08, 0, true) // saia lateral
+        this.addBox([0.06, 0.08, 0.18], 0.95, trimMat, side * 1.1, -0.15, true) // alça/maçaneta porta
+        this.addBox([0.06, 0.08, 0.18], 0.95, trimMat, side * 1.1, 0.35, true) // alça/maçaneta porta
+        // Side Mirrors on Angled Mounts
+        this.addBox([0.18, 0.12, 0.14], 1.18, this.bodyMaterial, side * 1.05, -0.72, true)
+        this.addBox([0.04, 0.09, 0.11], 1.18, glassMaterial, side * 1.15, -0.72, true)
+      }
+
+      // 4. Rear Trunk Deck / Diagonal Hatchback Rear in High Poly mode
+      if (this.graphicsMode === 'high') {
+        const hatchRear = this.addBox([1.82, 0.44, 1.32], 1.20, this.bodyMaterial, 0, 1.60)
+        hatchRear.rotation.x = -0.82 // Smooth diagonal hatch slant connecting roof to bumper smoothly!
+      } else {
+        this.addBox([1.95, 0.38, 1.05], 0.98, this.bodyMaterial, 0, 1.55)
+      }
+      this.addBox([1.98, 0.12, 0.28], 1.22, trimMat, 0, 2.05, true) // Rear lip spoiler (aerofólio)
+      // Dual Chrome Exhaust Tips (escapamento)
       for (const ex of [-0.62, 0.62]) {
         const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.25, 10), chromeMat)
         exhaust.rotation.x = Math.PI / 2
         exhaust.position.set(ex, 0.48, 2.22)
+        exhaust.userData.isDetail = true
         this.root.add(exhaust)
       }
     }
@@ -825,24 +918,25 @@ export class Car {
 
     // 2. Cab (Truck front)
     this.addBox([2.36, 1.62, 2.15], 1.6, this.bodyMaterial, 0, -2.4)
-    this.addBox([2.28, 0.42, 1.8], 2.62, this.bodyMaterial, 0, -2.35) // Roof deflector
+    this.addBox([2.28, 0.42, 1.8], 2.62, this.bodyMaterial, 0, -2.35, true) // Roof deflector
     const windshield = this.addBox([1.96, 0.74, 0.09], 1.82, glassMaterial, 0, -3.48)
     windshield.rotation.x = -0.14
     this.addBox([0.08, 0.58, 0.98], 1.82, glassMaterial, -1.19, -2.4)
     this.addBox([0.08, 0.58, 0.98], 1.82, glassMaterial, 1.19, -2.4)
-    this.addBox([2.15, 0.52, 0.12], 1.12, chassisMat, 0, -3.48) // Front grille surround
-    this.addBox([1.65, 0.42, 0.06], 1.12, chromeMat, 0, -3.5) // Front chrome louvers
+    this.addBox([2.15, 0.52, 0.12], 1.12, chassisMat, 0, -3.48, true) // Front grille surround
+    this.addBox([1.65, 0.42, 0.06], 1.12, chromeMat, 0, -3.5, true) // Front chrome louvers
 
     // Side Mirrors
     for (const sm of [-1.24, 1.24]) {
-      this.addBox([0.16, 0.38, 0.18], 1.82, chassisMat, sm, -2.85)
-      this.addBox([0.04, 0.32, 0.12], 1.82, glassMaterial, sm + (sm > 0 ? 0.08 : -0.08), -2.85)
+      this.addBox([0.16, 0.38, 0.18], 1.82, chassisMat, sm, -2.85, true)
+      this.addBox([0.04, 0.32, 0.12], 1.82, glassMaterial, sm + (sm > 0 ? 0.08 : -0.08), -2.85, true)
     }
 
     // Dual vertical chrome exhaust stacks
     for (const ex of [-1.18, 1.18]) {
       const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 10), chromeMat)
       stack.position.set(ex, 2.45, -1.25)
+      stack.userData.isDetail = true
       this.root.add(stack)
     }
 
@@ -852,6 +946,7 @@ export class Car {
       tankGeo.rotateX(Math.PI / 2)
       const dTank = new THREE.Mesh(tankGeo, chromeMat)
       dTank.position.set(side * 1.22, 0.68, -0.7)
+      dTank.userData.isDetail = true
       this.root.add(dTank)
     }
 
@@ -861,12 +956,12 @@ export class Car {
     // Structural Vertical & Diagonal Steel Truss Pillars
     for (const zPillar of [-1.2, 0.3, 1.7]) {
       for (const side of [-1.2, 1.2]) {
-        this.addBox([0.12, 1.65, 0.14], 1.48, steelMat, side, zPillar)
+        this.addBox([0.12, 1.65, 0.14], 1.48, steelMat, side, zPillar, true)
       }
     }
     // Upper deck side safety guard rails
     for (const side of [-1.2, 1.2]) {
-      this.addBox([0.08, 0.22, 2.6], 2.6, chassisMat, side, -1.0)
+      this.addBox([0.08, 0.22, 2.6], 2.6, chassisMat, side, -1.0, true)
     }
 
     // 4. THE INCLINED LAUNCH RAMP (Slopes DOWNWARDS to the asphalt at the rear of the truck!)
@@ -998,8 +1093,10 @@ export class Car {
     windshield.rotation.x = -0.3
     this.addBox([0.08, 0.48, 1.6], 1.32, glassMaterial, -0.92, 0.12)
     this.addBox([0.08, 0.48, 1.6], 1.32, glassMaterial, 0.92, 0.12)
-    const rearGlass = this.addBox([1.58, 0.52, 0.09], 1.32, glassMaterial, 0, 0.88)
-    rearGlass.rotation.x = 0.32
+    if (this.graphicsMode !== 'high') {
+      const rearGlass = this.addBox([1.58, 0.52, 0.09], 1.32, glassMaterial, 0, 0.88)
+      rearGlass.rotation.x = 0.32
+    }
 
     // Black/White Checkered Taxi Livery Decal Stripes on Doors
     const checkerMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 })
@@ -1007,11 +1104,11 @@ export class Car {
     for (const side of [-1, 1]) {
       for (let ch = -3; ch <= 3; ch++) {
         const mat = Math.abs(ch) % 2 === 0 ? checkerMat : whiteMat
-        this.addBox([0.02, 0.14, 0.22], 0.76, mat, side * 1.10, ch * 0.23)
+        this.addBox([0.02, 0.14, 0.22], 0.76, mat, side * 1.10, ch * 0.23, true)
       }
     }
 
-    // 4. Glowing Illuminated "TAXI" Roof Light Box
+    // 4. Glowing Illuminated "TAXI" Roof Light Box (placa/barra em cima)
     const taxiSignMat = new THREE.MeshStandardMaterial({
       color: 0xfffbeb,
       emissive: 0xfef08a,
@@ -1019,18 +1116,54 @@ export class Car {
       roughness: 0.2,
     })
     const signBaseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
-    this.addBox([0.72, 0.06, 0.32], 1.74, signBaseMat, 0, 0.08)
-    this.addBox([0.62, 0.22, 0.24], 1.86, taxiSignMat, 0, 0.08)
+    this.addBox([0.72, 0.06, 0.32], 1.74, signBaseMat, 0, 0.08, true)
+    this.addBox([0.62, 0.22, 0.24], 1.86, taxiSignMat, 0, 0.08, true)
 
-    // Rear Trunk Deck
-    this.addBox([1.95, 0.38, 1.05], 0.98, taxiYellowMat, 0, 1.55)
-    // Dual Chrome Exhaust
+    // Rear Trunk Deck / Diagonal Hatchback Rear in High Poly mode
+    if (this.graphicsMode === 'high') {
+      const hatchRear = this.addBox([1.82, 0.44, 1.32], 1.20, taxiYellowMat, 0, 1.60)
+      hatchRear.rotation.x = -0.82 // Smooth diagonal hatch slant connecting roof to bumper smoothly!
+    } else {
+      this.addBox([1.95, 0.38, 1.05], 0.98, taxiYellowMat, 0, 1.55)
+    }
+    // Dual Chrome Exhaust (escapamento)
     for (const ex of [-0.62, 0.62]) {
       const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.25, 10), chromeMat)
       exhaust.rotation.x = Math.PI / 2
       exhaust.position.set(ex, 0.48, 2.22)
+      exhaust.userData.isDetail = true
       this.root.add(exhaust)
     }
+
+    // 5. Four Chrome Taxi Wheels with Alloy Hubcaps
+    const taxiWheelPositions: [number, number][] = [
+      [-1.22, -1.35], [1.22, -1.35],
+      [-1.22, 1.35], [1.22, 1.35],
+    ]
+    const taxiWheelAlloy = new THREE.MeshStandardMaterial({
+      color: this.hasForgedWheels ? 0xfacc15 : 0xe2e8f0,
+      roughness: 0.25,
+      metalness: 0.85,
+    })
+    const taxiRimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.26, 12)
+    for (const [x, z] of taxiWheelPositions) {
+      const wheel = new THREE.Mesh(wheelGeometry, tireMaterial)
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(x, 0.47, z)
+      wheel.castShadow = true
+      const rim = new THREE.Mesh(taxiRimGeo, taxiWheelAlloy)
+      wheel.add(rim)
+      this.root.add(wheel)
+      this.wheels.push(wheel)
+    }
+
+    // 6. Headlights and Taillights
+    const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xfff4d5, emissive: 0xf8d9a3, emissiveIntensity: 0.8 })
+    const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xe34e40, emissive: 0x6a130e, emissiveIntensity: 0.8 })
+    this.addBox([0.44, 0.16, 0.05], 0.82, lampMaterial, -0.72, -2.18)
+    this.addBox([0.44, 0.16, 0.05], 0.82, lampMaterial, 0.72, -2.18)
+    this.addBox([0.42, 0.15, 0.05], 0.82, tailMaterial, -0.72, 2.18)
+    this.addBox([0.42, 0.15, 0.05], 0.82, tailMaterial, 0.72, 2.18)
   }
 
   private buildBombCar(): void {
@@ -1041,13 +1174,13 @@ export class Car {
 
     // 1. Low-slung Sports Car Body
     this.addBox([2.22, 0.46, 4.45], 0.62, darkMat, 0, 0)
-    this.addBox([2.28, 0.24, 0.35], 0.52, redAccentMat, 0, -2.25) // Aggressive Front Splitter
-    this.addBox([2.28, 0.28, 0.35], 0.54, trimMat, 0, 2.25) // Rear Diffuser
+    this.addBox([2.28, 0.24, 0.35], 0.52, redAccentMat, 0, -2.25, true) // Aggressive Front Splitter
+    this.addBox([2.28, 0.28, 0.35], 0.54, trimMat, 0, 2.25, true) // Rear Diffuser
 
     // 2. Wide Aero Fenders
     for (const side of [-1, 1]) {
-      this.addBox([0.16, 0.42, 1.05], 0.78, redAccentMat, side * 1.13, -1.25)
-      this.addBox([0.16, 0.42, 1.05], 0.78, redAccentMat, side * 1.13, 1.25)
+      this.addBox([0.16, 0.42, 1.05], 0.78, redAccentMat, side * 1.13, -1.25, true)
+      this.addBox([0.16, 0.42, 1.05], 0.78, redAccentMat, side * 1.13, 1.25, true)
     }
 
     // 3. Cabin with Tinted Glass
@@ -1057,16 +1190,23 @@ export class Car {
     windshield.rotation.x = -0.34
     this.addBox([0.08, 0.46, 1.55], 1.26, darkGlass, -0.93, 0.1)
     this.addBox([0.08, 0.46, 1.55], 1.26, darkGlass, 0.93, 0.1)
-    const rearGlass = this.addBox([1.6, 0.50, 0.09], 1.26, darkGlass, 0, 0.85)
-    rearGlass.rotation.x = 0.36
-
-    // 4. High-Performance Racing GT Wing / Spoiler
-    for (const side of [-0.75, 0.75]) {
-      this.addBox([0.06, 0.42, 0.12], 1.35, trimMat, side, 2.15)
+    if (this.graphicsMode !== 'high') {
+      const rearGlass = this.addBox([1.6, 0.50, 0.09], 1.26, darkGlass, 0, 0.85)
+      rearGlass.rotation.x = 0.36
     }
-    this.addBox([2.04, 0.08, 0.42], 1.56, redAccentMat, 0, 2.15)
 
-    // 5. BOMB UNIT STRAPPED ON ROOF & WIRES (The Mike Lips / Speed Bomb)
+    if (this.graphicsMode === 'high') {
+      const hatchRear = this.addBox([1.82, 0.44, 1.32], 1.15, darkMat, 0, 1.55)
+      hatchRear.rotation.x = -0.82 // Smooth diagonal hatch slant connecting roof to bumper smoothly!
+    }
+
+    // 4. High-Performance Racing GT Wing / Spoiler (aerofólio)
+    for (const side of [-0.75, 0.75]) {
+      this.addBox([0.06, 0.42, 0.12], 1.35, trimMat, side, 2.15, true)
+    }
+    this.addBox([2.04, 0.08, 0.42], 1.56, redAccentMat, 0, 2.15, true)
+
+    // 5. BOMB UNIT STRAPPED ON ROOF & WIRES (The Mike Lips / Speed Bomb - equipamento no teto)
     const bombMat = new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.7, metalness: 0.5 })
     const ledMat = new THREE.MeshStandardMaterial({
       color: 0xef4444,
@@ -1075,12 +1215,46 @@ export class Car {
     })
     const wireMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.8 })
     // C4 Dynamite / Explosive Block
-    this.addBox([0.65, 0.22, 0.75], 1.66, bombMat, 0, 0.15)
+    this.addBox([0.65, 0.22, 0.75], 1.66, bombMat, 0, 0.15, true)
     // Digital Countdown Timer Display (Flashing LED)
-    this.addBox([0.35, 0.12, 0.04], 1.76, ledMat, 0, -0.22)
+    this.addBox([0.35, 0.12, 0.04], 1.76, ledMat, 0, -0.22, true)
     // Detonator Horn & Wires
-    this.addBox([0.14, 0.14, 0.14], 1.78, chromeMat, 0.2, 0.15)
-    this.addBox([0.04, 0.04, 0.6], 1.68, wireMat, -0.22, 0.15)
+    this.addBox([0.14, 0.14, 0.14], 1.78, chromeMat, 0.2, 0.15, true)
+    this.addBox([0.04, 0.04, 0.6], 1.68, wireMat, -0.22, 0.15, true)
+
+    // 6. Four Wide Racing Sport Wheels
+    const bombWheelPositions: [number, number][] = [
+      [-1.12, -1.38], [1.12, -1.38],
+      [-1.12, 1.38], [1.12, 1.38],
+    ]
+    const bombRimMat = new THREE.MeshStandardMaterial({
+      color: this.hasForgedWheels ? 0xfacc15 : 0x09090b,
+      roughness: 0.3,
+      metalness: 0.85,
+    })
+    const caliperMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3 })
+    const sportRimGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.26, 12)
+    for (const [x, z] of bombWheelPositions) {
+      const wheel = new THREE.Mesh(wheelGeometry, tireMaterial)
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(x, 0.47, z)
+      wheel.castShadow = true
+      const rim = new THREE.Mesh(sportRimGeo, bombRimMat)
+      wheel.add(rim)
+      const caliper = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.27), caliperMat)
+      caliper.position.set(0, 0.16, 0)
+      caliper.userData.isDetail = true
+      wheel.add(caliper)
+      this.root.add(wheel)
+      this.wheels.push(wheel)
+    }
+
+    // 7. Xenon Headlights & LED Tail Strip
+    const xenonLampMat = new THREE.MeshStandardMaterial({ color: 0x60a5fa, emissive: 0x38bdf8, emissiveIntensity: 1.2 })
+    const ledTailMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 1.5 })
+    this.addBox([0.48, 0.12, 0.06], 0.76, xenonLampMat, -0.75, -2.24)
+    this.addBox([0.48, 0.12, 0.06], 0.76, xenonLampMat, 0.75, -2.24)
+    this.addBox([1.82, 0.08, 0.06], 0.82, ledTailMat, 0, 2.24)
   }
 
   private buildHyperF1(): void {
@@ -1094,44 +1268,44 @@ export class Car {
     this.addBox([0.65, 0.24, 1.8], 0.32, this.bodyMaterial, 0, -2.2) // Long tapered nose cone
     this.addBox([0.45, 0.18, 0.6], 0.26, this.bodyMaterial, 0, -2.85) // Front nose tip
 
-    // Front Multi-Element Wing with Endplates
-    this.addBox([2.24, 0.06, 0.52], 0.22, carbonMat, 0, -2.8)
-    this.addBox([2.24, 0.04, 0.28], 0.28, redAccentMat, 0, -2.7) // Upper wing flap
-    this.addBox([0.06, 0.28, 0.65], 0.32, carbonMat, -1.12, -2.8) // Left endplate
-    this.addBox([0.06, 0.28, 0.65], 0.32, carbonMat, 1.12, -2.8) // Right endplate
+    // Front Multi-Element Wing with Endplates (aerofólio dianteiro)
+    this.addBox([2.24, 0.06, 0.52], 0.22, carbonMat, 0, -2.8, true)
+    this.addBox([2.24, 0.04, 0.28], 0.28, redAccentMat, 0, -2.7, true) // Upper wing flap
+    this.addBox([0.06, 0.28, 0.65], 0.32, carbonMat, -1.12, -2.8, true) // Left endplate
+    this.addBox([0.06, 0.28, 0.65], 0.32, carbonMat, 1.12, -2.8, true) // Right endplate
 
-    // 2. Cockpit Tub & Titanium Halo Safety System
+    // 2. Cockpit Tub & Titanium Halo Safety System (barras de proteção)
     this.addBox([0.82, 0.28, 1.4], 0.62, carbonMat, 0, -0.2) // Cockpit tub
     // Halo curved bar
-    this.addBox([0.68, 0.08, 0.08], 0.92, titaniumMat, 0, -0.62) // Halo center arch
-    this.addBox([0.06, 0.08, 0.72], 0.92, titaniumMat, -0.32, -0.26) // Halo left stalk
-    this.addBox([0.06, 0.08, 0.72], 0.92, titaniumMat, 0.32, -0.26) // Halo right stalk
-    this.addBox([0.06, 0.32, 0.06], 0.78, titaniumMat, 0, -0.62) // Center pillar
+    this.addBox([0.68, 0.08, 0.08], 0.92, titaniumMat, 0, -0.62, true) // Halo center arch
+    this.addBox([0.06, 0.08, 0.72], 0.92, titaniumMat, -0.32, -0.26, true) // Halo left stalk
+    this.addBox([0.06, 0.08, 0.72], 0.92, titaniumMat, 0.32, -0.26, true) // Halo right stalk
+    this.addBox([0.06, 0.32, 0.06], 0.78, titaniumMat, 0, -0.62, true) // Center pillar
 
-    // 3. Sidepods & Overhead Airbox Intake
+    // 3. Sidepods & Overhead Airbox Intake (saias e entradas de ar)
     for (const side of [-1, 1]) {
       this.addBox([0.45, 0.36, 2.0], 0.45, this.bodyMaterial, side * 0.72, 0.1) // Sculpted sidepod
-      this.addBox([0.38, 0.28, 0.08], 0.45, carbonMat, side * 0.72, -0.92) // Radiator intake vent
-      this.addBox([0.35, 0.04, 1.95], 0.24, carbonMat, side * 0.85, 0.1) // Floor barge board
+      this.addBox([0.38, 0.28, 0.08], 0.45, carbonMat, side * 0.72, -0.92, true) // Radiator intake vent
+      this.addBox([0.35, 0.04, 1.95], 0.24, carbonMat, side * 0.85, 0.1, true) // Floor barge board (saia lateral)
     }
     // Overhead Airbox
-    this.addBox([0.32, 0.38, 0.68], 0.96, this.bodyMaterial, 0, 0.35)
-    this.addBox([0.24, 0.22, 0.06], 0.96, carbonMat, 0, 0.0) // Airbox intake
+    this.addBox([0.32, 0.38, 0.68], 0.96, this.bodyMaterial, 0, 0.35, true)
+    this.addBox([0.24, 0.22, 0.06], 0.96, carbonMat, 0, 0.0, true) // Airbox intake
 
     // Shark Fin Engine Cover
-    this.addBox([0.06, 0.52, 1.4], 1.02, redAccentMat, 0, 1.25)
+    this.addBox([0.06, 0.52, 1.4], 1.02, redAccentMat, 0, 1.25, true)
 
-    // 4. Massive Double-Deck Rear Wing with Swan-Neck Mounts
-    this.addBox([0.06, 0.62, 0.18], 1.02, carbonMat, -0.4, 2.15) // Mount L
-    this.addBox([0.06, 0.62, 0.18], 1.02, carbonMat, 0.4, 2.15) // Mount R
-    this.addBox([1.98, 0.08, 0.52], 1.32, this.bodyMaterial, 0, 2.18) // Main rear wing element
-    this.addBox([1.98, 0.06, 0.32], 1.44, redAccentMat, 0, 2.22) // DRS flap
-    this.addBox([0.06, 0.52, 0.68], 1.25, carbonMat, -0.98, 2.2) // Wing endplate L
-    this.addBox([0.06, 0.52, 0.68], 1.25, carbonMat, 0.98, 2.2) // Wing endplate R
+    // 4. Massive Double-Deck Rear Wing with Swan-Neck Mounts (aerofólio traseiro)
+    this.addBox([0.06, 0.62, 0.18], 1.02, carbonMat, -0.4, 2.15, true) // Mount L
+    this.addBox([0.06, 0.62, 0.18], 1.02, carbonMat, 0.4, 2.15, true) // Mount R
+    this.addBox([1.98, 0.08, 0.52], 1.32, this.bodyMaterial, 0, 2.18, true) // Main rear wing element
+    this.addBox([1.98, 0.06, 0.32], 1.44, redAccentMat, 0, 2.22, true) // DRS flap
+    this.addBox([0.06, 0.52, 0.68], 1.25, carbonMat, -0.98, 2.2, true) // Wing endplate L
+    this.addBox([0.06, 0.52, 0.68], 1.25, carbonMat, 0.98, 2.2, true) // Wing endplate R
 
     // 5. Rear Diffuser & FIA Flashing Rain Light
-    this.addBox([1.2, 0.22, 0.5], 0.24, carbonMat, 0, 2.1)
-    this.addBox([0.22, 0.16, 0.06], 0.35, rainLightMat, 0, 2.38)
+    this.addBox([1.2, 0.22, 0.5], 0.24, carbonMat, 0, 2.1, true)
+    this.addBox([0.22, 0.16, 0.06], 0.35, rainLightMat, 0, 2.38, true)
 
     // Wide F1 Slick Racing Wheels with Center-lock Nuts
     const f1WheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.35, 14)
@@ -1522,20 +1696,24 @@ export class Car {
     }
   }
 
-  private addTruckBox(size: [number, number, number], y: number, material: THREE.Material, x = 0, z = 0): THREE.Mesh {
+  private addTruckBox(size: [number, number, number], y: number, material: THREE.Material, x = 0, z = 0, isDetail = false): THREE.Mesh {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
     mesh.position.set(x, y, z)
     mesh.castShadow = true
     mesh.receiveShadow = true
+    mesh.userData.boxSize = size
+    if (isDetail) mesh.userData.isDetail = true
     this.truckGroup.add(mesh)
     return mesh
   }
 
-  private addRobotBox(group: THREE.Group, size: [number, number, number], pos: [number, number, number], material: THREE.Material): THREE.Mesh {
+  private addRobotBox(group: THREE.Group, size: [number, number, number], pos: [number, number, number], material: THREE.Material, isDetail = false): THREE.Mesh {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
     mesh.position.set(...pos)
     mesh.castShadow = true
     mesh.receiveShadow = true
+    mesh.userData.boxSize = size
+    if (isDetail) mesh.userData.isDetail = true
     group.add(mesh)
     return mesh
   }
@@ -1711,25 +1889,27 @@ export class Car {
     this.addTruckBox([0.34, 0.22, 0.08], 2.65, redGraphicMat, -0.96, 2.62) // Tail lights
     this.addTruckBox([0.34, 0.22, 0.08], 2.65, redGraphicMat, 0.96, 2.62)
 
-    // Heavy Chrome Roll Cage & Off-Road Floodlights
-    this.addTruckBox([2.1, 0.12, 0.12], 3.98, chromeMat, 0, 0.88)
-    this.addTruckBox([0.12, 1.1, 0.12], 3.45, chromeMat, -1.0, 0.88)
-    this.addTruckBox([0.12, 1.1, 0.12], 3.45, chromeMat, 1.0, 0.88)
-    this.addTruckBox([0.12, 0.12, 1.4], 3.45, chromeMat, -1.0, 1.5)
-    this.addTruckBox([0.12, 0.12, 1.4], 3.45, chromeMat, 1.0, 1.5)
+    // Heavy Chrome Roll Cage & Off-Road Floodlights (barras pretas/cromadas no teto)
+    this.addTruckBox([2.1, 0.12, 0.12], 3.98, chromeMat, 0, 0.88, true)
+    this.addTruckBox([0.12, 1.1, 0.12], 3.45, chromeMat, -1.0, 0.88, true)
+    this.addTruckBox([0.12, 1.1, 0.12], 3.45, chromeMat, 1.0, 0.88, true)
+    this.addTruckBox([0.12, 0.12, 1.4], 3.45, chromeMat, -1.0, 1.5, true)
+    this.addTruckBox([0.12, 0.12, 1.4], 3.45, chromeMat, 1.0, 1.5, true)
 
     // 4 Giant Roof Floodlights with Protective Yellow Covers
     for (const lx of [-0.8, -0.27, 0.27, 0.8]) {
       const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.14, 14), roofLightMat)
       lamp.rotation.x = Math.PI / 2
       lamp.position.set(lx, 4.18, 0.88)
+      lamp.userData.isDetail = true
       this.truckGroup.add(lamp)
     }
 
-    // Dual vertical chrome smokestacks with perforated heat shields
+    // Dual vertical chrome smokestacks with perforated heat shields (escapamentos)
     for (const sx of [-1.02, 1.02]) {
       const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.6, 12), chromeMat)
       stack.position.set(sx, 3.65, 0.78)
+      stack.userData.isDetail = true
       this.truckGroup.add(stack)
     }
   }
@@ -2160,8 +2340,8 @@ export class Car {
       this.climbPitch *= Math.max(0, 1 - dt * 4.5)
     }
 
-    this.root.position.y = this.climbLift
-    this.root.rotation.x = this.climbPitch
+    this.root.position.y = this.groundElevation + this.climbLift
+    this.root.rotation.x = this.dunePitch + this.climbPitch
     this.root.rotation.z = 0
     this.yaw += this.angularVelocity * dt
     this.angularVelocity *= Math.exp(-4 * dt)
@@ -2176,19 +2356,44 @@ export class Car {
     for (const wheel of this.wheels) wheel.rotation.x += wheelSpin
   }
 
-  crush(): void {
+  crush(_monsterPos?: THREE.Vector3, _monsterSpeed = 10): void {
     if (this.kind === 'monster_truck' || this.kind === 'fuel_tanker' || this.kind === 'truck' || this.kind === 'bus' || this.kind === 'car_hauler') return
+    if (this.isCrushed) return
     this.isCrushed = true
     this.exploded = true
     this.hits = this.maxHits
-    this.speed *= 0.05
-    this.driftVelocity.multiplyScalar(0.05)
-    this.root.scale.y = 0.20 * this.scale
-    this.root.scale.x = 1.25 * this.scale
-    this.root.scale.z = 1.15 * this.scale
+    this.speed *= 0.02
+    this.driftVelocity.multiplyScalar(0.02)
+    this.root.scale.y = 0.16 * this.scale
+    this.root.scale.x = 1.38 * this.scale
+    this.root.scale.z = 1.22 * this.scale
     this.bodyMaterial.color.setHex(0x1a1d20)
     this.bodyMaterial.roughness = 0.95
     this.bodyMaterial.needsUpdate = true
+
+    // Deforma fisicamente a malha do carro amassado
+    this.root.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.geometry && obj.geometry.attributes.position) {
+        if (!obj.userData.isDeformed) {
+          obj.geometry = obj.geometry.clone()
+          obj.userData.isDeformed = true
+        }
+        const pos = obj.geometry.attributes.position
+        for (let i = 0; i < pos.count; i++) {
+          const y = pos.getY(i)
+          if (y > 0) {
+            pos.setY(i, y * 0.2 - Math.random() * 0.08)
+          }
+          pos.setX(i, pos.getX(i) * 1.28 + (Math.random() - 0.5) * 0.12)
+          pos.setZ(i, pos.getZ(i) * 1.18 + (Math.random() - 0.5) * 0.12)
+        }
+        pos.needsUpdate = true
+        obj.geometry.computeVertexNormals()
+      }
+    })
+
+    this.root.rotation.z += (Math.random() - 0.5) * 0.28
+    this.root.rotation.x += (Math.random() - 0.5) * 0.22
   }
 
   checkRampClimb(hauler: Car): { onRamp: boolean; atLaunchLip: boolean; rampHeight: number } {
@@ -2265,15 +2470,15 @@ export class Car {
     const isSmallB = other.kind !== 'monster_truck' && other.kind !== 'fuel_tanker' && other.kind !== 'truck' && other.kind !== 'bus'
 
     if (isMonsterA && isSmallB) {
-      this.climbLift = Math.min(1.15, this.climbLift + 0.72)
-      this.climbPitch = -0.22 * Math.sign(this.speed || 1)
-      this.speed *= 0.94 // Maintains powerful forward momentum over the crushed car
-      other.crush()
+      this.climbLift = Math.min(1.45, this.climbLift + 0.88)
+      this.climbPitch = -0.28 * Math.sign(this.speed || 1)
+      this.speed = Math.max(this.speed * 0.92, this.speed > 0 ? 10.0 : -10.0)
+      other.crush(this.root.position, this.speed)
     } else if (isMonsterB && isSmallA) {
-      other.climbLift = Math.min(1.15, other.climbLift + 0.72)
-      other.climbPitch = -0.22 * Math.sign(other.speed || 1)
-      other.speed *= 0.94
-      this.crush()
+      other.climbLift = Math.min(1.45, other.climbLift + 0.88)
+      other.climbPitch = -0.28 * Math.sign(other.speed || 1)
+      other.speed = Math.max(other.speed * 0.92, other.speed > 0 ? 10.0 : -10.0)
+      this.crush(other.root.position, other.speed)
     }
 
     const inverseMassA = 1 / this.mass

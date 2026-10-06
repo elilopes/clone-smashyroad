@@ -60,6 +60,15 @@ O protótipo foi profundamente expandido com sistemas urbanos interativos de fí
 - **Queda Cinematográfica e Grande Recompensa**: Ao atingir a 50ª colisão, o King Kong se solta do parapeito e despenca com aceleração gravitacional e rotação do topo até o chão, concluindo a missão com explosões, som triunfante e premiação de **+$5.000 em dinheiro** e **+15.000 pontos**.
 - **Radar & Minimapa GPS**: O arranha-céu e o gorila são sinalizados no radar e minimapa expandível com ícone dedicado `🦍 KING KONG`.
 
+#### 6. 🛠️ Otimizações, Novas Físicas & Melhorias de Interface (UI)
+- **Most Wanted Car (MWC)**: O nome e a marca do jogo foram oficialmente atualizados de *Most Pursued Car* para **Most Wanted Car** em toda a interface e títulos.
+- **Modo Gráfico Baixo (Culled Meshing)**: Implementado sistema de *Culled Meshing* combinado com *Instanced Mesh*. O jogo remove as faces ocultas inferiores de todos os edifícios e blocos instanciados no modo Baixo para otimização pesada e fluidez ultra-rápida.
+- **Modo Gráfico Alto (Rounded & Hatchback)**: O modo de qualidade gráfica Alta agora renderiza os veículos com cantos e bordas perfeitamente arredondadas via *RoundedBoxGeometry*. Além disso, todos os veículos não-picapes possuem uma traseira esportiva na diagonal estilo *hatchback* em vez de blocos quadrados de 90 graus.
+- **Física de Voo Tridimensional (Avião)**: O avião bimotor agora possui resolução de colisão sólida em 3D. Ele desliza e colide corretamente contra as paredes laterais dos prédios ao invés de passar por dentro, mas pode voar livremente por cima deles se estiver acima de seu topo.
+- **Física do Personagem Palito contra Policiais**: Quando o jogador estiver a pé, as viaturas policiais colidem e o empurram fisicamente sem passar por dentro do seu modelo 3D, batendo sem infligir dano direto.
+- **Gerenciamento de Modais de UI**: Modais de Perfil do Piloto (Conexão Google), Ajustes de Configurações e Ranking Diário foram reordenados e configurados com `z-index: 500`, aparecendo sempre à frente da tela de jogo pausado. O botão de Configurações também foi embutido diretamente nas opções de Pausa.
+- **Modo de Perfil Simplificado**: Jogadores não conectados agora exibem o status limpo de `ANÔNIMO` no menu superior, ocultando o indicador de níveis e o texto longo "Jogador Anônimo".
+
 ---
 
 ### 📂 Estrutura de Sistemas do Jogo
@@ -130,6 +139,15 @@ This prototype has been deeply enhanced with interactive city physics and advanc
 - **50-Hit Resistance Boss Health**: King Kong boasts a durable 50-hit collision resistance. Each direct bullet impact triggers an intense red/white hit-flash on his 3D mesh, mechanical flinch tremors, and spark discharges. The boss health bar dynamically tracks remaining endurance (`X / 50`).
 - **Cinematic Fall & Grand Reward**: Once 50 hits are registered, King Kong releases his grip and plummets in full gravity-driven freefall to the city streets below. Defeating him rewards the player with a celebratory explosion sequence, victory chimes, **+$5,000 cash**, and **+15,000 points**.
 - **GPS Minimap & Radar Tracking**: The skyscraper and the gorilla are tracked in real-time on both the mini-radar and expanded map with a custom `🦍 KING KONG` waypoint.
+
+#### 6. 🛠️ Optimizations, New Physics & UI Enhancements
+- **Most Wanted Car (MWC)**: The game title and branding have been officially updated from *Most Pursued Car* to **Most Wanted Car** across all headings and interfaces.
+- **Low Graphics Mode (Culled Meshing)**: Combines *Culled Meshing* with *Instanced Mesh* rendering. This optimization removes hidden bottom faces of all procedural building blocks to achieve maximum frame rates and ultra-fluid gameplay.
+- **High Graphics Mode (Rounded & Hatchback)**: The High quality mode renders vehicles with smooth rounded corners using *RoundedBoxGeometry*. Additionally, all non-pickup vehicles feature a sporty slanted hatchback rear profile rather than flat vertical 90-degree boxes.
+- **3D Flight Collision Resolution (Plane)**: The twin-engine plane now features robust 3D collision sliding resolution. The aircraft slides and bounces correctly against skyscraper walls instead of clipping through them, while still allowing the player to fly freely above the building rooftops.
+- **Foot Physics against Cop Units**: When playing on foot as the stick figure, patrol cars physically collide and push the character away without clipping through, bumping the player with sparks and without applying direct damage.
+- **UI Modal Overlay Management**: The Pilot Profile, Daily Leaderboard, and Graphics Settings modals have been properly configured with fixed views and `z-index: 500`. They now display smoothly on top of the paused screen, and a Settings button has been embedded into the Pause screen.
+- **Simplified Anonymous Profile**: Guest players now see a clean `ANONYMOUS` (or `ANÔNIMO`) tag in the header bar instead of the long "Jogador Anônimo" level label.
 
 ---
 
