@@ -1,4 +1,4 @@
-# Smash City — Wanted District
+# MOST WANTED CAR
 
 [English](#english) | [Português](#português)
 
@@ -84,6 +84,8 @@ O protótipo foi  expandido com sistemas urbanos interativos de física e IA de 
 ---
 
 ## <a name="english"></a>English
+
+# MOST WANTED CAR
 
 Jogo MOST WANTED CAR, a complete prototype and playable 3D vehicle pursuit built using HTML5, TypeScript, and Three.js. This game is basead at game Smash City 2. The city is generated procedurally around the player's vehicle, extending infinitely as the race progresses.
 
