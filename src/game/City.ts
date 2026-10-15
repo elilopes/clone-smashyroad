@@ -1772,6 +1772,9 @@ export class City {
         const roadZ = Math.round(dz / BLOCK) * BLOCK
         if (Math.abs(dz - roadZ) < 18) continue
 
+        // Leave East Rally Track Arena clear of dunes for oval circuit
+        if (sideXCenter > 0 && Math.abs(dx - 1100) < 170 && Math.abs(dz) < 170) continue
+
         const scaleX = 22 + random() * 40
         const scaleY = 3.5 + random() * 9.5
         const scaleZ = 28 + random() * 48
@@ -2221,7 +2224,14 @@ export class City {
     return this.colliders
   }
 
+  addColliders(bounds: Bounds[]): void {
+    this.colliders.push(...bounds)
+  }
+
   getDuneHeightAt(x: number, z: number): number {
+    // Keep Rally Track Arena in East Dunes flat on the ground
+    if (Math.abs(x - 1100) < 170 && Math.abs(z) < 170) return 0
+
     let maxHeight = 0
     for (const chunk of this.chunks.values()) {
       for (const d of chunk.dunes) {

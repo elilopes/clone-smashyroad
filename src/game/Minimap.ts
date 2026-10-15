@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { Car } from './Car'
 import type { City, PlazaInfo, LagoonInfo } from './City'
+import type { RallyRace } from './RallyRace'
 
 export class Minimap {
   private readonly shell: HTMLElement
@@ -72,6 +73,7 @@ export class Minimap {
     busPassengers?: { x: number; z: number; collected: boolean }[],
     monsterTruckInfo?: { position: THREE.Vector3; inMonsterTruck: boolean },
     stationaryCars?: { x: number; z: number; collected: boolean }[],
+    rallyRace?: RallyRace,
   ): void {
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2)
 
@@ -132,6 +134,11 @@ export class Minimap {
 
     // 5.6. King Kong Building (Arranha-céu com o King Kong no topo)
     this.drawKingKong(ctx, cx, cy, playerPosition, scale, radius, city.getKingKongLocation())
+
+    // 5.7. Rally Race Circuit in the East Dunes
+    if (rallyRace) {
+      this.drawRallyRace(ctx, cx, cy, playerPosition, scale, radius, rallyRace)
+    }
 
     // 5.8. Bus Passengers (Pessoas marcadas para o ônibus)
     if (busPassengers) {
@@ -1153,6 +1160,111 @@ export class Minimap {
       ctx.font = '800 7.5px monospace'
       ctx.textAlign = 'center'
       ctx.fillText(`🛻 ${Math.round(dist)}m`, textX, textY + 3)
+      ctx.restore()
+    }
+  }
+
+  private drawRallyRace(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    player: THREE.Vector3,
+    scale: number,
+    radius: number,
+    rallyRace: RallyRace,
+  ): void {
+    const rx = cx + (rallyRace.centerX - player.x) * scale
+    const rz = cy + (rallyRace.centerZ - player.z) * scale
+    const distToCenter = Math.hypot(rx - cx, rz - cy)
+
+    if (distToCenter < radius + 150 * scale) {
+      ctx.save()
+      ctx.translate(rx, rz)
+
+      const straightH = (rallyRace.straightLength / 2) * scale
+      const curveR = rallyRace.curveRadius * scale
+      const trackW = (rallyRace.trackWidth / 2) * scale
+
+      // 1. Draw Oval Track Base (Dark Asphalt)
+      ctx.lineWidth = trackW * 2
+      ctx.strokeStyle = '#1e293b'
+      ctx.lineCap = 'round'
+
+      ctx.beginPath()
+      ctx.moveTo(curveR, -straightH)
+      ctx.lineTo(curveR, straightH)
+      ctx.arc(0, straightH, curveR, 0, Math.PI, false)
+      ctx.lineTo(-curveR, -straightH)
+      ctx.arc(0, -straightH, curveR, Math.PI, 0, false)
+      ctx.closePath()
+      ctx.stroke()
+
+      // Curbs / track borders
+      ctx.lineWidth = 1.8
+      ctx.strokeStyle = '#f59e0b'
+      ctx.stroke()
+
+      // 2. Central Grade Divider Line ("grade entre as pistas")
+      ctx.strokeStyle = '#e2e8f0'
+      ctx.lineWidth = 2.4
+      ctx.beginPath()
+      ctx.moveTo(0, -straightH)
+      ctx.lineTo(0, straightH)
+      ctx.stroke()
+
+      // 3. Score Arches (cyan circles)
+      for (const arch of rallyRace.getArches()) {
+        const ax = (arch.position.x - rallyRace.centerX) * scale
+        const az = (arch.position.z - rallyRace.centerZ) * scale
+        ctx.fillStyle = '#06b6d4'
+        ctx.beginPath()
+        ctx.arc(ax, az, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // 4. Turbo Pickups (amber lightning / circles)
+      for (const turbo of rallyRace.getTurbos()) {
+        if (!turbo.active) continue
+        const tx = (turbo.position.x - rallyRace.centerX) * scale
+        const tz = (turbo.position.z - rallyRace.centerZ) * scale
+        ctx.fillStyle = '#f97316'
+        ctx.beginPath()
+        ctx.arc(tx, tz, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // 5. 6 Rally Cars
+      for (const comp of rallyRace.getCompetitors()) {
+        const cxPos = (comp.car.root.position.x - rallyRace.centerX) * scale
+        const czPos = (comp.car.root.position.z - rallyRace.centerZ) * scale
+        ctx.fillStyle = `#${comp.colorHex.toString(16).padStart(6, '0')}`
+        ctx.beginPath()
+        ctx.arc(cxPos, czPos, 4.2, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1.2
+        ctx.stroke()
+      }
+
+      // Track Label
+      ctx.fillStyle = '#facc15'
+      ctx.font = '800 8.5px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('🏎️ RALLY DAS DUNAS', 0, -straightH - curveR - 6)
+
+      ctx.restore()
+    } else {
+      // Offscreen pointer towards the Rally Circuit
+      const angle = Math.atan2(rz - cy, rx - cx)
+      const edgeX = cx + (radius - 12) * Math.cos(angle)
+      const edgeY = cy + (radius - 12) * Math.sin(angle)
+
+      ctx.save()
+      ctx.translate(edgeX, edgeY)
+      ctx.font = '11px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('🏎️', 0, 0)
       ctx.restore()
     }
   }

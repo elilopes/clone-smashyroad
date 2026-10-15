@@ -23,6 +23,7 @@ export type VehicleKind =
   | 'bomb_car'
   | 'hyper_f1'
   | 'tactical_tanker'
+  | 'rally_car'
 
 export function getMaxHits(kind: VehicleKind): number {
   if (kind === 'monster_truck') return 100 // Monster truck ultra reforçado: suporta 100 colisões
@@ -31,6 +32,7 @@ export function getMaxHits(kind: VehicleKind): number {
   if (kind === 'car_hauler') return 35 // Caminhão cegonha resistente com rampa
   if (kind === 'truck' || kind === 'bus') return 30
   if (kind === 'bomb_car') return 25 // Esportivo blindado do carro-bomba
+  if (kind === 'rally_car') return 25 // Carro de Rally WRC resistente
   if (kind === 'hyper_f1') return 22 // Monoposto de alta velocidade Le Mans/F1
   if (kind === 'suv' || kind === 'pickup') return 20
   if (kind === 'taxi') return 18
@@ -45,6 +47,7 @@ export function getSmokeThresholdHits(kind: VehicleKind): number {
   if (kind === 'car_hauler') return 28
   if (kind === 'truck' || kind === 'bus') return 25
   if (kind === 'bomb_car') return 16
+  if (kind === 'rally_car') return 16
   if (kind === 'hyper_f1') return 15
   if (kind === 'suv' || kind === 'pickup') return 15
   if (kind === 'taxi') return 12
@@ -162,7 +165,13 @@ export class Car {
   hasForgedWheels = false
   swordSlashTimer = 0
   swordSlashCooldown = 0
+  turboTimer = 0
   private swordSlashTrailGroup?: THREE.Group
+
+  applyTurbo(duration = 2.5, boostSpeed = 18): void {
+    this.turboTimer = Math.max(this.turboTimer, duration)
+    this.speed = Math.max(this.speed + boostSpeed, 38)
+  }
 
   constructor(scene: THREE.Scene, options: CarOptions = {}) {
     this.scene = scene
@@ -209,7 +218,9 @@ export class Car {
                       ? 1.45
                       : this.kind === 'hyper_f1'
                         ? 1.05
-                        : 1.25)
+                        : this.kind === 'rally_car'
+                          ? 1.22
+                          : 1.25)
     this.wheelBase =
       this.kind === 'monster_truck'
         ? 1.95
@@ -227,9 +238,11 @@ export class Car {
                     ? 1.35
                     : this.kind === 'hyper_f1'
                       ? 1.55
-                      : this.kind === 'suv' || this.kind === 'pickup'
-                        ? 1.45
-                        : 1.25
+                      : this.kind === 'rally_car'
+                        ? 1.42
+                        : this.kind === 'suv' || this.kind === 'pickup'
+                          ? 1.45
+                          : 1.25
     this.halfWidth =
       this.kind === 'monster_truck'
         ? 2.05
@@ -249,9 +262,11 @@ export class Car {
                       ? 1.14
                       : this.kind === 'hyper_f1'
                         ? 1.18
-                        : this.kind === 'pickup'
-                          ? 1.12
-                          : 1.06
+                        : this.kind === 'rally_car'
+                          ? 1.15
+                          : this.kind === 'pickup'
+                            ? 1.12
+                            : 1.06
     this.halfLength =
       this.kind === 'monster_truck'
         ? 2.8
@@ -271,12 +286,14 @@ export class Car {
                       ? 2.25
                       : this.kind === 'hyper_f1'
                         ? 2.5
-                        : this.kind === 'pickup'
-                          ? 2.45
-                          : 2.075
+                        : this.kind === 'rally_car'
+                          ? 2.15
+                          : this.kind === 'pickup'
+                            ? 2.45
+                            : 2.075
 
     // Paint Style Material Configuration
-    let pColor = options.color ?? (this.kind === 'monster_truck' ? 0x0ea5e9 : this.kind === 'fuel_tanker' ? 0xf0f3f6 : this.kind === 'taxi' ? 0xfacc15 : this.kind === 'bomb_car' ? 0x18181b : this.kind === 'hyper_f1' ? 0xef4444 : this.kind === 'tactical_tanker' ? 0x272e38 : 0x2789d5)
+    let pColor = options.color ?? (this.kind === 'monster_truck' ? 0x0ea5e9 : this.kind === 'fuel_tanker' ? 0xf0f3f6 : this.kind === 'taxi' ? 0xfacc15 : this.kind === 'bomb_car' ? 0x18181b : this.kind === 'hyper_f1' ? 0xef4444 : this.kind === 'tactical_tanker' ? 0x272e38 : this.kind === 'rally_car' ? 0xef4444 : 0x2789d5)
     let pRoughness = 0.45
     let pMetalness = 0.2
     let pEmissive: number | undefined
@@ -407,6 +424,11 @@ export class Car {
   }
 
   private buildBody(police: boolean): void {
+    if (this.kind === 'rally_car') {
+      this.buildRallyCar()
+      return
+    }
+
     if (this.kind === 'hyper_f1') {
       this.buildHyperF1()
       return
@@ -1424,6 +1446,141 @@ export class Car {
     }
   }
 
+  private buildRallyCar(): void {
+    const isHigh = this.graphicsMode === 'high'
+    const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.82, metalness: 0.25 })
+    const whiteAccentMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.2 })
+    const carbonWingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5, metalness: 0.4 })
+    const fogEmissiveMat = new THREE.MeshStandardMaterial({ color: 0xfffbeb, emissive: 0xfef08a, emissiveIntensity: 2.4, roughness: 0.2 })
+    const xenonHeadMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x93c5fd, emissiveIntensity: 2.2, roughness: 0.2 })
+    const ledTailMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 2.5, roughness: 0.2 })
+    const rollCageMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.3, metalness: 0.85 })
+    const mudFlapMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.88 })
+
+    // 1. Lower Chassis & Front Aerodynamic Splitter
+    this.addBox([2.04, 0.38, 4.25], 0.42, this.bodyMaterial, 0, 0)
+    this.addBox([2.08, 0.12, 0.72], 0.28, darkTrimMat, 0, -2.18) // Front lower rally splitter / skidplate
+    this.addBox([1.98, 0.18, 0.55], 0.38, darkTrimMat, 0, 2.12) // Rear diffuser
+
+    // 2. Front Rally Bumper & Radiator Grille
+    this.addBox([1.95, 0.46, 0.48], 0.65, this.bodyMaterial, 0, -2.0)
+    this.addBox([1.42, 0.26, 0.08], 0.55, darkTrimMat, 0, -2.25) // Honeycomb center air intake
+
+    // 3. Quad Front High-Intensity Rally Fog Light Pods (Faróis de Milha de Rally)
+    const fogPodPositions = [-0.58, -0.2, 0.2, 0.58]
+    const fogPodGeo = new THREE.CylinderGeometry(0.14, 0.15, 0.16, 12)
+    fogPodGeo.rotateX(Math.PI / 2)
+    for (const fx of fogPodPositions) {
+      const podHousing = new THREE.Mesh(fogPodGeo, darkTrimMat)
+      podHousing.position.set(fx, 0.82, -2.25)
+      this.root.add(podHousing)
+
+      const podLens = new THREE.Mesh(new THREE.CircleGeometry(0.12, 12), fogEmissiveMat)
+      podLens.position.set(fx, 0.82, -2.34)
+      podLens.rotation.y = Math.PI
+      this.root.add(podLens)
+    }
+
+    // Main Xenon Headlights
+    this.addBox([0.38, 0.15, 0.06], 0.78, xenonHeadMat, -0.84, -2.18)
+    this.addBox([0.38, 0.15, 0.06], 0.78, xenonHeadMat, 0.84, -2.18)
+
+    // 4. Slanted Hood with Dual Cooling Vents
+    this.addBox([1.88, 0.24, 1.45], 0.85, this.bodyMaterial, 0, -1.25)
+    this.addBox([0.42, 0.04, 0.55], 0.98, darkTrimMat, -0.45, -1.15) // Vent left
+    this.addBox([0.42, 0.04, 0.55], 0.98, darkTrimMat, 0.45, -1.15) // Vent right
+
+    // 5. Flared Widebody Wheel Arches (Paralamas Alargados WRC)
+    this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, -1.06, -1.35)
+    this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, 1.06, -1.35)
+    this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, -1.06, 1.35)
+    this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, 1.06, 1.35)
+
+    // 6. Cabin Glass, Pillars & Roll Cage
+    const frontWindshield = this.addBox([1.68, 0.58, 0.08], 1.25, glassMaterial, 0, -0.42)
+    frontWindshield.rotation.x = -0.38
+
+    this.addBox([0.08, 0.48, 1.62], 1.25, glassMaterial, -0.86, 0.35)
+    this.addBox([0.08, 0.48, 1.62], 1.25, glassMaterial, 0.86, 0.35)
+
+    // Roll Cage Tubes inside cabin (Gaiola Tubular de Competição)
+    for (const side of [-0.68, 0.68]) {
+      const cageA = this.addBox([0.06, 0.65, 0.06], 1.22, rollCageMat, side, -0.2)
+      cageA.rotation.x = -0.35
+      const cageB = this.addBox([0.06, 0.65, 0.06], 1.22, rollCageMat, side, 0.9)
+      cageB.rotation.x = 0.35
+    }
+    this.addBox([1.35, 0.06, 0.06], 1.45, rollCageMat, 0, 0.35) // Cross bar
+
+    // Roof & Roof Air Scoop
+    this.addBox([1.72, 0.12, 1.82], 1.54, this.bodyMaterial, 0, 0.35)
+    this.addBox([0.38, 0.16, 0.52], 1.66, darkTrimMat, 0, -0.05)
+    this.addBox([0.32, 0.10, 0.06], 1.66, whiteAccentMat, 0, -0.32)
+
+    // 7. Hatchback Rear (Diagonal Slant in High-Poly mode per user styling request)
+    if (isHigh) {
+      const hatchRear = this.addBox([1.88, 0.72, 1.42], 1.18, this.bodyMaterial, 0, 1.28)
+      hatchRear.rotation.x = -0.44 // Slanted diagonal hatchback rear
+      const rearGlass = this.addBox([1.58, 0.52, 0.08], 1.34, glassMaterial, 0, 1.18)
+      rearGlass.rotation.x = 0.42
+    } else {
+      this.addBox([1.88, 0.55, 1.15], 1.05, this.bodyMaterial, 0, 1.45)
+      const rearGlass = this.addBox([1.58, 0.45, 0.08], 1.25, glassMaterial, 0, 1.25)
+      rearGlass.rotation.x = 0.36
+    }
+
+    // 8. Massive WRC Biplane Rear Wing Spoiler
+    this.addBox([0.08, 0.45, 0.28], 1.68, carbonWingMat, -0.65, 1.65)
+    this.addBox([0.08, 0.45, 0.28], 1.68, carbonWingMat, 0.65, 1.65)
+    const mainWing = this.addBox([1.96, 0.08, 0.48], 1.88, carbonWingMat, 0, 1.72)
+    mainWing.rotation.x = 0.12
+    this.addBox([1.82, 0.06, 0.34], 1.62, carbonWingMat, 0, 1.68)
+    this.addBox([0.06, 0.38, 0.58], 1.84, this.bodyMaterial, -0.98, 1.72)
+    this.addBox([0.06, 0.38, 0.58], 1.84, this.bodyMaterial, 0.98, 1.72)
+
+    // 9. Rear LED Taillights & Twin Chrome Exhausts
+    this.addBox([1.82, 0.12, 0.06], 0.88, ledTailMat, 0, 2.15)
+    this.addBox([0.34, 0.38, 0.05], 0.32, mudFlapMat, -0.92, 1.95)
+    this.addBox([0.34, 0.38, 0.05], 0.32, mudFlapMat, 0.92, 1.95)
+
+    const exhaustMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.92, roughness: 0.2 })
+    const exhaustGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.25, 10)
+    exhaustGeo.rotateX(Math.PI / 2)
+    for (const ex of [-0.35, 0.35]) {
+      const exhaust = new THREE.Mesh(exhaustGeo, exhaustMat)
+      exhaust.position.set(ex, 0.36, 2.16)
+      this.root.add(exhaust)
+    }
+
+    // 10. 4 High-Grip Rally Wheels with Multi-Spoke Rims
+    const rallyWheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.32, 14)
+    const wheelPositions: [number, number][] = [
+      [-1.05, -1.35],
+      [1.05, -1.35],
+      [-1.05, 1.35],
+      [1.05, 1.35],
+    ]
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      roughness: 0.25,
+      metalness: 0.85,
+    })
+
+    for (const [wx, wz] of wheelPositions) {
+      const wheel = new THREE.Mesh(rallyWheelGeo, tireMaterial)
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(wx, 0.38, wz)
+      wheel.castShadow = true
+
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.34, 10), rimMat)
+      rim.rotation.z = Math.PI / 2
+      wheel.add(rim)
+
+      this.root.add(wheel)
+      this.wheels.push(wheel)
+    }
+  }
+
   private buildCustomAddons(): void {
     // Decal Addons
     if (this.decalStyle === 'racing_stripes') {
@@ -2210,18 +2367,21 @@ export class Car {
       }
     }
 
+    const isBoosting = this.hasNitroBooster || this.turboTimer > 0
     const maxSpeed =
       (this.kind === 'hyper_f1'
         ? 48
-        : this.kind === 'bomb_car'
-          ? 42
-          : this.kind === 'monster_truck' || this.kind === 'tactical_tanker'
-            ? 34
-            : 37) *
+        : this.kind === 'rally_car'
+          ? 45
+          : this.kind === 'bomb_car'
+            ? 42
+            : this.kind === 'monster_truck' || this.kind === 'tactical_tanker'
+              ? 34
+              : 37) *
       (1 + (this.engineLevel || 0) * 0.12) *
-      (this.hasNitroBooster ? 1.15 : 1)
+      (isBoosting ? 1.35 : 1)
 
-    const accelMult = (1 + (this.engineLevel || 0) * 0.15) * (this.kind === 'hyper_f1' ? 1.3 : 1) * (this.hasNitroBooster ? 1.25 : 1)
+    const accelMult = (1 + (this.engineLevel || 0) * 0.15) * (this.kind === 'hyper_f1' ? 1.3 : this.kind === 'rally_car' ? 1.25 : 1) * (isBoosting ? 1.3 : 1)
 
     if (throttle > 0) this.speed += 17.5 * accelMult * throttle * dt
     else if (throttle < 0) this.speed += 12 * throttle * dt
@@ -2318,6 +2478,10 @@ export class Car {
         this.robotLeftArm.rotation.y = THREE.MathUtils.lerp(this.robotLeftArm.rotation.y, 0, dt * 12)
         this.robotLeftArm.rotation.x = THREE.MathUtils.lerp(this.robotLeftArm.rotation.x, 0, dt * 12)
       }
+    }
+
+    if (this.turboTimer > 0) {
+      this.turboTimer = Math.max(0, this.turboTimer - dt)
     }
 
     if (this.inWater) {

@@ -69,15 +69,25 @@ O protótipo foi  expandido com sistemas urbanos interativos de física e IA de 
 - **Física do Personagem Palito contra Policiais**: Quando o jogador estiver a pé, as viaturas policiais colidem e o empurram fisicamente sem passar por dentro do seu modelo 3D, batendo sem infligir dano direto.
 - **Perfil Simplificado**: Jogadores não conectados exibem o status limpo de `ANÔNIMO` no menu superior.
 
+#### 7. 🏎️ Circuito Oval de Rally nas Dunas (6 Carros, Grade Divisória, Arcos e Turbos)
+- **Mega Pista Oval no Deserto Leste**: Construído um circuito oval de rally com mais de 580 metros de perímetro em meio às dunas de areia (`X = 1100, Z = 0`). A área das dunas foi nivelada com solo compacto de terra batida, zebras de corrida vermelhas e brancas nas curvas e torres de refletores LED.
+- **Grade de Segurança Central entre as Pistas**: Conforme solicitado, a pista possui uma sólida grade metálica divisória central (`X = 1100`) com postes de aço e telas de arame reforçado entre os dois sentidos de tráfego, impedindo fisicamente que os carros mudem de sentido, cortem caminho ou invadam a pista contrária.
+- **Corrida Realista entre 6 Carros de Rally WRC**: 6 competidores com pinturas e números esportivos exclusivos (#1 Red Apex, #7 Blue Thunder, #23 Green Viper, #44 Orange Blaze, #88 Desert Gold, #99 Cyber Violet) disputam a liderança em tempo real. Os carros contam com IA de ultrapassagem dinâmica, aceleração e drift realista com fumaça e faíscas nas curvas.
+- **Arcos Brilhantes de Pontuação**: 4 arcos luminosos neon (`+500 PTS`) instalados ao longo da pista conferem premiação instantânea em dinheiro e pontuação, acompanhados de som triunfante e chuva de faíscas douradas ao cruzar por baixo deles.
+- **Ícones 3D de Turbo Boost**: Pickups flutuantes de Turbo giratórios posicionados no traçado da pista proporcionam impulsos violentos de nitro para o jogador e competidores de IA, liberando chamas de foguete no escapamento.
+- **Carro de Rally no Paddock & Disputa do Jogador**: Um 7º carro de rally elétrico está estacionado nos boxes para o jogador pilotar pressionando **E**, ou o jogador pode disputar a corrida com qualquer outro veículo. O HUD tático exibe a posição em tempo real (`Xº / 7`) e contagem de voltas, premiando com **+$5.000** e **+10.000 PTS** a vitória do campeonato em 3 voltas.
+- **Radar & Minimapa do Circuito**: O traçado oval, a grade central, os 6 competidores em movimento, os arcos e os turbos são renderizados com ícones no minimapa e radar GPS.
+
 ---
 
 ### 📂 Estrutura de Sistemas do Jogo
 
-- `src/game/Car.ts`: Modelos 3D, física, aceleração, direção, colisões e renderização do condutor de bicicleta.
+- `src/game/Car.ts`: Modelos 3D, física, aceleração, direção, colisões, condutor de bicicleta e novo modelo de Rally WRC.
+- `src/game/RallyRace.ts`: Circuito oval nas dunas, 6 carros de rally competindo, grade divisória central, arcos de pontuação e pickups de turbo.
 - `src/game/City.ts`: Geração de ruas, quarteirões, calçadas, edifícios, moedas coletáveis, lagoas e semáforos físicos 3D.
 - `src/game/Traffic.ts`: IA de trânsito civil, car-following, evasão de perigos e IA de parada em semáforos vermelhos.
 - `src/game/Pedestrians.ts`: Pedestres ativos que se movem, esquivam de carros e interagem com o mundo.
-- `src/game/Minimap.ts`: Radar e mapa expandível que indica rios, ruas, praças, lagoas e objetivos.
+- `src/game/Minimap.ts`: Radar e mapa expandível que indica rios, ruas, praças, lagoas, objetivos e circuito de rally nas dunas.
 - `src/game/Game.ts`: Core da engine, loop de update, câmera inteligente, HUD, perseguições e sistema de missões.
 
 ---
@@ -151,13 +161,23 @@ This prototype has been deeply enhanced with interactive city physics and Traffi
 - **Foot Physics against Cop Units**: When playing on foot as the stick figure, patrol cars physically collide and push the character away without clipping through, bumping the player with sparks and without applying direct damage.
 - **Simplified Profile**: Guest players now see a clean `ANONYMOUS` tag in the header bar.
 
+#### 7. 🏎️ Desert Dunes Oval Rally Circuit (6 Cars, Divider Grille, Arches & Turbos)
+- **Massive Desert Oval Racetrack**: Built a high-octane 580m oval rally circuit in the East sand dunes (`X = 1100, Z = 0`). The arena is leveled with compact dirt/gravel ground, red-and-white racing curbs along curves, and 4 high-powered LED floodlight towers.
+- **Central Security Divider Grille**: Features a solid central metallic security fence (`X = 1100`) with steel posts and heavy-duty wire mesh between opposing lanes, physically preventing cars from cutting corners or turning into oncoming traffic.
+- **Dynamic 6-Car Rally Race**: 6 AI competitors with unique custom liveries and numbers (#1 Red Apex, #7 Blue Thunder, #23 Green Viper, #44 Orange Blaze, #88 Desert Gold, #99 Cyber Violet) compete for 1st place in real-time with dynamic overtaking, slipstreaming, and drifting with dust trails.
+- **Glowing Score Arches**: 4 illuminated neon overhead arches (`+500 PTS`) grant instant score points and cash rewards with celebratory chimes and golden spark showers when driven through.
+- **3D Floating Turbo Boost Pickups**: Hovering, spinning turbo canisters with dual thruster nozzles and lightning emblems positioned on the track grant instant nitro surges and rocket flame exhaust trails to both the player and AI rally cars.
+- **Paddock Car & Player Race Participation**: An electric blue 7th WRC rally car is parked in the paddock pit lane for the player to commandeer with **E**, or the player can race with their current vehicle. A tactical HUD tracks real-time race standing (`X / 7`) and lap counts, awarding **+$5,000** and **+10,000 PTS** for winning a 3-lap championship.
+- **GPS Minimap & Radar Tracking**: The oval circuit, central divider, all 6 active competitors, score arches, and turbo pickups are clearly rendered on the mini-radar and expanded map.
+
 ---
 
 ### 📂 Game Systems Architecture
 
-- `src/game/Car.ts`: 3D meshes, vehicle physics, collisions, and bicycle rider animation.
+- `src/game/Car.ts`: 3D meshes, vehicle physics, collisions, bicycle rider animation, and WRC Rally car model.
+- `src/game/RallyRace.ts`: Dune oval circuit, 6 AI rally competitors, central security grille, score arches, and turbo boost pickups.
 - `src/game/City.ts`: Procedural generation of avenues, blocks, sidewalks, buildings, coins, lagoons, and 3D traffic lights.
 - `src/game/Traffic.ts`: Civilian traffic AI, car-following, emergency evasion, and traffic light stopping logic.
 - `src/game/Pedestrians.ts`: Active wandering pedestrians that can dodge oncoming vehicles.
-- `src/game/Minimap.ts`: Radar HUD showing rivers, roads, parks, lagoons, and active mission waypoints.
+- `src/game/Minimap.ts`: Radar HUD showing rivers, roads, parks, lagoons, active mission waypoints, and the desert dunes rally circuit.
 - `src/game/Game.ts`: Game loop coordinator, camera states, HUD overlays, active pursuits, and mission handlers.

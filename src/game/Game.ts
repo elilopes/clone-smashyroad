@@ -17,6 +17,7 @@ import { Pedestrians } from './Pedestrians'
 import { Plane } from './Plane'
 import { Projectiles } from './Projectiles'
 import { Pursuit } from './Pursuit'
+import { RallyRace } from './RallyRace'
 import { Sparks } from './Sparks'
 import { Sound } from './Sound'
 import { StickPerson } from './StickPerson'
@@ -24,6 +25,7 @@ import { Tank } from './Tank'
 import { Traffic } from './Traffic'
 import { WantedSystem } from './WantedSystem'
 import { usersDB, getXpRequiredForLevel, SHOP_CATALOG, type UserProfile } from '../db/users'
+import { triggerHapticImpact, triggerHapticNotification } from '../native/capacitor'
 
 const CASH_KEY = 'smash-city-cash'
 const BEST_KEY = 'smash-city-best'
@@ -39,6 +41,7 @@ export class Game {
   private readonly minimap: Minimap
   private readonly plane: Plane
   private readonly floatingRings: FloatingRings
+  private readonly rallyRace: RallyRace
   private readonly tanks: Tank[] = []
   private readonly helicopters: Helicopter[] = []
   private readonly projectiles: Projectiles
@@ -206,6 +209,11 @@ export class Game {
   private rampageTargetPolice = 15
   private rampageCompleted = false
   private hasUrbanDestroyerTrophy = localStorage.getItem('smash_trophy_urban') === 'true'
+
+  // 3.5. Corrida de Rally nas Dunas
+  private readonly rallyRacePanel = document.querySelector<HTMLElement>('#rally-race-panel')
+  private readonly rallyPositionValEl = document.querySelector<HTMLElement>('#rally-position-val')
+  private readonly rallyLapValEl = document.querySelector<HTMLElement>('#rally-lap-val')
 
   // 4. Auth & Progression (Google & Play Games via users.ts)
   private readonly authButton = document.querySelector<HTMLButtonElement>('#auth-button')
@@ -395,6 +403,31 @@ export class Game {
     this.initTaxiMission()
 
     this.initStrandedCars()
+
+    // Corrida de Rally nas Dunas (6 Carros, Pista Oval com Grade, Arcos e Turbos)
+    this.rallyRace = new RallyRace(this.scene, this.city, this.sound, this.sparks)
+    this.rallyRace.onScoreCollected = (points, cash) => {
+      this.distance += points
+      this.cash += cash
+      localStorage.setItem(CASH_KEY, String(this.cash))
+      this.updateHud()
+      this.showToast(`✨ ARCO DE PONTUAÇÃO! +${points} PTS`)
+    }
+    this.rallyRace.onTurboCollected = () => {
+      this.showToast('⚡ TURBO BOOST ATIVADO!')
+    }
+    this.rallyRace.onLapCompleted = (lap, position) => {
+      this.distance += 1000
+      this.updateHud()
+      this.showToast(`🏁 VOLTA ${lap} COMPLETADA! (POSIÇÃO: ${position}º)`)
+    }
+    this.rallyRace.onRaceWon = (rewardCash, rewardPoints) => {
+      this.cash += rewardCash
+      this.distance += rewardPoints
+      localStorage.setItem(CASH_KEY, String(this.cash))
+      this.updateHud()
+      this.showToast('🏆 CAMPEÃO DO RALLY DAS DUNAS! +$5.000 +10.000 PTS')
+    }
 
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
     this.city.ensureAround(this.player.root.position.z)
@@ -938,6 +971,9 @@ export class Game {
     this.planeShootCooldown = 0
     this.updateKingKongMissionUI()
     this.updateMonsterMissionUI()
+    this.rallyRace.playerLap = 1
+    this.rallyRace.playerHasWon = false
+    this.rallyRacePanel?.classList.add('hidden')
     this.updateVehicleButton()
     this.startOverlay.classList.add('hidden')
     this.endOverlay.classList.add('hidden')
@@ -1027,6 +1063,7 @@ export class Game {
         inMonsterTruck: this.inVehicle && this.player === this.monsterTruck,
       },
       this.getStationaryCarLocations(),
+      this.rallyRace,
     )
     if (this.graphicsMode === 'high' && this.composer) {
       this.composer.render()
@@ -1397,6 +1434,7 @@ export class Game {
         this.showToast('COLISÃO // A POLÍCIA FOI ALERTADA')
       }
       this.sound.effect('crash')
+      void triggerHapticImpact('heavy')
     }
 
     if (!this.inPlane && collided && this.inVehicle) {
@@ -1405,6 +1443,7 @@ export class Game {
         if (hit.isNewExplosion) {
           this.sparks.emitExplosion(this.player.root.position)
           this.sound.effect('explosion')
+          void triggerHapticNotification('error')
           this.endRun('explosion')
           return
         } else if (this.player.isSmoking && hit.hits === this.player.smokeThreshold) {
@@ -1872,6 +1911,8 @@ export class Game {
     this.updateBombMission(dt)
     // 3. Modo Fúria / Rampage (GTA 2 / GTA Vice City)
     this.updateRampageMission(dt)
+    // 4. Corrida de Rally nas Dunas (6 Carros)
+    this.updateRallyRace(dt)
 
     if (!this.inPlane && pursuit.busted) this.endRun('busted')
     this.hudTimer += dt
@@ -2567,6 +2608,30 @@ export class Game {
     }
   }
 
+  private updateRallyRace(dt: number): void {
+    const actorPos = this.inPlane
+      ? this.plane.root.position
+      : this.inVehicle
+        ? this.player.root.position
+        : this.character.root.position
+
+    this.rallyRace.update(dt, this.player, actorPos)
+
+    if (this.rallyRacePanel) {
+      if (this.rallyRace.playerInTrack) {
+        this.rallyRacePanel.classList.remove('hidden')
+        if (this.rallyPositionValEl) {
+          this.rallyPositionValEl.textContent = `${this.rallyRace.playerRacePosition}º / 7`
+        }
+        if (this.rallyLapValEl) {
+          this.rallyLapValEl.textContent = `VOLTA ${Math.min(3, this.rallyRace.playerLap)} / 3`
+        }
+      } else {
+        this.rallyRacePanel.classList.add('hidden')
+      }
+    }
+  }
+
   private endRun(reason: 'busted' | 'explosion' | 'plane_explosion' | 'drowned' = 'busted'): void {
     this.running = false
     this.ended = true
@@ -2810,6 +2875,23 @@ export class Game {
         distance: charPos.distanceTo(car.root.position),
         source: 'police',
       })
+    }
+
+    if (this.rallyRace) {
+      if (this.rallyRace.paddockCar) {
+        candidates.push({
+          car: this.rallyRace.paddockCar,
+          distance: charPos.distanceTo(this.rallyRace.paddockCar.root.position),
+          source: 'abandoned',
+        })
+      }
+      for (const comp of this.rallyRace.getCompetitors()) {
+        candidates.push({
+          car: comp.car,
+          distance: charPos.distanceTo(comp.car.root.position),
+          source: 'traffic',
+        })
+      }
     }
 
     candidates.sort((a, b) => a.distance - b.distance)
@@ -4963,6 +5045,7 @@ export class Game {
     this.pursuit.dispose()
     this.traffic.dispose()
     this.busPassengers.dispose()
+    this.rallyRace.dispose()
     this.sound.dispose()
     this.composer?.dispose()
     this.renderer.dispose()

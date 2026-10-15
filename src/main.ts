@@ -228,6 +228,31 @@ app.innerHTML = `
       </div>
     </div>
 
+    <!-- CORRIDA DE RALLY NAS DUNAS (6 CARROS) -->
+    <div id="rally-race-panel" class="rally-race-panel hidden" aria-label="Corrida de Rally das Dunas">
+      <div class="rally-race-header">
+        <span class="rally-race-badge">🏎️ RALLY DAS DUNAS</span>
+        <span id="rally-race-stage" class="rally-race-stage">6 CARROS NA PISTA</span>
+      </div>
+      <div class="rally-race-body">
+        <div class="rally-race-item">
+          <div class="rally-row">
+            <span class="rally-label">POSIÇÃO NA CORRIDA:</span>
+            <strong id="rally-position-val" class="rally-val" style="color: #facc15; font-size: 14px;">1º / 7</strong>
+          </div>
+        </div>
+        <div class="rally-race-item">
+          <div class="rally-row">
+            <span class="rally-label">VOLTA:</span>
+            <strong id="rally-lap-val" class="rally-val" style="color: #38bdf8; font-size: 14px;">VOLTA 1 / 3</strong>
+          </div>
+        </div>
+        <div class="rally-info-row">
+          <span id="rally-tip-info" class="rally-tip-info" style="color: #fbbf24; font-size: 8.5px; font-weight: 700;">⚡ COLETE TURBOS E CRUZE OS ARCOS DE PONTUAÇÃO!</span>
+        </div>
+      </div>
+    </div>
+
     <!-- MISSÃO DE TÁXI / CORRIDA MALUCA (GTA VICE CITY / SAN ANDREAS) -->
     <div id="taxi-mission-panel" class="taxi-mission-panel hidden" aria-label="Missão de Táxi">
       <div class="taxi-mission-header">
@@ -587,4 +612,7 @@ app.innerHTML = `
   </main>
 `
 
+import { initCapacitorBridge } from './native/capacitor'
+
 new Game(document.querySelector<HTMLDivElement>('#game-root')!)
+void initCapacitorBridge()
