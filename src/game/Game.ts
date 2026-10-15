@@ -80,7 +80,6 @@ export class Game {
   private readonly energyFill = document.querySelector<HTMLElement>('#energy-fill')!
   private readonly energyHits = document.querySelector<HTMLElement>('#energy-hits')!
   private readonly energyStatus = document.querySelector<HTMLElement>('#energy-status')!
-  private readonly distanceValue = document.querySelector<HTMLElement>('#distance-value')!
   private readonly timeValue = document.querySelector<HTMLElement>('#time-value')!
   private readonly cashValue = document.querySelector<HTMLElement>('#cash-value')!
   private readonly toastElement = document.querySelector<HTMLElement>('#toast')!
@@ -611,12 +610,21 @@ export class Game {
     this.cancelAutoEnterBtn?.addEventListener('click', () => {
       this.cancelAutoApproach('ENTRADA AUTOMÁTICA CANCELADA')
     })
+
+    const statusModal = document.querySelector<HTMLElement>('#status-modal')
+    document.querySelector<HTMLButtonElement>('#status-button')!.addEventListener('click', () => {
+      statusModal?.classList.remove('hidden')
+    })
+    document.querySelector<HTMLButtonElement>('#close-status-btn')!.addEventListener('click', () => {
+      statusModal?.classList.add('hidden')
+    })
+
     document.querySelector<HTMLButtonElement>('#sound-button')!.addEventListener('click', (event) => {
       const button = event.currentTarget as HTMLButtonElement
       const enabled = this.sound.toggle()
       button.classList.toggle('muted', !enabled)
       button.setAttribute('aria-label', enabled ? 'Desativar som' : 'Ativar som')
-      button.textContent = enabled ? '♪' : '×'
+      button.textContent = enabled ? '♪ ATIVAR/DESATIVAR SOM' : '× ATIVAR/DESATIVAR SOM'
     })
     this.planeShootBtn?.addEventListener('pointerdown', (e) => {
       e.preventDefault()
@@ -3270,9 +3278,15 @@ export class Game {
     const kmh = Math.floor(Math.abs(this.inPlane ? this.plane.speed : this.inVehicle ? this.player.speed : this.character.speed) * 3.6)
     this.speedValue.textContent = String(kmh).padStart(3, '0')
     this.speedFill.style.width = `${Math.min(100, (kmh / 240) * 100)}%`
-    this.distanceValue.textContent = `${Math.floor(this.distance).toLocaleString('pt-BR')} m`
     this.timeValue.textContent = this.formatTime(this.elapsed)
     this.cashValue.textContent = `$ ${this.cash.toLocaleString('pt-BR')}`
+    
+    // Status Modal
+    document.querySelector<HTMLElement>('#status-level-value')!.textContent = `NV ${user.level}`
+    document.querySelector<HTMLElement>('#status-distance-value')!.textContent = `${Math.floor(this.distance).toLocaleString('pt-BR')} m`
+    document.querySelector<HTMLElement>('#status-time-value')!.textContent = this.formatTime(this.elapsed)
+    document.querySelector<HTMLElement>('#status-cash-value')!.textContent = `$ ${this.cash.toLocaleString('pt-BR')}`
+
     this.wantedLabel.textContent = `NÍVEL ${this.wanted.level} / 10`
     this.wantedPanel.classList.toggle('active', this.wanted.level > 0)
     this.wantedPanel.classList.toggle('captured', this.pursuit.bustProgress > 0.02)

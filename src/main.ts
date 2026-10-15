@@ -29,7 +29,7 @@ app.innerHTML = `
       <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
       <button id="camera-button" class="mode-button" type="button" aria-pressed="false" aria-label="Câmera 3D traseira ativada; alternar para visão três quartos" title="Alternar câmera (C)">3D</button>
       <button id="pause-button" class="icon-button pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo (P / ESC)">❚❚</button>
-      <button id="sound-button" class="icon-button" type="button" aria-label="Ativar ou desativar som">♪</button>
+      <button id="status-button" class="icon-button" type="button" aria-label="Abrir status" title="Status">📊</button>
     </header>
 
     <section class="wanted-panel" aria-label="Nível de perseguição">
@@ -364,12 +364,31 @@ app.innerHTML = `
       </div>
     </div>
 
+    <!-- STATUS MODAL -->
+    <div id="status-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Status do Jogador">
+      <div class="settings-card">
+        <h2 style="font-size: 24px; color: #facc15; margin: 6px 0 14px;">📊 STATUS</h2>
+        <div class="settings-group" style="margin-top: 16px; text-align: left;">
+          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">NÍVEL</span><strong id="status-level-value">NV 1</strong></div>
+          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">DISTÂNCIA</span><strong id="status-distance-value">0 m</strong></div>
+          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">TEMPO</span><strong id="status-time-value">00:00</strong></div>
+          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">DINHEIRO</span><strong id="status-cash-value">$ 0</strong></div>
+        </div>
+        <button id="close-status-btn" class="primary-button" type="button" style="margin-top: 24px; width: 100%;">FECHAR</button>
+      </div>
+    </div>
+
     <!-- CONFIGURAÇÕES MODAL -->
     <div id="settings-modal" class="settings-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Ajustes Gráficos">
       <div class="settings-card" style="text-align: center;">
         <div class="title-kicker"><span></span> PERFORMANCE & VÍDEO</div>
         <h2 style="font-size: 24px; color: #facc15; margin: 6px 0 14px;">⚙️ AJUSTES</h2>
         
+        <div class="settings-group" style="margin-top: 16px; text-align: left;">
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">SOM</label>
+          <button id="sound-button" class="secondary-button" type="button" aria-label="Ativar ou desativar som">♪ ATIVAR/DESATIVAR SOM</button>
+        </div>
+
         <div class="settings-group" style="margin-top: 16px; text-align: left;">
           <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">LIMITAR TAXA DE QUADROS (FPS)</label>
           <div class="settings-options" id="fps-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">

@@ -401,7 +401,8 @@ class UserDatabaseManager {
     if (!this.db) return
     try {
       await getDocFromServer(doc(this.db, 'test', 'connection'))
-    } catch {
+    } catch (err) {
+      console.error('[UsersDB] Firestore connection test failed:', err)
       // Offline fallback
     }
   }
@@ -465,12 +466,6 @@ class UserDatabaseManager {
           return this.sanitizeProfile(parsed)
         }
       }
-
-      const savedGuest = localStorage.getItem(GUEST_STORAGE_KEY)
-      if (savedGuest) {
-        const parsed = JSON.parse(savedGuest) as Partial<UserProfile>
-        if (parsed) return this.sanitizeProfile(parsed)
-      }
     } catch (e) {
       console.warn('[UsersDB] Error loading local profile:', e)
     }
@@ -479,9 +474,7 @@ class UserDatabaseManager {
 
   private saveLocalProfile(profile: UserProfile): void {
     try {
-      if (profile.isGuest) {
-        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(profile))
-      } else {
+      if (!profile.isGuest) {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(profile))
       }
     } catch (e) {
