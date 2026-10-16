@@ -13,23 +13,24 @@ app.innerHTML = `
         <span class="brand-copy"><strong>MOST WANTED CAR</strong><small>DISTRICT 01</small></span>
       </a>
       <div class="run-stats">
-        <div class="stat level-stat"><span class="stat-label">NÍVEL</span><strong id="level-value">NV 1</strong></div>
+        <div class="stat level-stat"><span class="stat-label">NÍVEL</span><strong id="header-level-value">NV 1</strong></div>
         <div class="stat xp-stat">
           <span class="stat-label">XP</span>
-          <strong id="xp-value">0 / 150</strong>
-          <div class="xp-bar-mini"><div id="xp-bar-fill" class="xp-bar-fill" style="width: 0%"></div></div>
+          <strong id="header-xp-value">0 / 150</strong>
+          <div class="xp-bar-mini"><div id="header-xp-bar-fill" class="xp-bar-fill" style="width: 0%"></div></div>
         </div>
-        <div class="stat"><span class="stat-label">DISTÂNCIA</span><strong id="distance-value">0 m</strong></div>
-        <div class="stat"><span class="stat-label">TEMPO</span><strong id="time-value">00:00</strong></div>
-        <div class="stat cash-stat"><span class="stat-label">DINHEIRO</span><strong id="cash-value">$ 0</strong></div>
+        <div class="stat cash-stat"><span class="stat-label">DINHEIRO</span><strong id="header-cash-value">$ 0</strong></div>
+        <div class="stat time-stat"><span class="stat-label">TEMPO</span><strong id="header-time-value">00:00</strong></div>
       </div>
-      <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Veículos, Upgrades e Garagem">🏪 LOJA & GARAGEM</button>
-      <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro">🏆 RANKING</button>
-      <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS e Sombras">⚙️ AJUSTES</button>
-      <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
-      <button id="camera-button" class="mode-button" type="button" aria-pressed="false" aria-label="Câmera 3D traseira ativada; alternar para visão três quartos" title="Alternar câmera (C)">3D</button>
-      <button id="pause-button" class="icon-button pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo (P / ESC)">❚❚</button>
-      <button id="status-button" class="icon-button" type="button" aria-label="Abrir status" title="Status">📊</button>
+      <div class="topbar-actions">
+        <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas Detalhadas">📊 STATUS</button>
+        <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Veículos, Upgrades e Garagem">🏪 LOJA & GARAGEM</button>
+        <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro">🏆 RANKING</button>
+        <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS, Som e Gráficos">⚙️ AJUSTES</button>
+        <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
+        <button id="camera-button" class="mode-button" type="button" aria-pressed="false" aria-label="Câmera 3D traseira ativada; alternar para visão três quartos" title="Alternar câmera (C)">3D</button>
+        <button id="pause-button" class="icon-button pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo (P / ESC)">❚❚</button>
+      </div>
     </header>
 
     <section class="wanted-panel" aria-label="Nível de perseguição">
@@ -365,16 +366,51 @@ app.innerHTML = `
     </div>
 
     <!-- STATUS MODAL -->
-    <div id="status-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Status do Jogador">
-      <div class="settings-card">
-        <h2 style="font-size: 24px; color: #facc15; margin: 6px 0 14px;">📊 STATUS</h2>
-        <div class="settings-group" style="margin-top: 16px; text-align: left;">
-          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">NÍVEL</span><strong id="status-level-value">NV 1</strong></div>
-          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">DISTÂNCIA</span><strong id="status-distance-value">0 m</strong></div>
-          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">TEMPO</span><strong id="status-time-value">00:00</strong></div>
-          <div class="stat" style="margin-bottom: 10px;"><span class="stat-label">DINHEIRO</span><strong id="status-cash-value">$ 0</strong></div>
+    <div id="status-modal" class="status-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Status do Piloto">
+      <div class="settings-card" style="text-align: center;">
+        <div class="title-kicker"><span></span> TELEMETRIA & ESTATÍSTICAS</div>
+        <h2 style="font-size: 24px; color: #facc15; margin: 6px 0 16px;">📊 STATUS DO PILOTO</h2>
+        
+        <div class="status-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; text-align: left;">
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+            <span class="stat-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 4px;">NÍVEL DO PILOTO</span>
+            <strong id="status-level-value" style="font: 700 22px/1.1 var(--mono); color: #ff5d31;">NV 1</strong>
+            <div style="margin-top: 8px;">
+              <span id="status-xp-value" style="font: 500 10px var(--mono); color: #94a3b8; display: block; margin-bottom: 3px;">0 / 150 XP</span>
+              <div class="xp-bar-mini" style="height: 5px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden;">
+                <div id="status-xp-bar-fill" class="xp-bar-fill" style="width: 0%; height: 100%; background: #ff5d31; transition: width 0.3s ease;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+            <span class="stat-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 4px;">DINHEIRO ACUMULADO</span>
+            <strong id="status-cash-value" style="font: 700 22px/1.1 var(--mono); color: #f7bf4a;">$ 0</strong>
+            <small style="display: block; font-size: 10px; color: #64748b; margin-top: 8px;">Saldo para compra e tunagem de carros</small>
+          </div>
+
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+            <span class="stat-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 4px;">DISTÂNCIA PERCORRIDA</span>
+            <strong id="status-distance-value" style="font: 700 22px/1.1 var(--mono); color: #38bdf8;">0 m</strong>
+            <small style="display: block; font-size: 10px; color: #64748b; margin-top: 8px;">Distância nesta perseguição</small>
+          </div>
+
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+            <span class="stat-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 4px;">TEMPO DE SOBREVIVÊNCIA</span>
+            <strong id="status-time-value" style="font: 700 22px/1.1 var(--mono); color: #4ade80;">00:00</strong>
+            <small style="display: block; font-size: 10px; color: #64748b; margin-top: 8px;">Tempo em fuga ativa</small>
+          </div>
         </div>
-        <button id="close-status-btn" class="primary-button" type="button" style="margin-top: 24px; width: 100%;">FECHAR</button>
+
+        <!-- Elementos ocultos para retrocompatibilidade de seletores de estatísticas -->
+        <span id="level-value" class="hidden" style="display:none;"></span>
+        <span id="xp-value" class="hidden" style="display:none;"></span>
+        <div id="xp-bar-fill" class="hidden" style="display:none;"></div>
+        <span id="distance-value" class="hidden" style="display:none;"></span>
+        <span id="time-value" class="hidden" style="display:none;"></span>
+        <span id="cash-value" class="hidden" style="display:none;"></span>
+
+        <button id="close-status-btn" class="primary-button" type="button" style="margin-top: 16px; width: 100%;">FECHAR ✕</button>
       </div>
     </div>
 
@@ -385,8 +421,11 @@ app.innerHTML = `
         <h2 style="font-size: 24px; color: #facc15; margin: 6px 0 14px;">⚙️ AJUSTES</h2>
         
         <div class="settings-group" style="margin-top: 16px; text-align: left;">
-          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">SOM</label>
-          <button id="sound-button" class="secondary-button" type="button" aria-label="Ativar ou desativar som">♪ ATIVAR/DESATIVAR SOM</button>
+          <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">ÁUDIO & EFEITOS SONOROS</label>
+          <div class="settings-options" id="sound-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <button id="sound-button" class="settings-option-btn active" type="button" style="flex: 1; height: 36px;" aria-label="Ativar ou desativar som">🔊 SOM: ATIVADO</button>
+          </div>
+          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Ative ou silencie os efeitos de aceleração, colisões, sirenes policiais e turbos.</span>
         </div>
 
         <div class="settings-group" style="margin-top: 16px; text-align: left;">
@@ -532,7 +571,15 @@ app.innerHTML = `
         <span><b>01</b> DIRIJA & VOE</span><span><b>02</b> CÍRCULOS FLUTUANTES</span><span><b>03</b> SOBREVIVA</span>
       </div>
       <button id="start-button" class="primary-button" type="button">INICIAR PERSEGUIÇÃO <span>↗</span></button>
-      <p class="control-hint">WASD / SETAS DIRIGIR / PILOTAR <i>·</i> E ENTRAR NO CARRO OU AVIÃO <i>·</i> C CÂMERA <i>·</i> M MAPA <i>·</i> P PAUSA</p>
+      <div style="margin-top: 14px; text-align: left;">
+        <label style="display: block; font: 700 8.5px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 6px;">QUALIDADE VISUAL</label>
+        <div id="start-graphics-options" style="display: flex; gap: 8px;">
+          <button class="settings-option-btn" data-graphics="low" type="button" style="flex:1; height: 32px; font-size: 9px;">BAIXA</button>
+          <button class="settings-option-btn active" data-graphics="medium" type="button" style="flex:1; height: 32px; font-size: 9px;">MÉDIA</button>
+          <button class="settings-option-btn" data-graphics="high" type="button" style="flex:1; height: 32px; font-size: 9px;">ALTA</button>
+        </div>
+      </div>
+      <p class="control-hint" style="margin-top: 14px;">WASD / SETAS DIRIGIR / PILOTAR <i>·</i> E ENTRAR NO CARRO OU AVIÃO <i>·</i> C CÂMERA <i>·</i> M MAPA <i>·</i> P PAUSA</p>
     </section>
 
     <section id="end-overlay" class="overlay end-overlay hidden">

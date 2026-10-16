@@ -1447,38 +1447,43 @@ export class Car {
   }
 
   private buildRallyCar(): void {
+    const isLow = this.graphicsMode === 'low'
     const isHigh = this.graphicsMode === 'high'
     const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.82, metalness: 0.25 })
-    const whiteAccentMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.2 })
     const carbonWingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5, metalness: 0.4 })
-    const fogEmissiveMat = new THREE.MeshStandardMaterial({ color: 0xfffbeb, emissive: 0xfef08a, emissiveIntensity: 2.4, roughness: 0.2 })
     const xenonHeadMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x93c5fd, emissiveIntensity: 2.2, roughness: 0.2 })
     const ledTailMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 2.5, roughness: 0.2 })
-    const rollCageMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.3, metalness: 0.85 })
-    const mudFlapMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.88 })
+    const mudFlapMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.8, metalness: 0.1 })
+    const rollCageMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.35, metalness: 0.85 }) // Barras de ferro tubular
 
     // 1. Lower Chassis & Front Aerodynamic Splitter
     this.addBox([2.04, 0.38, 4.25], 0.42, this.bodyMaterial, 0, 0)
-    this.addBox([2.08, 0.12, 0.72], 0.28, darkTrimMat, 0, -2.18) // Front lower rally splitter / skidplate
-    this.addBox([1.98, 0.18, 0.55], 0.38, darkTrimMat, 0, 2.12) // Rear diffuser
+    this.addBox([2.08, 0.12, 0.72], 0.28, darkTrimMat, 0, -2.18, isLow) // Front lower rally splitter / skidplate
 
     // 2. Front Rally Bumper & Radiator Grille
     this.addBox([1.95, 0.46, 0.48], 0.65, this.bodyMaterial, 0, -2.0)
-    this.addBox([1.42, 0.26, 0.08], 0.55, darkTrimMat, 0, -2.25) // Honeycomb center air intake
+    if (!isLow) {
+      this.addBox([1.42, 0.26, 0.08], 0.55, darkTrimMat, 0, -2.25, true) // Honeycomb center air intake
+    }
 
-    // 3. Quad Front High-Intensity Rally Fog Light Pods (Faróis de Milha de Rally)
-    const fogPodPositions = [-0.58, -0.2, 0.2, 0.58]
-    const fogPodGeo = new THREE.CylinderGeometry(0.14, 0.15, 0.16, 12)
-    fogPodGeo.rotateX(Math.PI / 2)
-    for (const fx of fogPodPositions) {
-      const podHousing = new THREE.Mesh(fogPodGeo, darkTrimMat)
-      podHousing.position.set(fx, 0.82, -2.25)
-      this.root.add(podHousing)
+    // 3. Quad Front High-Intensity Rally Fog Light Pods (no modo low, apenas faróis simples para leveza máxima)
+    if (!isLow) {
+      const fogEmissiveMat = new THREE.MeshStandardMaterial({ color: 0xfffbeb, emissive: 0xfef08a, emissiveIntensity: 2.4, roughness: 0.2 })
+      const fogPodPositions = [-0.58, -0.2, 0.2, 0.58]
+      const fogPodGeo = new THREE.CylinderGeometry(0.14, 0.15, 0.16, 10)
+      fogPodGeo.rotateX(Math.PI / 2)
+      for (const fx of fogPodPositions) {
+        const podHousing = new THREE.Mesh(fogPodGeo, darkTrimMat)
+        podHousing.position.set(fx, 0.82, -2.25)
+        podHousing.userData.isDetail = true
+        this.root.add(podHousing)
 
-      const podLens = new THREE.Mesh(new THREE.CircleGeometry(0.12, 12), fogEmissiveMat)
-      podLens.position.set(fx, 0.82, -2.34)
-      podLens.rotation.y = Math.PI
-      this.root.add(podLens)
+        const podLens = new THREE.Mesh(new THREE.CircleGeometry(0.12, 10), fogEmissiveMat)
+        podLens.position.set(fx, 0.82, -2.34)
+        podLens.rotation.y = Math.PI
+        podLens.userData.isDetail = true
+        this.root.add(podLens)
+      }
     }
 
     // Main Xenon Headlights
@@ -1487,8 +1492,10 @@ export class Car {
 
     // 4. Slanted Hood with Dual Cooling Vents
     this.addBox([1.88, 0.24, 1.45], 0.85, this.bodyMaterial, 0, -1.25)
-    this.addBox([0.42, 0.04, 0.55], 0.98, darkTrimMat, -0.45, -1.15) // Vent left
-    this.addBox([0.42, 0.04, 0.55], 0.98, darkTrimMat, 0.45, -1.15) // Vent right
+    if (!isLow) {
+      this.addBox([0.42, 0.04, 0.55], 0.98, darkTrimMat, -0.45, -1.15, true) // Vent left
+      this.addBox([0.42, 0.04, 0.55], 0.98, darkTrimMat, 0.45, -1.15, true) // Vent right
+    }
 
     // 5. Flared Widebody Wheel Arches (Paralamas Alargados WRC)
     this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, -1.06, -1.35)
@@ -1496,64 +1503,69 @@ export class Car {
     this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, -1.06, 1.35)
     this.addBox([0.16, 0.42, 1.15], 0.58, this.bodyMaterial, 1.06, 1.35)
 
-    // 6. Cabin Glass, Pillars & Roll Cage
-    const frontWindshield = this.addBox([1.68, 0.58, 0.08], 1.25, glassMaterial, 0, -0.42)
-    frontWindshield.rotation.x = -0.38
+    // 6. COCKPIT ABERTO EM QUADRADO DE BARRAS DE FERRO (SEM TETO SÓLIDO)
+    // 4 Colunas verticais nos 4 cantos do cockpit
+    const barRadius = 0.07
+    const colHeight = 0.88
+    const colY = 1.12
+    const frontZ = -0.32
+    const rearZ = 1.12
+    const halfW = 0.78
 
-    this.addBox([0.08, 0.48, 1.62], 1.25, glassMaterial, -0.86, 0.35)
-    this.addBox([0.08, 0.48, 1.62], 1.25, glassMaterial, 0.86, 0.35)
+    // Colunas de ferro verticais
+    this.addBox([barRadius * 2, colHeight, barRadius * 2], colY, rollCageMat, -halfW, frontZ)
+    this.addBox([barRadius * 2, colHeight, barRadius * 2], colY, rollCageMat, halfW, frontZ)
+    this.addBox([barRadius * 2, colHeight, barRadius * 2], colY, rollCageMat, -halfW, rearZ)
+    this.addBox([barRadius * 2, colHeight, barRadius * 2], colY, rollCageMat, halfW, rearZ)
 
-    // Roll Cage Tubes inside cabin (Gaiola Tubular de Competição)
-    for (const side of [-0.68, 0.68]) {
-      const cageA = this.addBox([0.06, 0.65, 0.06], 1.22, rollCageMat, side, -0.2)
-      cageA.rotation.x = -0.35
-      const cageB = this.addBox([0.06, 0.65, 0.06], 1.22, rollCageMat, side, 0.9)
-      cageB.rotation.x = 0.35
+    // Quadrado superior de barras de ferro formando o topo aberto do cockpit
+    const topBarY = 1.54
+    // Barra frontal do quadrado
+    this.addBox([halfW * 2 + barRadius * 2, barRadius * 2, barRadius * 2], topBarY, rollCageMat, 0, frontZ)
+    // Barra traseira do quadrado
+    this.addBox([halfW * 2 + barRadius * 2, barRadius * 2, barRadius * 2], topBarY, rollCageMat, 0, rearZ)
+    // Barra lateral esquerda do quadrado
+    this.addBox([barRadius * 2, barRadius * 2, (rearZ - frontZ)], topBarY, rollCageMat, -halfW, (frontZ + rearZ) / 2)
+    // Barra lateral direita do quadrado
+    this.addBox([barRadius * 2, barRadius * 2, (rearZ - frontZ)], topBarY, rollCageMat, halfW, (frontZ + rearZ) / 2)
+
+    // Barras diagonais laterais de reforço de competição
+    if (!isLow) {
+      const diagLeft = this.addBox([barRadius * 1.6, barRadius * 1.6, 1.45], 1.15, rollCageMat, -halfW + 0.01, (frontZ + rearZ) / 2, true)
+      diagLeft.rotation.x = 0.35
+      const diagRight = this.addBox([barRadius * 1.6, barRadius * 1.6, 1.45], 1.15, rollCageMat, halfW - 0.01, (frontZ + rearZ) / 2, true)
+      diagRight.rotation.x = 0.35
     }
-    this.addBox([1.35, 0.06, 0.06], 1.45, rollCageMat, 0, 0.35) // Cross bar
 
-    // Roof & Roof Air Scoop
-    this.addBox([1.72, 0.12, 1.82], 1.54, this.bodyMaterial, 0, 0.35)
-    this.addBox([0.38, 0.16, 0.52], 1.66, darkTrimMat, 0, -0.05)
-    this.addBox([0.32, 0.10, 0.06], 1.66, whiteAccentMat, 0, -0.32)
+    // Para-brisa de competição baixo (half windshield aerodinâmico transparente)
+    const frontWindshield = this.addBox([1.62, 0.45, 0.08], 1.10, glassMaterial, 0, -0.40)
+    frontWindshield.rotation.x = -0.40
 
-    // 7. Hatchback Rear (Diagonal Slant in High-Poly mode per user styling request)
+    // 7. Traseira Hatchback
     if (isHigh) {
-      const hatchRear = this.addBox([1.88, 0.72, 1.42], 1.18, this.bodyMaterial, 0, 1.28)
-      hatchRear.rotation.x = -0.44 // Slanted diagonal hatchback rear
-      const rearGlass = this.addBox([1.58, 0.52, 0.08], 1.34, glassMaterial, 0, 1.18)
-      rearGlass.rotation.x = 0.42
+      const hatchRear = this.addBox([1.88, 0.58, 1.25], 1.02, this.bodyMaterial, 0, 1.35)
+      hatchRear.rotation.x = -0.38
     } else {
-      this.addBox([1.88, 0.55, 1.15], 1.05, this.bodyMaterial, 0, 1.45)
-      const rearGlass = this.addBox([1.58, 0.45, 0.08], 1.25, glassMaterial, 0, 1.25)
-      rearGlass.rotation.x = 0.36
+      this.addBox([1.88, 0.52, 1.15], 0.98, this.bodyMaterial, 0, 1.38)
     }
 
-    // 8. Massive WRC Biplane Rear Wing Spoiler
-    this.addBox([0.08, 0.45, 0.28], 1.68, carbonWingMat, -0.65, 1.65)
-    this.addBox([0.08, 0.45, 0.28], 1.68, carbonWingMat, 0.65, 1.65)
-    const mainWing = this.addBox([1.96, 0.08, 0.48], 1.88, carbonWingMat, 0, 1.72)
+    // 8. Aerofólio WRC Traseiro de Competição
+    this.addBox([0.08, 0.42, 0.28], 1.45, carbonWingMat, -0.65, 1.65, isLow)
+    this.addBox([0.08, 0.42, 0.28], 1.45, carbonWingMat, 0.65, 1.65, isLow)
+    const mainWing = this.addBox([1.96, 0.08, 0.44], 1.62, carbonWingMat, 0, 1.70)
     mainWing.rotation.x = 0.12
-    this.addBox([1.82, 0.06, 0.34], 1.62, carbonWingMat, 0, 1.68)
-    this.addBox([0.06, 0.38, 0.58], 1.84, this.bodyMaterial, -0.98, 1.72)
-    this.addBox([0.06, 0.38, 0.58], 1.84, this.bodyMaterial, 0.98, 1.72)
 
-    // 9. Rear LED Taillights & Twin Chrome Exhausts
+    // 9. Lanternas Traseiras LED
     this.addBox([1.82, 0.12, 0.06], 0.88, ledTailMat, 0, 2.15)
-    this.addBox([0.34, 0.38, 0.05], 0.32, mudFlapMat, -0.92, 1.95)
-    this.addBox([0.34, 0.38, 0.05], 0.32, mudFlapMat, 0.92, 1.95)
-
-    const exhaustMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.92, roughness: 0.2 })
-    const exhaustGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.25, 10)
-    exhaustGeo.rotateX(Math.PI / 2)
-    for (const ex of [-0.35, 0.35]) {
-      const exhaust = new THREE.Mesh(exhaustGeo, exhaustMat)
-      exhaust.position.set(ex, 0.36, 2.16)
-      this.root.add(exhaust)
+    if (!isLow) {
+      this.addBox([0.34, 0.38, 0.05], 0.32, mudFlapMat, -0.92, 1.95, true)
+      this.addBox([0.34, 0.38, 0.05], 0.32, mudFlapMat, 0.92, 1.95, true)
     }
 
-    // 10. 4 High-Grip Rally Wheels with Multi-Spoke Rims
-    const rallyWheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.32, 14)
+    // 10. 4 High-Grip Rally Wheels with Multi-Spoke Rims (simplificadas no modo Low)
+    const rallyWheelGeo = isLow
+      ? new THREE.CylinderGeometry(0.38, 0.38, 0.32, 8)
+      : new THREE.CylinderGeometry(0.38, 0.38, 0.32, 14)
     const wheelPositions: [number, number][] = [
       [-1.05, -1.35],
       [1.05, -1.35],
@@ -1570,11 +1582,13 @@ export class Car {
       const wheel = new THREE.Mesh(rallyWheelGeo, tireMaterial)
       wheel.rotation.z = Math.PI / 2
       wheel.position.set(wx, 0.38, wz)
-      wheel.castShadow = true
+      wheel.castShadow = !isLow
 
-      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.34, 10), rimMat)
-      rim.rotation.z = Math.PI / 2
-      wheel.add(rim)
+      if (!isLow) {
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.34, 10), rimMat)
+        rim.rotation.z = Math.PI / 2
+        wheel.add(rim)
+      }
 
       this.root.add(wheel)
       this.wheels.push(wheel)

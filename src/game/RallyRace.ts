@@ -45,43 +45,49 @@ export class RallyRace {
   private readonly sparks: Sparks
   readonly root = new THREE.Group()
 
-  // Track Dimensions in East Desert Dunes
+  // Dimensões do Circuito nas Dunas a Leste (Circuito de 4.000 metros)
   readonly centerX = 1100
   readonly centerZ = 0
-  readonly straightLength = 150 // Straight runs from Z = -75 to Z = +75
-  readonly curveRadius = 45     // Center to lane centerline: East lane at X = 1145, West lane at X = 1055
-  readonly trackWidth = 18      // 18m wide two-lane track
+  readonly straightLength = 1215 // Retas de 1.215 metros
+  readonly curveRadius = 250     // Curvas de 250 metros de raio (Total = 2*1215 + 2*PI*250 = 4.000,8m)
+  readonly trackWidth = 18       // Pista de duas faixas com 18m de largura
   readonly totalTrackLength: number
+  readonly finishLineDist: number
 
-  // Visuals and Entities
+  // Entidades e Concorrentes
   readonly competitors: RallyCompetitor[] = []
   readonly scoreArches: RallyArch[] = []
   readonly turboPickups: RallyTurboPickup[] = []
-  paddockCar?: Car
-  private paddockBeacon?: THREE.Mesh
+  private rockBlocksMesh?: THREE.InstancedMesh
 
-  // Player Race Progress
+  // Estado da Missão e Corrida
+  raceStarted = false
+  missionActive = false
   playerInTrack = false
+  playerRallyCar: Car | null = null
   playerDistanceAlongTrack = 0
   playerLap = 1
   playerBestLap = 0
   playerLapTimer = 0
-  playerRacePosition = 7
+  playerRacePosition = 6
   playerHasWon = false
+  private lastRestrictedWarning = 0
 
-  // Callbacks
+  // Callbacks de Eventos
   onScoreCollected?: (points: number, cash: number) => void
   onTurboCollected?: () => void
   onLapCompleted?: (lap: number, position: number) => void
   onRaceWon?: (rewardCash: number, rewardPoints: number) => void
+  onRaceLost?: (position: number) => void
+  onRaceStarted?: () => void
+  onRestrictedAccess?: () => void
 
-  // Materials for track and elements
+  // Materiais da pista e elementos
   private readonly trackAsphaltMat = new THREE.MeshStandardMaterial({
-    color: 0x221f1e, // Dark desert gravel asphalt
+    color: 0x221f1e, // Asfalto escuro de cascalho do deserto
     roughness: 0.92,
     metalness: 0.1,
   })
-  private readonly curbRedMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.6 })
   private readonly curbWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 })
   private readonly barrierConcreteMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.85 })
   private readonly fenceSteelMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.85, roughness: 0.35 })
@@ -95,7 +101,7 @@ export class RallyRace {
   private readonly archNeonMat = new THREE.MeshStandardMaterial({
     color: 0x06b6d4,
     emissive: 0x22d3ee,
-    emissiveIntensity: 2.8,
+    emissiveIntensity: 3.2,
     roughness: 0.15,
   })
   private readonly turboEnergyMat = new THREE.MeshStandardMaterial({
@@ -103,6 +109,11 @@ export class RallyRace {
     emissive: 0xfbbf24,
     emissiveIntensity: 3.2,
     roughness: 0.12,
+  })
+  private readonly rockMaterial = new THREE.MeshStandardMaterial({
+    color: 0x78716c,
+    roughness: 0.95,
+    metalness: 0.05,
   })
 
   constructor(scene: THREE.Scene, city: City, sound: Sound, sparks: Sparks) {
@@ -112,22 +123,30 @@ export class RallyRace {
     this.sparks = sparks
     this.totalTrackLength = 2 * this.straightLength + 2 * Math.PI * this.curveRadius
 
+    // Linha de chegada na reta Oeste (Z = 0, X = 850), bem em frente à via da ponte
+    const halfStraight = this.straightLength / 2
+    const curveLen = Math.PI * this.curveRadius
+    this.finishLineDist = this.straightLength + curveLen + halfStraight
+
     this.scene.add(this.root)
     this.buildTrackEnvironment()
+    this.buildRockBlocks()
     this.buildScoreArches()
     this.buildTurboPickups()
-    this.spawnCompetitors()
-    this.spawnPaddockCar()
+    this.spawnGridCompetitors()
   }
 
-  // Convert distance along the track loop (0 to totalTrackLength) to world Vector3 & tangent
+  isMissionActive(): boolean {
+    return this.missionActive
+  }
+
+  // Converte distância ao longo do circuito (0 a totalTrackLength) em posição Vector3 e yaw
   getTrackTransform(distance: number, lateralOffset = 0): { position: THREE.Vector3; tangent: THREE.Vector3; yaw: number } {
     let s = ((distance % this.totalTrackLength) + this.totalTrackLength) % this.totalTrackLength
     const halfStraight = this.straightLength / 2
     const curveLen = Math.PI * this.curveRadius
 
-    // Section 1: East Straight (Front Straight, heading North Z -> +Z)
-    // s in [0, straightLength]
+    // Seção 1: Reta Leste (Z: -halfStraight -> +halfStraight, sentido Norte)
     if (s <= this.straightLength) {
       const z = -halfStraight + s
       const x = this.centerX + this.curveRadius + lateralOffset
@@ -139,10 +158,9 @@ export class RallyRace {
     }
     s -= this.straightLength
 
-    // Section 2: North Hairpin Curve (sweeps from East to West)
-    // s in [0, curveLen]
+    // Seção 2: Curva Norte (do Leste para o Oeste)
     if (s <= curveLen) {
-      const angle = (s / curveLen) * Math.PI // 0 to PI
+      const angle = (s / curveLen) * Math.PI
       const r = this.curveRadius + lateralOffset
       const x = this.centerX + r * Math.cos(angle)
       const z = halfStraight + r * Math.sin(angle)
@@ -157,8 +175,7 @@ export class RallyRace {
     }
     s -= curveLen
 
-    // Section 3: West Straight (Back Straight, heading South Z -> -Z)
-    // s in [0, straightLength]
+    // Seção 3: Reta Oeste (Z: +halfStraight -> -halfStraight, sentido Sul)
     if (s <= this.straightLength) {
       const z = halfStraight - s
       const x = this.centerX - this.curveRadius - lateralOffset
@@ -170,9 +187,8 @@ export class RallyRace {
     }
     s -= this.straightLength
 
-    // Section 4: South Hairpin Curve (sweeps from West to East)
-    // s in [0, curveLen]
-    const angle = Math.PI + (s / curveLen) * Math.PI // PI to 2*PI
+    // Seção 4: Curva Sul (do Oeste para o Leste)
+    const angle = Math.PI + (s / curveLen) * Math.PI
     const r = this.curveRadius + lateralOffset
     const x = this.centerX + r * Math.cos(angle)
     const z = -halfStraight + r * Math.sin(angle)
@@ -186,32 +202,27 @@ export class RallyRace {
     }
   }
 
-  // Calculate approximate distance along track for any arbitrary world point
+  // Calcula a distância acumulada de qualquer coordenada mundial até o circuito
   getDistanceAlongTrack(worldPos: THREE.Vector3): number {
     const halfStraight = this.straightLength / 2
     const curveLen = Math.PI * this.curveRadius
     const dx = worldPos.x - this.centerX
     const z = worldPos.z
 
-    // If within the straight Z interval
     if (z >= -halfStraight && z <= halfStraight) {
       if (dx >= 0) {
-        // East straight (heading North)
         return z + halfStraight
       } else {
-        // West straight (heading South)
         return this.straightLength + curveLen + (halfStraight - z)
       }
     }
 
-    // In the North curve (z > halfStraight)
     if (z > halfStraight) {
       const angle = Math.atan2(z - halfStraight, dx)
       const clampedAngle = THREE.MathUtils.clamp(angle, 0, Math.PI)
       return this.straightLength + (clampedAngle / Math.PI) * curveLen
     }
 
-    // In the South curve (z < -halfStraight)
     let angle = Math.atan2(z + halfStraight, dx)
     if (angle < 0) angle += 2 * Math.PI
     const clampedAngle = THREE.MathUtils.clamp(angle, Math.PI, 2 * Math.PI)
@@ -223,24 +234,25 @@ export class RallyRace {
     const halfStraight = this.straightLength / 2
     const innerR = this.curveRadius - this.trackWidth / 2
     const outerR = this.curveRadius + this.trackWidth / 2
+    const westTrackX = this.centerX - this.curveRadius
 
-    // 1. Asphalt Ground Surface for Straights
-    // East Straight
+    // 1. Asfalto das retas
+    // Reta Leste
     const eastTrack = new THREE.Mesh(new THREE.PlaneGeometry(this.trackWidth, this.straightLength), this.trackAsphaltMat)
     eastTrack.rotation.x = -Math.PI / 2
     eastTrack.position.set(this.centerX + this.curveRadius, 0.04, 0)
     eastTrack.receiveShadow = true
     this.root.add(eastTrack)
 
-    // West Straight
+    // Reta Oeste
     const westTrack = new THREE.Mesh(new THREE.PlaneGeometry(this.trackWidth, this.straightLength), this.trackAsphaltMat)
     westTrack.rotation.x = -Math.PI / 2
-    westTrack.position.set(this.centerX - this.curveRadius, 0.04, 0)
+    westTrack.position.set(westTrackX, 0.04, 0)
     westTrack.receiveShadow = true
     this.root.add(westTrack)
 
-    // North & South Curved Turns (Ring Geometry)
-    const curveSegments = 24
+    // Curvas Norte e Sul
+    const curveSegments = 36
     const northCurve = new THREE.Mesh(new THREE.RingGeometry(innerR, outerR, curveSegments, 1, 0, Math.PI), this.trackAsphaltMat)
     northCurve.rotation.x = -Math.PI / 2
     northCurve.position.set(this.centerX, 0.04, halfStraight)
@@ -253,58 +265,43 @@ export class RallyRace {
     southCurve.receiveShadow = true
     this.root.add(southCurve)
 
-    // 2. Access Road connecting from City Bridge Road (at X=720, Z=0) to the Rally Paddock
-    const accessRoad = new THREE.Mesh(new THREE.PlaneGeometry(330, 16), this.trackAsphaltMat)
+    // 2. Via de acesso que conecta a ponte da cidade (X=720, Z=0) à Linha de Chegada na Reta Oeste
+    const accessRoad = new THREE.Mesh(new THREE.PlaneGeometry(westTrackX - 720 + 2, 16), this.trackAsphaltMat)
     accessRoad.rotation.x = -Math.PI / 2
-    accessRoad.position.set(885, 0.03, 0)
+    accessRoad.position.set((720 + westTrackX) / 2, 0.035, 0)
     accessRoad.receiveShadow = true
     this.root.add(accessRoad)
 
-    // 3. GRADE ENTRE AS PISTAS (Central Divider Fence & Guard-Rail)
-    // "uma pista oval grande com grade entre as pistas para os carros não mudarem o sentido"
-    // Center divider along X = 1100 from Z = -halfStraight to Z = halfStraight, plus end curves!
+    // 3. GRADE ENTRE AS PISTAS (Divisória central com tela de aço e defensas)
     const fenceGroup = new THREE.Group()
     const fenceHeight = 3.2
     const postGeo = new THREE.CylinderGeometry(0.14, 0.14, fenceHeight, 8)
-    const railGeo = new THREE.BoxGeometry(0.12, 0.22, 4.2)
-    const meshPanelGeo = new THREE.BoxGeometry(0.08, fenceHeight - 0.4, 4.0)
+    const railGeo = new THREE.BoxGeometry(0.12, 0.22, 6.0)
+    const meshPanelGeo = new THREE.BoxGeometry(0.08, fenceHeight - 0.4, 5.8)
 
-    for (let z = -halfStraight - 4; z <= halfStraight + 4; z += 4) {
-      // Steel vertical support post
+    for (let z = -halfStraight - 4; z <= halfStraight + 4; z += 6) {
       const post = new THREE.Mesh(postGeo, this.fenceSteelMat)
       post.position.set(this.centerX, fenceHeight / 2, z)
       post.castShadow = true
       fenceGroup.add(post)
 
-      // Horizontal security beams & wire mesh panel
       if (z <= halfStraight) {
         const topRail = new THREE.Mesh(railGeo, this.fenceSteelMat)
-        topRail.position.set(this.centerX, fenceHeight - 0.2, z + 2)
+        topRail.position.set(this.centerX, fenceHeight - 0.2, z + 3)
         fenceGroup.add(topRail)
 
-        const midRail = new THREE.Mesh(railGeo, this.fenceSteelMat)
-        midRail.position.set(this.centerX, fenceHeight / 2, z + 2)
-        fenceGroup.add(midRail)
-
-        const botRail = new THREE.Mesh(railGeo, this.fenceSteelMat)
-        botRail.position.set(this.centerX, 0.25, z + 2)
-        fenceGroup.add(botRail)
-
         const wireMesh = new THREE.Mesh(meshPanelGeo, this.wireMeshMat)
-        wireMesh.position.set(this.centerX, fenceHeight / 2, z + 2)
+        wireMesh.position.set(this.centerX, fenceHeight / 2, z + 3)
         fenceGroup.add(wireMesh)
       }
     }
 
-    // Concrete median base curb under central fence
     const medianBase = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.45, this.straightLength + 12), this.barrierConcreteMat)
     medianBase.position.set(this.centerX, 0.22, 0)
     medianBase.castShadow = true
     fenceGroup.add(medianBase)
-
     this.root.add(fenceGroup)
 
-    // Register Solid 3D Collider for the Central Fence so no car can cross lanes!
     colliders.push({
       minX: this.centerX - 1.2,
       maxX: this.centerX + 1.2,
@@ -314,9 +311,9 @@ export class RallyRace {
       maxY: fenceHeight + 1.5,
     })
 
-    // 4. Outer Boundary Safety Barriers & Tire Stacks
+    // 4. Barreiras externas nas retas
     const outerWallHeight = 1.8
-    // Outer East barrier wall
+    // Barreira da Reta Leste
     const eastWall = new THREE.Mesh(new THREE.BoxGeometry(1.2, outerWallHeight, this.straightLength), this.barrierConcreteMat)
     eastWall.position.set(this.centerX + outerR + 0.6, outerWallHeight / 2, 0)
     eastWall.castShadow = true
@@ -330,10 +327,10 @@ export class RallyRace {
       maxY: outerWallHeight,
     })
 
-    // Outer West barrier wall (leaves gap at Z=0 for access road entrance)
+    // Barreira da Reta Oeste (com abertura suave em Z=0 para conexão da ponte)
     for (const zSide of [-1, 1]) {
-      const partLen = (this.straightLength - 24) / 2
-      const wz = zSide * (12 + partLen / 2)
+      const partLen = (this.straightLength - 28) / 2
+      const wz = zSide * (14 + partLen / 2)
       const westWallPart = new THREE.Mesh(new THREE.BoxGeometry(1.2, outerWallHeight, partLen), this.barrierConcreteMat)
       westWallPart.position.set(this.centerX - outerR - 0.6, outerWallHeight / 2, wz)
       westWallPart.castShadow = true
@@ -349,134 +346,221 @@ export class RallyRace {
       })
     }
 
-    // Outer curve barriers (segmented around North and South bends)
-    const curveBarriersCount = 14
-    for (let i = 0; i <= curveBarriersCount; i++) {
-      const angle = (i / curveBarriersCount) * Math.PI
-      // North bend outer wall post
-      const nx = this.centerX + (outerR + 0.6) * Math.cos(angle)
-      const nz = halfStraight + (outerR + 0.6) * Math.sin(angle)
-      const nBarrier = new THREE.Mesh(new THREE.BoxGeometry(2.4, outerWallHeight, 3.8), this.barrierConcreteMat)
-      nBarrier.position.set(nx, outerWallHeight / 2, nz)
-      nBarrier.rotation.y = -angle
-      this.root.add(nBarrier)
-      colliders.push({
-        minX: nx - 1.6,
-        maxX: nx + 1.6,
-        minZ: nz - 1.6,
-        maxZ: nz + 1.6,
-        minY: 0,
-        maxY: outerWallHeight,
-      })
-
-      // South bend outer wall post
-      const sAngle = Math.PI + angle
-      const sx = this.centerX + (outerR + 0.6) * Math.cos(sAngle)
-      const sz = -halfStraight + (outerR + 0.6) * Math.sin(sAngle)
-      const sBarrier = new THREE.Mesh(new THREE.BoxGeometry(2.4, outerWallHeight, 3.8), this.barrierConcreteMat)
-      sBarrier.position.set(sx, outerWallHeight / 2, sz)
-      sBarrier.rotation.y = -sAngle
-      this.root.add(sBarrier)
-      colliders.push({
-        minX: sx - 1.6,
-        maxX: sx + 1.6,
-        minZ: sz - 1.6,
-        maxZ: sz + 1.6,
-        minY: 0,
-        maxY: outerWallHeight,
-      })
-    }
-
-    // 5. Red & White Curbs (Zebras de Pista)
-    for (let z = -halfStraight; z <= halfStraight; z += 4) {
-      const isRed = Math.floor(z / 4) % 2 === 0
-      const curbMat = isRed ? this.curbRedMat : this.curbWhiteMat
-      // Inner East Curb
-      const curbA = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 3.8), curbMat)
-      curbA.position.set(this.centerX + innerR + 0.4, 0.06, z)
-      this.root.add(curbA)
-      // Inner West Curb
-      const curbB = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 3.8), curbMat)
-      curbB.position.set(this.centerX - innerR - 0.4, 0.06, z)
-      this.root.add(curbB)
-    }
-
-    // 6. Start / Finish Line Checkered Strip & Overhead Gantry
-    const startFinishLine = new THREE.Mesh(new THREE.PlaneGeometry(this.trackWidth, 3.2), this.curbWhiteMat)
+    // 5. LINHA DE CHEGADA E PÓRTICO (Start/Finish Line Checkered Strip & Overhead Gantry)
+    // Posicionada na RETA OESTE (Z = 0, X = westTrackX), bem em frente à via da ponte!
+    const startFinishLine = new THREE.Mesh(new THREE.PlaneGeometry(this.trackWidth, 4.0), this.curbWhiteMat)
     startFinishLine.rotation.x = -Math.PI / 2
-    startFinishLine.position.set(this.centerX + this.curveRadius, 0.05, 0)
+    startFinishLine.position.set(westTrackX, 0.05, 0)
     this.root.add(startFinishLine)
 
-    // Overhead Gantry across East Straight
+    // Linhas quadriculadas pretas na faixa de chegada
+    for (let c = -this.trackWidth / 2 + 1; c < this.trackWidth / 2; c += 2) {
+      const checkBlock = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 4.0), this.trackAsphaltMat)
+      checkBlock.rotation.x = -Math.PI / 2
+      checkBlock.position.set(westTrackX + c, 0.052, 0)
+      this.root.add(checkBlock)
+    }
+
+    // Pórtico aéreo monumental sobre a linha de chegada
     const gantry = new THREE.Group()
-    const towerGeo = new THREE.BoxGeometry(0.6, 9.5, 0.6)
-    const beamGeo = new THREE.BoxGeometry(this.trackWidth + 4, 1.2, 0.8)
+    const towerGeo = new THREE.BoxGeometry(0.8, 12.0, 0.8)
+    const beamGeo = new THREE.BoxGeometry(this.trackWidth + 6, 1.6, 1.2)
 
     const towerLeft = new THREE.Mesh(towerGeo, this.fenceSteelMat)
-    towerLeft.position.set(this.centerX + innerR - 0.5, 4.75, 0)
+    towerLeft.position.set(westTrackX - this.trackWidth / 2 - 1.2, 6.0, 0)
     gantry.add(towerLeft)
 
     const towerRight = new THREE.Mesh(towerGeo, this.fenceSteelMat)
-    towerRight.position.set(this.centerX + outerR + 0.5, 4.75, 0)
+    towerRight.position.set(westTrackX + this.trackWidth / 2 + 1.2, 6.0, 0)
     gantry.add(towerRight)
 
     const crossBeam = new THREE.Mesh(beamGeo, this.fenceSteelMat)
-    crossBeam.position.set(this.centerX + this.curveRadius, 8.8, 0)
+    crossBeam.position.set(westTrackX, 11.2, 0)
     gantry.add(crossBeam)
 
-    // Overhead Digital Banner Sign
-    const signGeo = new THREE.BoxGeometry(this.trackWidth - 2, 1.4, 0.2)
+    // Painel digital luminoso no pórtico
+    const signGeo = new THREE.BoxGeometry(this.trackWidth - 1, 2.0, 0.3)
     const signMat = new THREE.MeshStandardMaterial({
       color: 0x0f172a,
       emissive: 0xfacc15,
-      emissiveIntensity: 1.4,
+      emissiveIntensity: 1.8,
       roughness: 0.2,
     })
     const gantrySign = new THREE.Mesh(signGeo, signMat)
-    gantrySign.position.set(this.centerX + this.curveRadius, 8.8, 0.5)
+    gantrySign.position.set(westTrackX, 11.2, 0.7)
     gantry.add(gantrySign)
 
     this.root.add(gantry)
 
-    // 7. Stadium Floodlight Towers (4 corners)
+    // 6. Torres de Iluminação Stadium Floodlights
     const floodlightPositions = [
-      { x: this.centerX + outerR + 6, z: halfStraight + 10 },
-      { x: this.centerX - outerR - 6, z: halfStraight + 10 },
-      { x: this.centerX + outerR + 6, z: -halfStraight - 10 },
-      { x: this.centerX - outerR - 6, z: -halfStraight - 10 },
+      { x: this.centerX + outerR + 8, z: halfStraight + 15 },
+      { x: this.centerX - outerR - 8, z: halfStraight + 15 },
+      { x: this.centerX + outerR + 8, z: -halfStraight - 15 },
+      { x: this.centerX - outerR - 8, z: -halfStraight - 15 },
     ]
-    const lightTowerGeo = new THREE.CylinderGeometry(0.35, 0.6, 22, 8)
-    const lightHeadGeo = new THREE.BoxGeometry(4.5, 1.6, 1.2)
+    const lightTowerGeo = new THREE.CylinderGeometry(0.35, 0.6, 26, 8)
+    const lightHeadGeo = new THREE.BoxGeometry(5.0, 1.8, 1.2)
     const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff0c2, emissiveIntensity: 3.5 })
 
     for (const lp of floodlightPositions) {
       const pole = new THREE.Mesh(lightTowerGeo, this.fenceSteelMat)
-      pole.position.set(lp.x, 11, lp.z)
+      pole.position.set(lp.x, 13, lp.z)
       this.root.add(pole)
 
       const head = new THREE.Mesh(lightHeadGeo, this.fenceSteelMat)
-      head.position.set(lp.x, 21.5, lp.z)
+      head.position.set(lp.x, 25.5, lp.z)
       head.lookAt(this.centerX, 0, lp.z > 0 ? halfStraight : -halfStraight)
       this.root.add(head)
 
-      const bulb = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.2, 0.1), bulbMat)
-      bulb.position.set(lp.x, 21.5, lp.z + (lp.z > 0 ? -0.65 : 0.65))
-      bulb.rotation.x = lp.z > 0 ? 0.3 : -0.3
+      const bulb = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.4, 0.1), bulbMat)
+      bulb.position.set(lp.x, 25.5, lp.z + (lp.z > 0 ? -0.65 : 0.65))
       this.root.add(bulb)
     }
 
-    // Register all barriers into City colliders
     this.city.addColliders(colliders)
   }
 
-  // 4 Glowing Score Arches
+  // Adiciona blocos de pedra nas laterais dos dois quilômetros de pista e no topo das dunas
+  private buildRockBlocks(): void {
+    const halfStraight = this.straightLength / 2
+    const outerR = this.curveRadius + this.trackWidth / 2
+    const innerR = this.curveRadius - this.trackWidth / 2
+
+    // InstancedMesh de blocos de rocha natural (alta performance: 1 draw call para todas as pedras!)
+    const rockCount = 520
+    const rockGeo = new THREE.DodecahedronGeometry(1.6, 0)
+    this.rockBlocksMesh = new THREE.InstancedMesh(rockGeo, this.rockMaterial, rockCount)
+    this.rockBlocksMesh.castShadow = true
+    this.rockBlocksMesh.receiveShadow = true
+
+    const dummy = new THREE.Object3D()
+    let instanceIndex = 0
+
+    // 1. Pedras ao longo das laterais esquerda e direita das retas (mais de 2 quilômetros totais de pista)
+    for (let z = -halfStraight; z <= halfStraight; z += 24) {
+      if (instanceIndex >= rockCount - 160) break
+
+      // Lateral Direita da Reta Leste
+      dummy.position.set(this.centerX + outerR + 4.2 + (Math.sin(z * 0.1) * 2.2), 0.8, z)
+      const scaleA = 0.9 + Math.abs(Math.sin(z * 0.35)) * 1.5
+      dummy.scale.set(scaleA, scaleA * 0.85, scaleA)
+      dummy.rotation.set(z * 0.2, z * 0.5, 0)
+      dummy.updateMatrix()
+      this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+
+      // Lateral Esquerda da Reta Leste
+      dummy.position.set(this.centerX + innerR - 3.8 + (Math.cos(z * 0.15) * 1.8), 0.7, z)
+      const scaleB = 0.8 + Math.abs(Math.cos(z * 0.25)) * 1.3
+      dummy.scale.set(scaleB, scaleB * 0.9, scaleB)
+      dummy.rotation.set(z * 0.1, z * 0.3, 0)
+      dummy.updateMatrix()
+      this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+
+      // Lateral Externa da Reta Oeste (exceto na abertura da ponte em Z=0)
+      if (Math.abs(z) > 16) {
+        dummy.position.set(this.centerX - outerR - 4.5 + (Math.sin(z * 0.2) * 2.0), 0.8, z)
+        const scaleC = 1.0 + Math.abs(Math.sin(z * 0.4)) * 1.4
+        dummy.scale.set(scaleC, scaleC * 0.85, scaleC)
+        dummy.rotation.set(z * 0.3, z * 0.2, 0)
+        dummy.updateMatrix()
+        this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+      }
+
+      // Lateral Interna da Reta Oeste
+      dummy.position.set(this.centerX - innerR + 3.8 + (Math.cos(z * 0.3) * 1.6), 0.7, z)
+      const scaleD = 0.85 + Math.abs(Math.sin(z * 0.25)) * 1.2
+      dummy.scale.set(scaleD, scaleD * 0.8, scaleD)
+      dummy.rotation.set(z * 0.15, z * 0.4, 0)
+      dummy.updateMatrix()
+      this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+    }
+
+    // 1b. Pedras nas Curvas Norte e Sul (Lado direito e esquerdo ao longo das curvas)
+    const curveSteps = 24
+    for (let c = 0; c < curveSteps; c++) {
+      if (instanceIndex >= rockCount - 60) break
+      const angle = (c / curveSteps) * Math.PI
+
+      // Curva Norte (Z positivo)
+      for (const sideSign of [-1, 1]) {
+        const rad = this.curveRadius + sideSign * (this.trackWidth / 2 + 3.5)
+        const cx = this.centerX + rad * Math.cos(angle)
+        const cz = halfStraight + rad * Math.sin(angle)
+        dummy.position.set(cx, 0.8, cz)
+        const sc = 1.0 + (c % 3) * 0.4
+        dummy.scale.set(sc, sc * 0.85, sc)
+        dummy.rotation.set(c * 0.4, angle, 0)
+        dummy.updateMatrix()
+        this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+      }
+
+      // Curva Sul (Z negativo)
+      const angleSouth = Math.PI + (c / curveSteps) * Math.PI
+      for (const sideSign of [-1, 1]) {
+        const rad = this.curveRadius + sideSign * (this.trackWidth / 2 + 3.5)
+        const cx = this.centerX + rad * Math.cos(angleSouth)
+        const cz = -halfStraight + rad * Math.sin(angleSouth)
+        dummy.position.set(cx, 0.8, cz)
+        const sc = 1.0 + (c % 3) * 0.4
+        dummy.scale.set(sc, sc * 0.85, sc)
+        dummy.rotation.set(c * 0.4, angleSouth, 0)
+        dummy.updateMatrix()
+        this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+      }
+    }
+
+    // 2. Pedras em cima das dunas de areia centrais e periféricas, incluindo o lado direito da pista
+    const dunePoints = [
+      { x: this.centerX - 120, z: -250, y: 5.5 },
+      { x: this.centerX - 80, z: 180, y: 6.2 },
+      { x: this.centerX + 110, z: -320, y: 7.0 },
+      { x: this.centerX + 90, z: 280, y: 5.8 },
+      { x: this.centerX, z: 0, y: 4.8 },
+      { x: this.centerX - 60, z: -480, y: 6.5 },
+      { x: this.centerX + 70, z: 450, y: 6.0 },
+      { x: this.centerX - 140, z: 40, y: 5.2 },
+      { x: this.centerX + 130, z: -80, y: 5.5 },
+      // Dunas adicionais específicas no lado direito da pista (East side)
+      { x: this.centerX + outerR + 25, z: -600, y: 8.5 },
+      { x: this.centerX + outerR + 30, z: -300, y: 9.0 },
+      { x: this.centerX + outerR + 28, z: 0, y: 8.0 },
+      { x: this.centerX + outerR + 32, z: 300, y: 9.2 },
+      { x: this.centerX + outerR + 26, z: 600, y: 8.8 },
+    ]
+
+    for (const dp of dunePoints) {
+      for (let r = 0; r < 14; r++) {
+        if (instanceIndex >= rockCount) break
+        const angle = (r / 14) * Math.PI * 2
+        const rad = 6 + (r % 4) * 5
+        const rx = dp.x + Math.cos(angle) * rad
+        const rz = dp.z + Math.sin(angle) * rad
+        const ry = dp.y + (Math.sin(r * 2.1) * 1.8)
+
+        dummy.position.set(rx, ry, rz)
+        const s = 1.2 + Math.abs(Math.sin(r * 1.7)) * 2.2
+        dummy.scale.set(s, s * 0.9, s * 1.1)
+        dummy.rotation.set(r * 0.5, angle, r * 0.3)
+        dummy.updateMatrix()
+        this.rockBlocksMesh.setMatrixAt(instanceIndex++, dummy.matrix)
+      }
+    }
+
+    this.rockBlocksMesh.instanceMatrix.needsUpdate = true
+    this.root.add(this.rockBlocksMesh)
+  }
+
+  // 4 Arcos do circuito AUMENTADOS, monumentais e imponentes
   private buildScoreArches(): void {
     const archConfigs = [
-      { id: 0, dist: 0, rotY: 0 },                                        // Start/Finish Straight (Z=0, heading North)
-      { id: 1, dist: this.straightLength + (Math.PI * this.curveRadius * 0.75), rotY: Math.PI * 0.75 }, // North turn exit
-      { id: 2, dist: this.straightLength + Math.PI * this.curveRadius + this.straightLength * 0.5, rotY: Math.PI }, // Back straight
-      { id: 3, dist: this.straightLength * 2 + Math.PI * this.curveRadius + (Math.PI * this.curveRadius * 0.75), rotY: -Math.PI * 0.25 }, // South turn exit
+      { id: 0, dist: this.finishLineDist, rotY: 0 },                                        // Linha de largada na reta Oeste (Z=0)
+      { id: 1, dist: this.straightLength + (Math.PI * this.curveRadius * 0.75), rotY: Math.PI * 0.75 }, // Saída da curva Norte
+      { id: 2, dist: this.straightLength + Math.PI * this.curveRadius + this.straightLength * 0.5, rotY: Math.PI }, // Reta Leste
+      { id: 3, dist: this.straightLength * 2 + Math.PI * this.curveRadius + (Math.PI * this.curveRadius * 0.75), rotY: -Math.PI * 0.25 }, // Saída da curva Sul
     ]
+
+    const archRadius = 14.0 // Raio monumental aumentado cobrindo toda a pista de 18m com folga
 
     for (const cfg of archConfigs) {
       const transform = this.getTrackTransform(cfg.dist, 0)
@@ -484,35 +568,43 @@ export class RallyRace {
       group.position.copy(transform.position)
       group.rotation.y = transform.yaw
 
-      // Arch Structure
-      const archTruss = new THREE.Mesh(new THREE.TorusGeometry(8.5, 0.35, 8, 20, Math.PI), this.fenceSteelMat)
+      // Estrutura de treliça de aço aumentada
+      const archTruss = new THREE.Mesh(new THREE.TorusGeometry(archRadius, 0.55, 8, 28, Math.PI), this.fenceSteelMat)
       archTruss.position.set(0, 0, 0)
       group.add(archTruss)
 
-      // Glowing Neon Ring Arch
-      const neonRing = new THREE.Mesh(new THREE.TorusGeometry(8.2, 0.22, 8, 24, Math.PI), this.archNeonMat)
-      neonRing.position.set(0, 0, 0.1)
+      // Arco Neon iluminado aumentado
+      const neonRing = new THREE.Mesh(new THREE.TorusGeometry(archRadius - 0.35, 0.32, 8, 32, Math.PI), this.archNeonMat)
+      neonRing.position.set(0, 0, 0.15)
       group.add(neonRing)
 
-      // Floating Score Emblem Sign: +500 PTS
-      const signGroup = new THREE.Group()
-      signGroup.position.set(0, 7.8, 0)
+      // Bases de sustentação reforçadas nos pilares
+      const baseGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4)
+      for (const sideX of [-archRadius, archRadius]) {
+        const pillarBase = new THREE.Mesh(baseGeo, this.barrierConcreteMat)
+        pillarBase.position.set(sideX, 1.0, 0)
+        group.add(pillarBase)
+      }
 
-      const badgeGeo = new THREE.BoxGeometry(4.2, 1.2, 0.25)
+      // Emblema e Placa Superior Flutuante Aumentada: RALLY DUEL +500 PTS
+      const signGroup = new THREE.Group()
+      signGroup.position.set(0, archRadius - 0.8, 0)
+
+      const badgeGeo = new THREE.BoxGeometry(6.8, 1.8, 0.35)
       const badgeMat = new THREE.MeshStandardMaterial({
         color: 0x0284c7,
         emissive: 0x38bdf8,
-        emissiveIntensity: 2.2,
+        emissiveIntensity: 2.4,
         roughness: 0.15,
       })
       const badge = new THREE.Mesh(badgeGeo, badgeMat)
       signGroup.add(badge)
 
-      // Golden Ring Core in badge
-      const starCore = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.12, 8, 16), new THREE.MeshStandardMaterial({
+      // Anel dourado gigante central
+      const starCore = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.18, 8, 20), new THREE.MeshStandardMaterial({
         color: 0xfacc15,
         emissive: 0xf59e0b,
-        emissiveIntensity: 3.0,
+        emissiveIntensity: 3.2,
       }))
       signGroup.add(starCore)
       group.add(signGroup)
@@ -530,55 +622,44 @@ export class RallyRace {
     }
   }
 
-  // 4 Glowing 3D Turbo Boost Pickups
+  // 4 Coletas de Turbo Boost em formato de foguete
   private buildTurboPickups(): void {
     const turboDists = [
-      this.straightLength * 0.3,                                              // Front straight
-      this.straightLength + Math.PI * this.curveRadius * 0.5,                  // North curve apex
-      this.straightLength + Math.PI * this.curveRadius + this.straightLength * 0.7, // Back straight
-      this.straightLength * 2 + Math.PI * this.curveRadius * 1.5,             // South curve apex
+      this.straightLength * 0.3,
+      this.straightLength + Math.PI * this.curveRadius * 0.5,
+      this.straightLength + Math.PI * this.curveRadius + this.straightLength * 0.7,
+      this.straightLength * 2 + Math.PI * this.curveRadius * 1.5,
     ]
 
     turboDists.forEach((dist, idx) => {
       const transform = this.getTrackTransform(dist, (idx % 2 === 0 ? -3.5 : 3.5))
       const group = new THREE.Group()
-      group.position.set(transform.position.x, 1.1, transform.position.z)
+      group.position.set(transform.position.x, 1.2, transform.position.z)
 
-      // Turbo Canister Body
-      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.8, roughness: 0.2 })
-      const canister = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.1, 14), bodyMat)
-      canister.rotation.z = Math.PI / 4
-      group.add(canister)
+      // Foguete 3D com bico cônico e aletas
+      const rocketBodyMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.8, roughness: 0.2 })
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 1.4, 12), rocketBodyMat)
+      group.add(body)
 
-      // Dual Jet Nozzles
-      const nozzleMat = new THREE.MeshStandardMaterial({ color: 0xd97706, emissive: 0xf59e0b, emissiveIntensity: 2.5 })
-      for (const nz of [-0.22, 0.22]) {
-        const nozzle = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.45, 10), nozzleMat)
-        nozzle.rotation.x = Math.PI
-        nozzle.position.set(nz, -0.65, 0)
-        group.add(nozzle)
+      const coneMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.2, metalness: 0.4 })
+      const noseCone = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.75, 12), coneMat)
+      noseCone.position.set(0, 1.05, 0)
+      group.add(noseCone)
+
+      // Aletas traseiras do foguete
+      const finGeo = new THREE.BoxGeometry(0.08, 0.5, 0.35)
+      for (let f = 0; f < 4; f++) {
+        const fin = new THREE.Mesh(finGeo, coneMat)
+        fin.rotation.y = (f * Math.PI) / 2
+        fin.position.set(Math.cos((f * Math.PI) / 2) * 0.35, -0.45, Math.sin((f * Math.PI) / 2) * 0.35)
+        group.add(fin)
       }
 
-      // Spinning Glowing Lightning / Energy Ring
+      // Anel de plasma de propulsão
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.12, 8, 20), this.turboEnergyMat)
       ring.rotation.x = Math.PI / 2
+      ring.position.set(0, -0.65, 0)
       group.add(ring)
-
-      // Floating 3D Lightning Bolt Symbol
-      const boltMat = new THREE.MeshStandardMaterial({
-        color: 0xfef08a,
-        emissive: 0xfacc15,
-        emissiveIntensity: 3.5,
-      })
-      const boltTop = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 0.12), boltMat)
-      boltTop.position.set(0.1, 0.25, 0)
-      boltTop.rotation.z = -0.35
-      group.add(boltTop)
-
-      const boltBot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 0.12), boltMat)
-      boltBot.position.set(-0.1, -0.15, 0)
-      boltBot.rotation.z = -0.35
-      group.add(boltBot)
 
       this.root.add(group)
       this.turboPickups.push({
@@ -592,15 +673,19 @@ export class RallyRace {
     })
   }
 
-  // Spawn the 6 Distinct Rally Cars
-  private spawnCompetitors(): void {
+  // Posiciona todos os 6 carros de rally elétrico perfilados na linha de chegada:
+  // Sendo duas filas de 3 carros parados em cada fila!
+  private spawnGridCompetitors(): void {
     const competitorConfigs = [
-      { id: 1, name: 'Red Apex', number: 1, color: 0xef4444, baseSpeed: 34.5, startOffset: 0, lane: -3.5 },
-      { id: 2, name: 'Blue Thunder', number: 7, color: 0x2563eb, baseSpeed: 33.8, startOffset: 25, lane: 3.5 },
-      { id: 3, name: 'Green Viper', number: 23, color: 0x22c55e, baseSpeed: 34.0, startOffset: 50, lane: -2.0 },
-      { id: 4, name: 'Orange Blaze', number: 44, color: 0xf97316, baseSpeed: 33.5, startOffset: 75, lane: 2.0 },
-      { id: 5, name: 'Desert Gold', number: 88, color: 0xfacc15, baseSpeed: 33.0, startOffset: 100, lane: -3.8 },
-      { id: 6, name: 'Cyber Violet', number: 99, color: 0xa855f7, baseSpeed: 34.2, startOffset: 125, lane: 3.8 },
+      // Fila 1 (Esquerda / Interior, lane = -3.5)
+      { id: 1, name: 'Red Apex EV', number: 1, color: 0xef4444, baseSpeed: 34.5, row: 0, lane: -3.5, distOffset: -4 },
+      { id: 3, name: 'Green Viper EV', number: 23, color: 0x22c55e, baseSpeed: 34.0, row: 1, lane: -3.5, distOffset: -18 },
+      { id: 5, name: 'Desert Gold EV', number: 88, color: 0xfacc15, baseSpeed: 33.2, row: 2, lane: -3.5, distOffset: -32 },
+
+      // Fila 2 (Direita / Exterior, lane = +3.5)
+      { id: 2, name: 'Blue Thunder EV', number: 7, color: 0x2563eb, baseSpeed: 34.0, row: 0, lane: 3.5, distOffset: -10 },
+      { id: 4, name: 'Orange Blaze EV', number: 44, color: 0xf97316, baseSpeed: 33.6, row: 1, lane: 3.5, distOffset: -24 },
+      { id: 6, name: 'Cyber Violet EV', number: 99, color: 0xa855f7, baseSpeed: 34.4, row: 2, lane: 3.5, distOffset: -38 },
     ]
 
     for (const cfg of competitorConfigs) {
@@ -612,11 +697,12 @@ export class RallyRace {
         scale: 1,
       })
 
-      const dist = (this.straightLength * 0.2 + cfg.startOffset) % this.totalTrackLength
+      // Posicionados antes da linha de chegada na reta Oeste (próximo à via da ponte)
+      const dist = (this.finishLineDist + cfg.distOffset + this.totalTrackLength) % this.totalTrackLength
       const transform = this.getTrackTransform(dist, cfg.lane)
       car.root.position.copy(transform.position)
       car.yaw = transform.yaw
-      car.speed = cfg.baseSpeed * 0.8
+      car.speed = 0 // Todos os carros começam 100% PARADOS na linha de chegada
 
       this.competitors.push({
         id: cfg.id,
@@ -629,46 +715,58 @@ export class RallyRace {
         laneOffset: cfg.lane,
         targetLaneOffset: cfg.lane,
         baseSpeed: cfg.baseSpeed,
-        currentSpeed: cfg.baseSpeed,
+        currentSpeed: 0, // Parados esperando o início da corrida
         driftAngle: 0,
       })
     }
   }
 
-  // Spawn a 7th Rally Car parked in the Paddock for the Player to take and drive
-  private spawnPaddockCar(): void {
-    this.paddockCar = new Car(this.scene, {
-      kind: 'rally_car',
-      color: 0x38bdf8, // Brilliant Cyan / Electric Blue WRC
-      playerControlled: false,
-      police: false,
-      scale: 1,
-    })
-    this.paddockCar.root.position.set(this.centerX - 75, 0.08, 0)
-    this.paddockCar.yaw = -Math.PI / 2 // Facing towards the track entrance
+  // Inicia a corrida de rally quando o jogador assume qualquer um dos 6 carros de rally elétrico
+  startRaceWithPlayerCar(selectedCar: Car): void {
+    if (this.raceStarted) return
 
-    // Floating entry beacon
-    const beaconGeo = new THREE.RingGeometry(1.6, 2.2, 24)
-    const beaconMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0284c7,
-      emissiveIntensity: 2.2,
-      side: THREE.DoubleSide,
-    })
-    this.paddockBeacon = new THREE.Mesh(beaconGeo, beaconMat)
-    this.paddockBeacon.rotation.x = -Math.PI / 2
-    this.paddockBeacon.position.set(this.centerX - 75, 0.12, 0)
-    this.root.add(this.paddockBeacon)
+    this.playerRallyCar = selectedCar
+    this.raceStarted = true
+    this.missionActive = true
+    this.playerLap = 1
+    this.playerHasWon = false
+
+    // Identifica e remove o carro assumido da lista de concorrentes IA (restando 5 concorrentes IA rivais)
+    const takenIndex = this.competitors.findIndex(c => c.car === selectedCar)
+    if (takenIndex !== -1) {
+      this.competitors.splice(takenIndex, 1)
+    }
+
+    // Faz os outros 5 competidores começarem a acelerar imediatamente!
+    for (const comp of this.competitors) {
+      comp.currentSpeed = comp.baseSpeed * 0.82
+    }
+
+    this.sound.effect('upgrade')
+    this.onRaceStarted?.()
   }
 
   update(dt: number, playerCar: Car, playerPos: THREE.Vector3): void {
     const time = performance.now() * 0.001
 
-    // Check if player is inside the Rally Arena
+    // Verifica se o jogador está na arena do Rally
     const distToCenter = Math.hypot(playerPos.x - this.centerX, playerPos.z - this.centerZ)
-    this.playerInTrack = distToCenter < 165
+    this.playerInTrack = distToCenter < (this.curveRadius + 140)
 
-    // 1. Update Arches (Pulsing Glow & Collision with Player)
+    // Se o jogador estiver na pista mas NÃO estiver em um carro de rally elétrico
+    if (this.playerInTrack && playerCar.kind !== 'rally_car') {
+      if (time - this.lastRestrictedWarning > 4.5) {
+        this.lastRestrictedWarning = time
+        this.onRestrictedAccess?.()
+      }
+    }
+
+    // Se o jogador estiver em um carro de rally e a corrida ainda não iniciou, inicia!
+    if (playerCar.kind === 'rally_car' && !this.raceStarted && this.playerInTrack) {
+      this.startRaceWithPlayerCar(playerCar)
+    }
+
+    // 1. Atualização dos Arcos de Pontuação
     for (const arch of this.scoreArches) {
       if (arch.cooldownTimer > 0) {
         arch.cooldownTimer = Math.max(0, arch.cooldownTimer - dt)
@@ -677,159 +775,164 @@ export class RallyRace {
         }
       }
 
-      // Sine pulse on neon arch
       const intensity = 2.4 + Math.sin(time * 4 + arch.id) * 0.6
       ;(arch.neonMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = intensity
 
-      // Check collision with player
-      if (arch.cooldownTimer <= 0) {
+      if (arch.cooldownTimer <= 0 && playerCar.kind === 'rally_car') {
         const distToPlayer = playerPos.distanceTo(arch.position)
-        if (distToPlayer < 9.5) {
-          // Player collected score arch!
-          arch.cooldownTimer = 1.8
+        if (distToPlayer < 12.0) {
+          arch.cooldownTimer = 2.0
           ;(arch.neonMesh.material as THREE.MeshStandardMaterial).emissive.setHex(0xfacc15)
           this.sound.effect('coin')
-          this.sparks.emit(new THREE.Vector3(arch.position.x, 3.5, arch.position.z))
-          this.onScoreCollected?.(500, 150)
+          this.sparks.emit(new THREE.Vector3(arch.position.x, 4.2, arch.position.z))
+          this.onScoreCollected?.(500, 200)
         }
       }
     }
 
-    // 2. Update Turbo Pickups (Spinning, Hovering, & Triggering Boost)
+    // 2. Coletas de Turbo Boost
     for (const turbo of this.turboPickups) {
       if (!turbo.active) {
         turbo.cooldownTimer = Math.max(0, turbo.cooldownTimer - dt)
         if (turbo.cooldownTimer <= 0) {
           turbo.active = true
           turbo.mesh.visible = true
-          turbo.mesh.scale.set(1, 1, 1)
         }
         continue
       }
 
-      // Animation: spin and sinusoidal float
       turbo.mesh.rotation.y += turbo.spinSpeed * dt
-      turbo.mesh.position.y = 1.1 + Math.sin(time * 3 + turbo.id) * 0.22
+      turbo.mesh.position.y = 1.2 + Math.sin(time * 3 + turbo.id) * 0.25
 
-      // Check pickup by Player Car
-      const distToPlayer = playerPos.distanceTo(turbo.position)
-      if (distToPlayer < 4.2) {
-        turbo.active = false
-        turbo.cooldownTimer = 5.0
-        turbo.mesh.visible = false
-
-        playerCar.applyTurbo(3.2, 18)
-        this.sound.effect('upgrade')
-        this.sparks.emit(new THREE.Vector3(playerPos.x, 0.4, playerPos.z))
-        this.onTurboCollected?.()
-      }
-
-      // Check pickup by AI Rally Cars
-      for (const comp of this.competitors) {
-        const distToComp = comp.car.root.position.distanceTo(turbo.position)
-        if (distToComp < 4.0 && turbo.active) {
+      if (playerCar.kind === 'rally_car') {
+        const distToPlayer = playerPos.distanceTo(turbo.position)
+        if (distToPlayer < 4.2) {
           turbo.active = false
           turbo.cooldownTimer = 5.0
           turbo.mesh.visible = false
-          comp.car.applyTurbo(2.8, 16)
-          comp.currentSpeed += 12
-          this.sparks.emit(new THREE.Vector3(comp.car.root.position.x, 0.4, comp.car.root.position.z))
+
+          playerCar.applyTurbo(3.5, 20)
+          this.sound.effect('upgrade')
+          this.sparks.emit(new THREE.Vector3(playerPos.x, 0.4, playerPos.z))
+          this.onTurboCollected?.()
+        }
+      }
+
+      if (this.raceStarted) {
+        for (const comp of this.competitors) {
+          const distToComp = comp.car.root.position.distanceTo(turbo.position)
+          if (distToComp < 4.0 && turbo.active) {
+            turbo.active = false
+            turbo.cooldownTimer = 5.0
+            turbo.mesh.visible = false
+            comp.car.applyTurbo(2.8, 16)
+            comp.currentSpeed += 12
+            this.sparks.emit(new THREE.Vector3(comp.car.root.position.x, 0.4, comp.car.root.position.z))
+          }
         }
       }
     }
 
-    // 3. Update the 6 Rally Competitors (Racing AI, Dynamic Overtaking & Drifting)
-    for (let i = 0; i < this.competitors.length; i++) {
-      const comp = this.competitors[i]
-      const car = comp.car
+    // 3. Atualização dos Concorrentes de Rally
+    if (this.raceStarted) {
+      for (let i = 0; i < this.competitors.length; i++) {
+        const comp = this.competitors[i]
+        const car = comp.car
 
-      // Speed modulation & Turbo
-      if (car.turboTimer > 0) {
-        comp.currentSpeed = Math.min(comp.baseSpeed * 1.45, comp.currentSpeed + 24 * dt)
-      } else {
-        comp.currentSpeed = THREE.MathUtils.lerp(comp.currentSpeed, comp.baseSpeed, dt * 2.2)
-      }
-
-      // Check distance to car ahead to perform lane overtake
-      for (let j = 0; j < this.competitors.length; j++) {
-        if (i === j) continue
-        const other = this.competitors[j]
-        let deltaDist = other.distanceAlongTrack - comp.distanceAlongTrack
-        if (deltaDist < 0) deltaDist += this.totalTrackLength
-
-        // If another car is 6-18 meters directly ahead, switch lane to overtake!
-        if (deltaDist > 0 && deltaDist < 16 && Math.abs(comp.laneOffset - other.laneOffset) < 2.5) {
-          comp.targetLaneOffset = comp.laneOffset > 0 ? -3.5 : 3.5
+        if (car.turboTimer > 0) {
+          comp.currentSpeed = Math.min(comp.baseSpeed * 1.45, comp.currentSpeed + 24 * dt)
+        } else {
+          comp.currentSpeed = THREE.MathUtils.lerp(comp.currentSpeed, comp.baseSpeed, dt * 2.2)
         }
-      }
 
-      // Smoothly steer between inner and outer racing line
-      comp.laneOffset = THREE.MathUtils.lerp(comp.laneOffset, comp.targetLaneOffset, dt * 2.0)
+        // Ultrapassagens dinâmicas entre competidores
+        for (let j = 0; j < this.competitors.length; j++) {
+          if (i === j) continue
+          const other = this.competitors[j]
+          let deltaDist = other.distanceAlongTrack - comp.distanceAlongTrack
+          if (deltaDist < 0) deltaDist += this.totalTrackLength
 
-      // Advance distance along track
-      const prevDist = comp.distanceAlongTrack
-      comp.distanceAlongTrack = (comp.distanceAlongTrack + comp.currentSpeed * dt) % this.totalTrackLength
-      if (comp.distanceAlongTrack < prevDist) {
-        comp.lap += 1
-      }
-
-      // Calculate new position and tangent along the track
-      const transform = this.getTrackTransform(comp.distanceAlongTrack, comp.laneOffset)
-      car.root.position.x = transform.position.x
-      car.root.position.z = transform.position.z
-      car.root.position.y = 0.08
-      car.speed = comp.currentSpeed
-
-      // Dynamic drift slide angle on curves
-      const isCurving = Math.abs(transform.position.z) > this.straightLength / 2
-      if (isCurving) {
-        const driftDirection = transform.position.z > 0 ? 0.28 : -0.28
-        comp.driftAngle = THREE.MathUtils.lerp(comp.driftAngle, driftDirection, dt * 4.5)
-        // Emit tire drift sparks/dust
-        if (Math.random() < 0.25) {
-          this.sparks.emit(new THREE.Vector3(car.root.position.x, 0.1, car.root.position.z))
+          if (deltaDist > 0 && deltaDist < 18 && Math.abs(comp.laneOffset - other.laneOffset) < 2.5) {
+            comp.targetLaneOffset = comp.laneOffset > 0 ? -3.5 : 3.5
+          }
         }
-      } else {
-        comp.driftAngle = THREE.MathUtils.lerp(comp.driftAngle, 0, dt * 6)
-      }
 
-      car.yaw = transform.yaw + comp.driftAngle
-      car.root.rotation.y = car.yaw
+        comp.laneOffset = THREE.MathUtils.lerp(comp.laneOffset, comp.targetLaneOffset, dt * 2.0)
 
-      // Spin wheels
-      const wheelSpin = -comp.currentSpeed * dt / 0.38
-      for (const wheel of car.wheels) {
-        wheel.rotation.x += wheelSpin
-      }
+        const prevDist = comp.distanceAlongTrack
+        comp.distanceAlongTrack = (comp.distanceAlongTrack + comp.currentSpeed * dt) % this.totalTrackLength
+        if (comp.distanceAlongTrack < prevDist) {
+          comp.lap += 1
+        }
 
-      // Check collision between this rally car and the Player Car
-      const distToPlayerCar = car.root.position.distanceTo(playerCar.root.position)
-      if (distToPlayerCar < 3.2) {
-        car.collideWith(playerCar, dt)
-        this.sound.effect('crash')
-        this.sparks.emit(new THREE.Vector3((car.root.position.x + playerCar.root.position.x) / 2, 0.4, (car.root.position.z + playerCar.root.position.z) / 2))
+        const transform = this.getTrackTransform(comp.distanceAlongTrack, comp.laneOffset)
+        car.root.position.x = transform.position.x
+        car.root.position.z = transform.position.z
+        const duneY = this.city.getDuneHeightAt(transform.position.x, transform.position.z)
+        car.groundElevation = duneY
+        car.root.position.y = Math.max(0.08, duneY + car.climbLift)
+        car.speed = comp.currentSpeed
+
+        const isCurving = Math.abs(transform.position.z) > this.straightLength / 2
+        if (isCurving) {
+          const driftDirection = transform.position.z > 0 ? 0.28 : -0.28
+          comp.driftAngle = THREE.MathUtils.lerp(comp.driftAngle, driftDirection, dt * 4.5)
+          if (Math.random() < 0.2) {
+            this.sparks.emit(new THREE.Vector3(car.root.position.x, 0.1, car.root.position.z))
+          }
+        } else {
+          comp.driftAngle = THREE.MathUtils.lerp(comp.driftAngle, 0, dt * 6)
+        }
+
+        car.yaw = transform.yaw + comp.driftAngle
+        car.root.rotation.y = car.yaw
+
+        const wheelSpin = -comp.currentSpeed * dt / 0.38
+        for (const wheel of car.wheels) {
+          wheel.rotation.x += wheelSpin
+        }
+
+        const distToPlayerCar = car.root.position.distanceTo(playerCar.root.position)
+        if (distToPlayerCar < 3.2) {
+          car.collideWith(playerCar, dt)
+          this.sound.effect('crash')
+          this.sparks.emit(new THREE.Vector3((car.root.position.x + playerCar.root.position.x) / 2, 0.4, (car.root.position.z + playerCar.root.position.z) / 2))
+        }
       }
     }
 
-    // 4. Update Player Race Progress & Leaderboard Position
-    if (this.playerInTrack) {
+    // 4. Progresso de Corrida e Ranking do Jogador (Apenas com carro de rally elétrico!)
+    if (this.playerInTrack && playerCar.kind === 'rally_car') {
       const prevPlayerDist = this.playerDistanceAlongTrack
       this.playerDistanceAlongTrack = this.getDistanceAlongTrack(playerPos)
 
-      // Crossed Start/Finish Line (heading North at Z=0 on East lane)
-      if (playerPos.x > this.centerX && prevPlayerDist > this.totalTrackLength - 40 && this.playerDistanceAlongTrack < 40) {
+      // Linha de Chegada na Reta Oeste (Z=0, finishLineDist)
+      const crossedLine = prevPlayerDist < this.finishLineDist && this.playerDistanceAlongTrack >= this.finishLineDist
+      if (crossedLine && this.raceStarted) {
         this.playerLap += 1
         this.sound.effect('jump')
         this.onLapCompleted?.(this.playerLap, this.playerRacePosition)
 
-        // Check if player won the 3-lap rally!
-        if (this.playerLap > 3 && this.playerRacePosition === 1 && !this.playerHasWon) {
+        // Vitória ou Derrota ao completar a 3ª volta cruzando o arco final
+        if (this.playerLap > 3 && !this.playerHasWon) {
           this.playerHasWon = true
-          this.onRaceWon?.(5000, 10000)
+          this.missionActive = false
+
+          // Todos os carros do rally param de andar
+          for (const comp of this.competitors) {
+            comp.baseSpeed = 0
+            comp.currentSpeed = 0
+          }
+
+          if (this.playerRacePosition === 1 || this.playerRacePosition === 2) {
+            this.onRaceWon?.(6000, 10000)
+          } else {
+            this.onRaceLost?.(this.playerRacePosition)
+          }
         }
       }
 
-      // Calculate Player Race Ranking (1st to 7th place)
+      // Cálculo da posição no ranking (1º ao 6º lugar)
       let rank = 1
       for (const comp of this.competitors) {
         if (comp.lap > this.playerLap) {
@@ -838,18 +941,10 @@ export class RallyRace {
           rank++
         }
       }
-      this.playerRacePosition = rank
-    }
-
-    // 5. Paddock Beacon Animation
-    if (this.paddockBeacon) {
-      this.paddockBeacon.rotation.z += dt * 1.5
-      const s = 1 + Math.sin(time * 3) * 0.12
-      this.paddockBeacon.scale.set(s, s, 1)
+      this.playerRacePosition = Math.min(6, rank)
     }
   }
 
-  // Returns competitor cars for Minimap drawing
   getCompetitors(): readonly RallyCompetitor[] {
     return this.competitors
   }
@@ -867,7 +962,7 @@ export class RallyRace {
       comp.car.dispose()
     }
     this.competitors.length = 0
-    this.paddockCar?.dispose()
+    this.playerRallyCar = null
     this.scene.remove(this.root)
   }
 }

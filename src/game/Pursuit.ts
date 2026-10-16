@@ -22,6 +22,11 @@ export class Pursuit {
   private readonly units: PoliceUnit[] = []
   private spawnTimer = 0
   private bust = 0
+  rallyMissionActive = false
+
+  setRallyMissionActive(active: boolean): void {
+    this.rallyMissionActive = active
+  }
 
   constructor(scene: THREE.Scene, wanted: WantedSystem) {
     this.scene = scene
@@ -81,11 +86,15 @@ export class Pursuit {
     }
 
     const playerPosition = targetPosition
-    const wantedCars = Math.min(7, 1 + Math.floor((level - 1) * 0.72))
+    const wantedCars = Math.min(10, Math.max(1, Math.floor(level * 1.2) + 1))
     this.spawnTimer -= dt
     if (this.units.length < wantedCars && this.spawnTimer <= 0) {
-      this.spawnPolice(playerPosition, level)
-      this.spawnTimer = Math.max(0.65, 3.3 - level * 0.25)
+      // Se a missão de rally estiver ativa ou o jogador estiver no circuito, a polícia não spawna
+      const inRallyArea = playerPosition.x > 700 || player.kind === 'rally_car'
+      if (!this.rallyMissionActive && !inRallyArea) {
+        this.spawnPolice(playerPosition, level)
+        this.spawnTimer = Math.max(0.65, 3.3 - level * 0.25)
+      }
     }
     let closeCalls = 0
     let vehicleCollisions = 0
@@ -101,6 +110,13 @@ export class Pursuit {
       const dx = playerPosition.x - car.root.position.x
       const dz = playerPosition.z - car.root.position.z
       const distance = Math.hypot(dx, dz)
+
+      // Se a missão de rally estiver ativa, viaturas desaparecem se entrarem perto do circuito (X > 700)
+      if (this.rallyMissionActive && (car.root.position.x > 700 || playerPosition.x > 700)) {
+        car.dispose()
+        this.units.splice(index, 1)
+        continue
+      }
 
       if (distance > 235 || car.root.position.z > playerPosition.z + 225 || (car.exploded && car.hitCooldown <= 0)) {
         car.dispose()
@@ -125,12 +141,25 @@ export class Pursuit {
         car.speed *= Math.max(0, 1 - dt * 1.8)
         car.integrateMovement(dt)
       } else {
-        const targetYaw = Math.atan2(-dx, -dz)
-        const yawDifference = THREE.MathUtils.euclideanModulo(targetYaw - car.yaw + Math.PI, Math.PI * 2) - Math.PI
-        car.yaw += THREE.MathUtils.clamp(yawDifference, -dt * (1.25 + level * 0.035), dt * (1.25 + level * 0.035))
-        const chaseSpeed = 24 + level * 1.65
-        car.speed += (chaseSpeed - car.speed) * Math.min(1, dt * 0.8)
-        car.integrateMovement(dt)
+        // Se a missão de rally estiver ativa e o jogador estiver dentro do circuito (x > 800), a polícia para na barreira da entrada
+        if (this.rallyMissionActive && playerPosition.x > 800) {
+          const entryX = 790
+          const entryZ = 0
+          const toEntryX = entryX - car.root.position.x
+          const toEntryZ = entryZ - car.root.position.z
+          const targetYaw = Math.atan2(-toEntryX, -toEntryZ)
+          const yawDifference = THREE.MathUtils.euclideanModulo(targetYaw - car.yaw + Math.PI, Math.PI * 2) - Math.PI
+          car.yaw += THREE.MathUtils.clamp(yawDifference, -dt * 1.5, dt * 1.5)
+          car.speed = Math.min(car.speed, 10)
+          car.integrateMovement(dt)
+        } else {
+          const targetYaw = Math.atan2(-dx, -dz)
+          const yawDifference = THREE.MathUtils.euclideanModulo(targetYaw - car.yaw + Math.PI, Math.PI * 2) - Math.PI
+          car.yaw += THREE.MathUtils.clamp(yawDifference, -dt * (1.25 + level * 0.035), dt * (1.25 + level * 0.035))
+          const chaseSpeed = 24 + level * 1.65
+          car.speed += (chaseSpeed - car.speed) * Math.min(1, dt * 0.8)
+          car.integrateMovement(dt)
+        }
       }
 
     }
@@ -205,6 +234,11 @@ export class Pursuit {
             unit.sparkCooldown = 0.22
           }
         }
+      }
+
+      // Carros de polícia não podem colidir com carros de rally elétrico nem durante o rally
+      if (this.rallyMissionActive || player.kind === 'rally_car') {
+        continue
       }
 
       const vehicleCollision = player.collideWith(car, dt)
@@ -318,7 +352,7 @@ export class Pursuit {
     this.units.push({ car, stunned: 0, hitCooldown: 0, sparkCooldown: 0, countedPass: false })
   }
 
-  private removeAll(): void {
+  public removeAll(): void {
     for (const unit of this.units) unit.car.dispose()
     this.units.length = 0
   }

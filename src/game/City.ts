@@ -2229,8 +2229,8 @@ export class City {
   }
 
   getDuneHeightAt(x: number, z: number): number {
-    // Keep Rally Track Arena in East Dunes flat on the ground
-    if (Math.abs(x - 1100) < 170 && Math.abs(z) < 170) return 0
+    // Keep Rally Track Arena in East Dunes flat on the ground (increased range for 4km track)
+    if (Math.abs(x - 1100) < 420 && Math.abs(z) < 750) return 0
 
     let maxHeight = 0
     for (const chunk of this.chunks.values()) {

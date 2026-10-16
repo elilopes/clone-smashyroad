@@ -167,6 +167,41 @@ export class Input {
     this.joystickEl.addEventListener('pointerup', handlePointerUp)
     this.joystickEl.addEventListener('pointercancel', handlePointerUp)
     this.joystickEl.addEventListener('lostpointercapture', handlePointerUp)
+
+    const bindArrowButton = (el: HTMLElement | null | undefined, throttleVal: number, steerVal: number) => {
+      if (!el) return
+      el.addEventListener('pointerdown', (e) => {
+        if (this.controlMode !== 'joystick') return
+        e.preventDefault()
+        e.stopPropagation()
+        this.joystickThrottle = throttleVal
+        if (steerVal !== 0) this.joystickSteer = steerVal
+        el.classList.add('active')
+        if (this.joystickKnobEl) {
+          const kx = steerVal !== 0 ? -steerVal * this.joystickRadius : 0
+          const ky = throttleVal !== 0 ? -throttleVal * this.joystickRadius : 0
+          this.joystickKnobEl.style.transform = `translate(${kx}px, ${ky}px)`
+        }
+      })
+      const releaseArrow = (e: Event) => {
+        e.preventDefault()
+        e.stopPropagation()
+        this.joystickThrottle = 0
+        this.joystickSteer = 0
+        el.classList.remove('active')
+        if (this.joystickKnobEl) {
+          this.joystickKnobEl.style.transform = 'translate(0px, 0px)'
+        }
+      }
+      el.addEventListener('pointerup', releaseArrow)
+      el.addEventListener('pointercancel', releaseArrow)
+      el.addEventListener('lostpointercapture', releaseArrow)
+    }
+
+    bindArrowButton(this.joystickArrows.up, 1, 0)
+    bindArrowButton(this.joystickArrows.down, -1, 0)
+    bindArrowButton(this.joystickArrows.left, 0, 1)
+    bindArrowButton(this.joystickArrows.right, 0, -1)
   }
 
   private updateJoystickPosition(clientX: number, clientY: number): void {
@@ -366,7 +401,7 @@ export class Input {
     let steer = keySteer
 
     if (this.controlMode === 'joystick') {
-      steer = this.joystickPointerId !== null && Math.abs(this.joystickSteer) > 0.05
+      steer = Math.abs(this.joystickSteer) > 0.05
         ? this.joystickSteer
         : keySteer
     } else if (this.controlMode === 'tilt') {
@@ -379,14 +414,14 @@ export class Input {
     steer = THREE.MathUtils.clamp(steer, -1, 1)
 
     let throttle = Number(pressed('w', 'arrowup', 'accelerate')) - Number(pressed('s', 'arrowdown', 'reverse'))
-    if (this.controlMode === 'joystick' && this.joystickPointerId !== null && Math.abs(this.joystickThrottle) > 0.05) {
+    if (this.controlMode === 'joystick' && Math.abs(this.joystickThrottle) > 0.05) {
       throttle = this.joystickThrottle
     }
 
     const isAuto = autoAccel !== undefined ? autoAccel : this.autoAccel
 
     if (isAuto) {
-      const isReversing = pressed('s', 'arrowdown', 'reverse') || (this.controlMode === 'joystick' && this.joystickPointerId !== null && this.joystickThrottle < -0.25)
+      const isReversing = pressed('s', 'arrowdown', 'reverse') || (this.controlMode === 'joystick' && this.joystickThrottle < -0.25)
       const isBraking = pressed('handbrake')
       if (isBraking) {
         throttle = 0

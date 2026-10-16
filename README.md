@@ -6,7 +6,7 @@
 
 ## <a name="português"></a>Português
 
-Jogo MOST WANTED CAR, um protótipo completo e jogável em 3D de perseguição veicular em HTML5, TypeScript e Three.js. Este jogo foi baseado no jogo Smash City 2. A cidade é gerada de forma procedural ao redor do carro e se estende indefinidamente enquanto a corrida continua.
+Jogo MOST WANTED CAR, um protótipo completo e jogável em 3D de perseguição veicular em HTML5, TypeScript e Three.js. A cidade é gerada de forma procedural ao redor do carro e se estende indefinidamente enquanto a corrida continua.
 
 Copia da tela
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/dd6cd006-9e5c-4545-99d1-acf96b7aefe8" />
@@ -98,7 +98,7 @@ O protótipo foi  expandido com sistemas urbanos interativos de física e IA de 
 
 # MOST WANTED CAR
 
-Game MOST WANTED CAR, a complete prototype and playable 3D vehicle pursuit built using HTML5, TypeScript, and Three.js. This game is basead at game Smash City 2. The city is generated procedurally around the player's vehicle, extending infinitely as the race progresses.
+Game MOST WANTED CAR, a complete prototype and playable 3D vehicle pursuit built using HTML5, TypeScript, and Three.js. The city is generated procedurally around the player's vehicle, extending infinitely as the race progresses.
 
 Print screen
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/dd6cd006-9e5c-4545-99d1-acf96b7aefe8" />

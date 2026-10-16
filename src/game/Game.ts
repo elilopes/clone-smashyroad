@@ -80,8 +80,8 @@ export class Game {
   private readonly energyFill = document.querySelector<HTMLElement>('#energy-fill')!
   private readonly energyHits = document.querySelector<HTMLElement>('#energy-hits')!
   private readonly energyStatus = document.querySelector<HTMLElement>('#energy-status')!
-  private readonly timeValue = document.querySelector<HTMLElement>('#time-value')!
-  private readonly cashValue = document.querySelector<HTMLElement>('#cash-value')!
+  private readonly timeValue = document.querySelector<HTMLElement>('#status-time-value') || document.querySelector<HTMLElement>('#time-value')!
+  private readonly cashValue = document.querySelector<HTMLElement>('#status-cash-value') || document.querySelector<HTMLElement>('#cash-value')!
   private readonly toastElement = document.querySelector<HTMLElement>('#toast')!
   private readonly tankerMissionPanel = document.querySelector<HTMLElement>('#tanker-mission-panel')!
   private readonly tankerMissionStageEl = document.querySelector<HTMLElement>('#tanker-mission-stage')!
@@ -221,9 +221,9 @@ export class Game {
   private readonly playGamesSignInBtn = document.querySelector<HTMLButtonElement>('#playgames-sign-in-btn')
   private readonly closeAuthModalBtn = document.querySelector<HTMLButtonElement>('#close-auth-modal-btn')
   private readonly authStatusMsg = document.querySelector<HTMLElement>('#auth-status-msg')
-  private readonly levelValue = document.querySelector<HTMLElement>('#level-value')
-  private readonly xpValue = document.querySelector<HTMLElement>('#xp-value')
-  private readonly xpBarFill = document.querySelector<HTMLElement>('#xp-bar-fill')
+  private readonly levelValue = document.querySelector<HTMLElement>('#status-level-value') || document.querySelector<HTMLElement>('#level-value')
+  private readonly xpValue = document.querySelector<HTMLElement>('#status-xp-value') || document.querySelector<HTMLElement>('#xp-value')
+  private readonly xpBarFill = document.querySelector<HTMLElement>('#status-xp-bar-fill') || document.querySelector<HTMLElement>('#xp-bar-fill')
   private readonly profileUserName = document.querySelector<HTMLElement>('#profile-user-name')
   private readonly profileSyncBadge = document.querySelector<HTMLElement>('#profile-sync-badge')
   private readonly profileLevelVal = document.querySelector<HTMLElement>('#profile-level-val')
@@ -258,6 +258,7 @@ export class Game {
   private readonly fpsOptionsContainer = document.querySelector<HTMLElement>('#fps-options-container')
   private readonly shadowOptionsContainer = document.querySelector<HTMLElement>('#shadow-options-container')
   private readonly graphicsOptionsContainer = document.querySelector<HTMLElement>('#graphics-options-container')
+  private readonly startGraphicsContainer = document.querySelector<HTMLElement>('#start-graphics-options')
   private readonly accelOptionsContainer = document.querySelector<HTMLElement>('#accel-options-container')
   private readonly controlOptionsContainer = document.querySelector<HTMLElement>('#control-options-container')
   private readonly langOptionsContainer = document.querySelector<HTMLElement>('#lang-options-container')
@@ -412,6 +413,11 @@ export class Game {
       this.updateHud()
       this.showToast(`✨ ARCO DE PONTUAÇÃO! +${points} PTS`)
     }
+    this.rallyRace.onRaceStarted = () => {
+      this.pursuit.removeAll() // Viaturas da policia desaparecem quando a missão inicia!
+      this.pursuit.setRallyMissionActive(true)
+      this.showToast('🏁 MISSÃO RALLY INICIADA! A POLÍCIA SE AFASTOU.')
+    }
     this.rallyRace.onTurboCollected = () => {
       this.showToast('⚡ TURBO BOOST ATIVADO!')
     }
@@ -424,8 +430,14 @@ export class Game {
       this.cash += rewardCash
       this.distance += rewardPoints
       localStorage.setItem(CASH_KEY, String(this.cash))
+      this.pursuit.setRallyMissionActive(false)
       this.updateHud()
-      this.showToast('🏆 CAMPEÃO DO RALLY DAS DUNAS! +$5.000 +10.000 PTS')
+      this.showToast('🏆 VITÓRIA! MISSÃO RALLY CONCLUÍDA EM 1º/2º LUGAR! +$6.000 +10.000 PTS')
+    }
+    this.rallyRace.onRaceLost = (position) => {
+      this.pursuit.setRallyMissionActive(false)
+      this.updateHud()
+      this.showToast(`❌ MISSÃO FRACASSADA! Você terminou em ${position}º lugar (necessário 1º ou 2º).`)
     }
 
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
@@ -612,20 +624,33 @@ export class Game {
     })
 
     const statusModal = document.querySelector<HTMLElement>('#status-modal')
-    document.querySelector<HTMLButtonElement>('#status-button')!.addEventListener('click', () => {
+    document.querySelector<HTMLButtonElement>('#status-button')?.addEventListener('click', () => {
+      this.updateHud()
       statusModal?.classList.remove('hidden')
     })
-    document.querySelector<HTMLButtonElement>('#close-status-btn')!.addEventListener('click', () => {
+    document.querySelector<HTMLButtonElement>('#close-status-btn')?.addEventListener('click', () => {
       statusModal?.classList.add('hidden')
     })
-
-    document.querySelector<HTMLButtonElement>('#sound-button')!.addEventListener('click', (event) => {
-      const button = event.currentTarget as HTMLButtonElement
-      const enabled = this.sound.toggle()
-      button.classList.toggle('muted', !enabled)
-      button.setAttribute('aria-label', enabled ? 'Desativar som' : 'Ativar som')
-      button.textContent = enabled ? '♪ ATIVAR/DESATIVAR SOM' : '× ATIVAR/DESATIVAR SOM'
+    statusModal?.addEventListener('click', (e) => {
+      if (e.target === statusModal) {
+        statusModal.classList.add('hidden')
+      }
     })
+
+    const soundButton = document.querySelector<HTMLButtonElement>('#sound-button')
+    if (soundButton) {
+      const updateSoundBtn = (enabled: boolean) => {
+        soundButton.classList.toggle('active', enabled)
+        soundButton.classList.toggle('muted', !enabled)
+        soundButton.setAttribute('aria-label', enabled ? 'Desativar som' : 'Ativar som')
+        soundButton.textContent = enabled ? '🔊 SOM: ATIVADO' : '🔈 SOM: SILENCIADO'
+      }
+      updateSoundBtn(!this.sound.muted)
+      soundButton.addEventListener('click', () => {
+        const enabled = this.sound.toggle()
+        updateSoundBtn(enabled)
+      })
+    }
     this.planeShootBtn?.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       if (this.inPlane && this.kingKongMissionStage === 'active') {
@@ -764,13 +789,19 @@ export class Game {
       }
     })
 
-    this.graphicsOptionsContainer?.addEventListener('click', (e) => {
+    const handleGraphicsClick = (e: MouseEvent) => {
       const btn = (e.target as HTMLElement).closest('.settings-option-btn')
       if (!btn) return
-      this.graphicsOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
-      btn.classList.add('active')
       const graphicsVal = (btn.getAttribute('data-graphics') || 'medium') as GraphicsDesignMode
       this.applyGraphicsMode(graphicsVal)
+
+      const allContainers = [this.graphicsOptionsContainer, this.startGraphicsContainer]
+      for (const container of allContainers) {
+        container?.querySelectorAll('.settings-option-btn').forEach(b => {
+          if (b.getAttribute('data-graphics') === graphicsVal) b.classList.add('active')
+          else b.classList.remove('active')
+        })
+      }
 
       const isPt = this.currentGameLang === 'pt'
       let modeDesc = ''
@@ -782,7 +813,10 @@ export class Game {
         modeDesc = isPt ? 'ALTA: Greeble High Poly + Merged Geo + SSAO' : 'HIGH: High Poly Greeble + Merged Geo + SSAO'
       }
       this.showToast(`🎨 ${modeDesc}`)
-    })
+    }
+
+    this.graphicsOptionsContainer?.addEventListener('click', handleGraphicsClick)
+    this.startGraphicsContainer?.addEventListener('click', handleGraphicsClick)
 
     this.accelOptionsContainer?.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('.settings-option-btn')
@@ -851,6 +885,11 @@ export class Game {
         this.closeSettings()
         return
       }
+      const statusModal = document.querySelector<HTMLElement>('#status-modal')
+      if (event.key === 'Escape' && statusModal && !statusModal.classList.contains('hidden') && !event.repeat) {
+        statusModal.classList.add('hidden')
+        return
+      }
       if ((event.key.toLowerCase() === 'p' || event.key === 'Escape') && !event.repeat) {
         this.togglePause()
         return
@@ -882,7 +921,7 @@ export class Game {
     this.setPaused(false)
     this.input.clear()
     this.pursuit.reset()
-    this.wanted.reset()
+    this.wanted.setLevel(1)
     this.missions.reset()
     this.city.clear()
     this.pedestrians.clear()
@@ -982,6 +1021,7 @@ export class Game {
     this.rallyRace.playerLap = 1
     this.rallyRace.playerHasWon = false
     this.rallyRacePanel?.classList.add('hidden')
+    this.pursuit.setRallyMissionActive(false)
     this.updateVehicleButton()
     this.startOverlay.classList.add('hidden')
     this.endOverlay.classList.add('hidden')
@@ -1341,6 +1381,15 @@ export class Game {
     for (const car of this.abandonedCars) {
       car.groundElevation = this.city.getDuneHeightAt(car.root.position.x, car.root.position.z)
       car.root.position.y = car.groundElevation + car.climbLift
+    }
+    if (this.rallyRace) {
+      for (const comp of this.rallyRace.getCompetitors()) {
+        const duneY = this.city.getDuneHeightAt(comp.car.root.position.x, comp.car.root.position.z)
+        comp.car.groundElevation = duneY
+        if (!this.rallyRace.raceStarted) {
+          comp.car.root.position.y = Math.max(0.08, duneY + 0.08)
+        }
+      }
     }
 
     const pedestrianHits = !this.inPlane ? this.pedestrians.update(dt, actorPosition, actorYaw, this.inVehicle ? speed : 0) : 0
@@ -2886,13 +2935,6 @@ export class Game {
     }
 
     if (this.rallyRace) {
-      if (this.rallyRace.paddockCar) {
-        candidates.push({
-          car: this.rallyRace.paddockCar,
-          distance: charPos.distanceTo(this.rallyRace.paddockCar.root.position),
-          source: 'abandoned',
-        })
-      }
       for (const comp of this.rallyRace.getCompetitors()) {
         candidates.push({
           car: comp.car,
@@ -3280,12 +3322,40 @@ export class Game {
     this.speedFill.style.width = `${Math.min(100, (kmh / 240) * 100)}%`
     this.timeValue.textContent = this.formatTime(this.elapsed)
     this.cashValue.textContent = `$ ${this.cash.toLocaleString('pt-BR')}`
+
+    // Desktop Header Run Stats
+    const headerLevel = document.querySelector<HTMLElement>('#header-level-value')
+    if (headerLevel) headerLevel.textContent = `NV ${user.level}`
+    const headerXp = document.querySelector<HTMLElement>('#header-xp-value')
+    const headerXpFill = document.querySelector<HTMLElement>('#header-xp-bar-fill')
+    const reqXp = getXpRequiredForLevel(user.level)
+    if (headerXp) headerXp.textContent = `${user.xp} / ${reqXp} XP`
+    if (headerXpFill) headerXpFill.style.width = `${Math.min(100, (user.xp / reqXp) * 100)}%`
+    const headerCash = document.querySelector<HTMLElement>('#header-cash-value')
+    if (headerCash) headerCash.textContent = `$ ${this.cash.toLocaleString('pt-BR')}`
+    const headerTime = document.querySelector<HTMLElement>('#header-time-value')
+    if (headerTime) headerTime.textContent = this.formatTime(this.elapsed)
     
     // Status Modal
-    document.querySelector<HTMLElement>('#status-level-value')!.textContent = `NV ${user.level}`
-    document.querySelector<HTMLElement>('#status-distance-value')!.textContent = `${Math.floor(this.distance).toLocaleString('pt-BR')} m`
-    document.querySelector<HTMLElement>('#status-time-value')!.textContent = this.formatTime(this.elapsed)
-    document.querySelector<HTMLElement>('#status-cash-value')!.textContent = `$ ${this.cash.toLocaleString('pt-BR')}`
+    const formattedTime = this.formatTime(this.elapsed)
+    const formattedCash = `$ ${this.cash.toLocaleString('pt-BR')}`
+    const formattedDistance = `${Math.floor(this.distance).toLocaleString('pt-BR')} m`
+
+    const statusLevelEl = document.querySelector<HTMLElement>('#status-level-value')
+    if (statusLevelEl) statusLevelEl.textContent = `NV ${user.level}`
+    const statusDistEl = document.querySelector<HTMLElement>('#status-distance-value')
+    if (statusDistEl) statusDistEl.textContent = formattedDistance
+    const statusTimeEl = document.querySelector<HTMLElement>('#status-time-value')
+    if (statusTimeEl) statusTimeEl.textContent = formattedTime
+    const statusCashEl = document.querySelector<HTMLElement>('#status-cash-value')
+    if (statusCashEl) statusCashEl.textContent = formattedCash
+    const statusXpEl = document.querySelector<HTMLElement>('#status-xp-value')
+    const statusXpFill = document.querySelector<HTMLElement>('#status-xp-bar-fill')
+    if (statusXpEl && statusXpFill) {
+      const requiredXp = getXpRequiredForLevel(user.level)
+      statusXpEl.textContent = `${user.xp} / ${requiredXp} XP`
+      statusXpFill.style.width = `${Math.min(100, (user.xp / requiredXp) * 100)}%`
+    }
 
     this.wantedLabel.textContent = `NÍVEL ${this.wanted.level} / 10`
     this.wantedPanel.classList.toggle('active', this.wanted.level > 0)
@@ -4853,12 +4923,15 @@ export class Game {
 
     // Update active class on Graphics Mode buttons
     const currentGraphicsMode = localStorage.getItem('smash_graphics_mode') || 'medium'
-    const graphicsButtons = this.graphicsOptionsContainer?.querySelectorAll('.settings-option-btn')
-    graphicsButtons?.forEach((btn) => {
-      const modeVal = btn.getAttribute('data-graphics')
-      if (modeVal === currentGraphicsMode) btn.classList.add('active')
-      else btn.classList.remove('active')
-    })
+    const allGraphicsContainers = [this.graphicsOptionsContainer, this.startGraphicsContainer]
+    for (const container of allGraphicsContainers) {
+      const graphicsButtons = container?.querySelectorAll('.settings-option-btn')
+      graphicsButtons?.forEach((btn) => {
+        const modeVal = btn.getAttribute('data-graphics')
+        if (modeVal === currentGraphicsMode) btn.classList.add('active')
+        else btn.classList.remove('active')
+      })
+    }
 
     // Update active class on Language buttons
     const langButtons = this.langOptionsContainer?.querySelectorAll('.settings-option-btn')
@@ -4867,6 +4940,16 @@ export class Game {
       if (langVal === this.currentGameLang) btn.classList.add('active')
       else btn.classList.remove('active')
     })
+
+    // Update Sound button state
+    const soundBtn = document.querySelector<HTMLButtonElement>('#sound-button')
+    if (soundBtn) {
+      const isEnabled = !this.sound.muted
+      soundBtn.classList.toggle('active', isEnabled)
+      soundBtn.classList.toggle('muted', !isEnabled)
+      soundBtn.setAttribute('aria-label', isEnabled ? 'Desativar som' : 'Ativar som')
+      soundBtn.textContent = isEnabled ? '🔊 SOM: ATIVADO' : '🔈 SOM: SILENCIADO'
+    }
 
     this.settingsModal.classList.remove('hidden')
   }

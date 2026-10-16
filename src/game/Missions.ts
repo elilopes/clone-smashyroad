@@ -14,6 +14,7 @@ export type MissionType =
   | 'taxi_fares'
   | 'speed_bomb'
   | 'rampage_police'
+  | 'rally_race'
 
 export type MissionEvent = {
   distance: number
@@ -31,6 +32,7 @@ export type MissionEvent = {
   taxiFares?: number
   speedBomb?: number
   rampagePolice?: number
+  rallyRaceWin?: number
 }
 
 type MissionDefinition = {
@@ -39,7 +41,7 @@ type MissionDefinition = {
   title: string
   target: number
   reward: number
-  unit: 'm' | 's' | '$' | 'x' | 'lv' | 'HP'
+  unit: 'm' | 's' | '$' | 'x' | 'lv' | 'HP' | '🏁'
 }
 
 export type MissionState = MissionDefinition & {
@@ -60,6 +62,7 @@ export const ALL_CONTRACTS: MissionDefinition[] = [
   { id: 'monster-crush', type: 'monster_crush', title: 'Esmague 10 carros com o Monster Truck', target: 10, reward: 3500, unit: 'x' },
   { id: 'tanker-fuel', type: 'tanker_deliver', title: 'Entregue combustível inflamável no posto', target: 1, reward: 2500, unit: 'x' },
   { id: 'bus-commuters', type: 'bus_passengers', title: 'Embarque 10 passageiros no ônibus', target: 10, reward: 3000, unit: 'x' },
+  { id: 'rally-dunes', type: 'rally_race', title: 'Rally das Dunas: Termine em 1º ou 2º lugar no circuito elétrico', target: 1, reward: 6000, unit: '🏁' },
 
   // 2. Exploração, Velocidade & Sobrevivência
   { id: 'stretch-1', type: 'distance', title: 'Percorra 350 metros pela cidade', target: 350, reward: 180, unit: 'm' },
@@ -124,6 +127,7 @@ export class Missions {
       if (mission.type === 'taxi_fares' && event.taxiFares !== undefined) mission.progress += event.taxiFares
       if (mission.type === 'speed_bomb' && event.speedBomb !== undefined) mission.progress = Math.max(mission.progress, event.speedBomb)
       if (mission.type === 'rampage_police' && event.rampagePolice !== undefined) mission.progress = Math.max(mission.progress, event.rampagePolice)
+      if (mission.type === 'rally_race' && event.rallyRaceWin !== undefined) mission.progress = Math.max(mission.progress, event.rallyRaceWin)
 
       if (mission.progress >= mission.target) {
         mission.progress = mission.target
@@ -134,6 +138,10 @@ export class Missions {
     }
 
     return justCompleted
+  }
+
+  recordRallyRaceWin(): MissionState[] {
+    return this.update(0, { distance: 0, coins: 0, time: 0, wanted: 0, closeCalls: 0, rallyRaceWin: 1 })
   }
 
   recordTaxiFare(count = 1): MissionState[] {
