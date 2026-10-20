@@ -42,7 +42,7 @@ type BuildingVisual = { matrix: THREE.Matrix4; color: THREE.Color; bounds: Bound
 type CityChunk = {
   group: THREE.Group
   bounds: Bounds[]
-  dunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number }[]
+  dunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number; rotY?: number }[]
   coins: Coin[]
   groundMaterial: THREE.MeshStandardMaterial
   buildingVisuals: BuildingVisual[]
@@ -209,8 +209,9 @@ export class City {
 
   private graphicsMode: GraphicsDesignMode = 'medium'
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, graphicsMode: GraphicsDesignMode = 'medium') {
     this.scene = scene
+    this.graphicsMode = graphicsMode
     this.ground = new THREE.Mesh(
       new THREE.PlaneGeometry(5000, 5000),
       new THREE.MeshStandardMaterial({ color: 0x78946b, roughness: 1 }),
@@ -454,12 +455,16 @@ export class City {
     return tints.map((color) => new THREE.MeshStandardMaterial({ map: texture, color, roughness: 0.9 }))
   }
 
-  ensureAround(z: number): void {
+  ensureAround(z: number, playerX = 0, keepRallyChunks = true): void {
+    const inRally = keepRallyChunks || playerX > 650
     const center = Math.floor(z / CHUNK_DEPTH)
-    for (let index = center - 2; index <= center + 2; index += 1) {
+    const minIdx = inRally ? Math.min(center - 2, -5) : center - 2
+    const maxIdx = inRally ? Math.max(center + 2, 5) : center + 2
+    for (let index = minIdx; index <= maxIdx; index += 1) {
       if (!this.chunks.has(index)) this.createChunk(index)
     }
     for (const [index, chunk] of this.chunks) {
+      if (inRally && index >= -5 && index <= 5) continue
       if (Math.abs(index - center) > 3) this.removeChunk(index, chunk)
     }
   }
@@ -467,7 +472,7 @@ export class City {
   private createChunk(index: number): void {
     const group = new THREE.Group()
     const bounds: Bounds[] = []
-    const chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number }[] = []
+    const chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number; rotY?: number }[] = []
     const chunkCoins: Coin[] = []
     const random = randomFrom((index + 10091) * 785839)
     const zStart = index * CHUNK_DEPTH
@@ -1729,7 +1734,7 @@ export class City {
     _zMiddle: number,
     bounds: Bounds[],
     random: () => number,
-    chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number }[]
+    chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number; rotY?: number }[]
   ): void {
     const sandBaseMat = this.sandMaterial
 
@@ -1760,7 +1765,7 @@ export class City {
     oceanEast.receiveShadow = true
     group.add(oceanEast)
 
-    const duneCountPerSide = 14
+    const duneCountPerSide = this.graphicsMode === 'low' ? 7 : 14
     const duneGeo = new THREE.SphereGeometry(1, 16, 12)
 
     const createDunesSide = (sideXCenter: number) => {
@@ -1775,30 +1780,33 @@ export class City {
         // Leave East Rally Track Arena clear of dunes for oval circuit
         if (sideXCenter > 0 && Math.abs(dx - 1100) < 170 && Math.abs(dz) < 170) continue
 
-        const scaleX = 22 + random() * 40
-        const scaleY = 3.5 + random() * 9.5
-        const scaleZ = 28 + random() * 48
+        const scaleX = 32 + random() * 26
+        const scaleY = 3.2 + random() * 3.6
+        const scaleZ = 32 + random() * 26
 
+        const rotY = 0
         const duneMesh = new THREE.Mesh(duneGeo, random() > 0.4 ? this.sandMaterial : this.sandDarkMaterial)
         duneMesh.position.set(dx, -scaleY * 0.22, dz)
         duneMesh.scale.set(scaleX, scaleY, scaleZ)
-        duneMesh.rotation.y = random() * Math.PI
-        duneMesh.rotation.z = (random() - 0.5) * 0.12
         duneMesh.receiveShadow = true
         duneMesh.castShadow = true
         group.add(duneMesh)
 
-        chunkDunes.push({ dx, dz, scaleX, scaleY, scaleZ })
+        chunkDunes.push({ dx, dz, scaleX, scaleY, scaleZ, rotY })
 
         // Generate multiple detailed objects per dune to populate the beach/sand environment
-        const objCount = 1 + Math.floor(random() * 3)
+        const objCount = this.graphicsMode === 'low' ? Math.floor(random() * 2) : 1 + Math.floor(random() * 3)
+        const cosDune = Math.cos(rotY)
+        const sinDune = Math.sin(rotY)
         for (let j = 0; j < objCount; j++) {
           const plantX = dx + (random() - 0.5) * (scaleX * 0.7)
           const plantZ = dz + (random() - 0.5) * (scaleZ * 0.7)
 
-          // Calculate exact dune surface height so they never float or sink
-          const nx = (plantX - dx) / scaleX
-          const nz = (plantZ - dz) / scaleZ
+          // Calculate exact dune surface height taking rotY into account so they never float or sink
+          const localPX = (plantX - dx) * cosDune + (plantZ - dz) * sinDune
+          const localPZ = -(plantX - dx) * sinDune + (plantZ - dz) * cosDune
+          const nx = localPX / scaleX
+          const nz = localPZ / scaleZ
           const normDistSq = nx * nx + nz * nz
           let plantY = -0.11
           if (normDistSq < 0.98) {
@@ -2229,18 +2237,23 @@ export class City {
   }
 
   getDuneHeightAt(x: number, z: number): number {
-    // Keep Rally Track Arena in East Dunes flat on the ground (increased range for 4km track)
-    if (Math.abs(x - 1100) < 420 && Math.abs(z) < 750) return 0
-
     let maxHeight = 0
     for (const chunk of this.chunks.values()) {
       for (const d of chunk.dunes) {
-        const nx = (x - d.dx) / d.scaleX
-        const nz = (z - d.dz) / d.scaleZ
+        let nx = (x - d.dx) / d.scaleX
+        let nz = (z - d.dz) / d.scaleZ
+        if (d.rotY) {
+          const cosR = Math.cos(d.rotY)
+          const sinR = Math.sin(d.rotY)
+          const localX = (x - d.dx) * cosR - (z - d.dz) * sinR
+          const localZ = (x - d.dx) * sinR + (z - d.dz) * cosR
+          nx = localX / d.scaleX
+          nz = localZ / d.scaleZ
+        }
         const normDistSq = nx * nx + nz * nz
-        if (normDistSq < 0.98) {
+        if (normDistSq < 1.0) {
           const cy = -d.scaleY * 0.22
-          const ySurface = cy + d.scaleY * Math.sqrt(1 - normDistSq)
+          const ySurface = cy + d.scaleY * Math.sqrt(Math.max(0, 1 - normDistSq))
           if (ySurface > maxHeight) {
             maxHeight = ySurface
           }

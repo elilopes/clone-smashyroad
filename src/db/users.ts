@@ -9,7 +9,6 @@ import {
   query,
   orderBy,
   limit,
-  getDocFromServer,
   type Firestore,
 } from 'firebase/firestore'
 import {
@@ -326,7 +325,7 @@ export function getTodayDateString(): string {
 }
 
 export function getXpRequiredForLevel(level: number): number {
-  return Math.floor(150 * Math.pow(1.22, Math.max(0, level - 1)))
+  return Math.floor(4000 * Math.pow(1.5, Math.max(0, level - 1)))
 }
 
 function createDefaultGuestProfile(): UserProfile {
@@ -384,8 +383,6 @@ class UserDatabaseManager {
         : getFirestore(this.app)
       this.auth = getAuth(this.app)
 
-      this.testFirestoreConnection()
-
       onAuthStateChanged(this.auth, async (user) => {
         if (user) {
           const providerId = user.providerData?.[0]?.providerId === 'google.com' ? 'google' : 'google'
@@ -394,16 +391,6 @@ class UserDatabaseManager {
       })
     } catch (err) {
       console.warn('[UsersDB] Firebase initialization fallback to offline mode:', err)
-    }
-  }
-
-  private async testFirestoreConnection(): Promise<void> {
-    if (!this.db) return
-    try {
-      await getDocFromServer(doc(this.db, 'test', 'connection'))
-    } catch (err) {
-      console.error('[UsersDB] Firestore connection test failed:', err)
-      // Offline fallback
     }
   }
 

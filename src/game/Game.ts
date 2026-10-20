@@ -213,6 +213,11 @@ export class Game {
   private readonly rallyRacePanel = document.querySelector<HTMLElement>('#rally-race-panel')
   private readonly rallyPositionValEl = document.querySelector<HTMLElement>('#rally-position-val')
   private readonly rallyLapValEl = document.querySelector<HTMLElement>('#rally-lap-val')
+  private readonly rallyCountdownEl = document.querySelector<HTMLElement>('#rally-countdown')
+  private readonly countdownValEl = document.querySelector<HTMLElement>('#countdown-val')
+  private readonly rallyResultBannerEl = document.querySelector<HTMLElement>('#rally-result-banner')
+  private readonly rallyResultTitleEl = document.querySelector<HTMLElement>('#rally-result-title')
+  private readonly rallyResultSubtitleEl = document.querySelector<HTMLElement>('#rally-result-subtitle')
 
   // 4. Auth & Progression (Google & Play Games via users.ts)
   private readonly authButton = document.querySelector<HTMLButtonElement>('#auth-button')
@@ -358,7 +363,7 @@ export class Game {
     this.sun.castShadow = shadowsEnabled
     this.targetFps = 30
     this.fpsInterval = 1000 / 30
-    this.city = new City(this.scene)
+    this.city = new City(this.scene, this.graphicsMode)
 
     this.graphicsMode = (localStorage.getItem('smash_graphics_mode') as GraphicsDesignMode) || 'medium'
     this.initPostProcessing()
@@ -413,6 +418,22 @@ export class Game {
       this.updateHud()
       this.showToast(`✨ ARCO DE PONTUAÇÃO! +${points} PTS`)
     }
+    this.rallyRace.onCountdownTick = (count) => {
+      if (this.rallyCountdownEl && this.countdownValEl) {
+        this.rallyCountdownEl.classList.remove('hidden')
+        this.countdownValEl.textContent = String(count)
+        this.countdownValEl.style.color = '#facc15'
+      }
+    }
+    this.rallyRace.onCountdownGo = () => {
+      if (this.rallyCountdownEl && this.countdownValEl) {
+        this.countdownValEl.textContent = 'LARGADA! 🏁'
+        this.countdownValEl.style.color = '#22c55e'
+        setTimeout(() => {
+          this.rallyCountdownEl?.classList.add('hidden')
+        }, 900)
+      }
+    }
     this.rallyRace.onRaceStarted = () => {
       this.pursuit.removeAll() // Viaturas da policia desaparecem quando a missão inicia!
       this.pursuit.setRallyMissionActive(true)
@@ -420,6 +441,9 @@ export class Game {
     }
     this.rallyRace.onTurboCollected = () => {
       this.showToast('⚡ TURBO BOOST ATIVADO!')
+    }
+    this.rallyRace.onMessage = (msg) => {
+      this.showToast(msg)
     }
     this.rallyRace.onLapCompleted = (lap, position) => {
       this.distance += 1000
@@ -432,16 +456,35 @@ export class Game {
       localStorage.setItem(CASH_KEY, String(this.cash))
       this.pursuit.setRallyMissionActive(false)
       this.updateHud()
-      this.showToast('🏆 VITÓRIA! MISSÃO RALLY CONCLUÍDA EM 1º/2º LUGAR! +$6.000 +10.000 PTS')
+      this.sound.effect('upgrade')
+      if (this.rallyResultBannerEl && this.rallyResultTitleEl && this.rallyResultSubtitleEl) {
+        this.rallyResultBannerEl.classList.remove('hidden', 'defeat')
+        this.rallyResultTitleEl.textContent = '🏆 VITÓRIA! MISSÃO CONCLUÍDA!'
+        this.rallyResultSubtitleEl.textContent = `Você terminou em ${this.rallyRace.playerRacePosition}º lugar! +$6.000 +10.000 PTS`
+        setTimeout(() => {
+          this.rallyResultBannerEl?.classList.add('hidden')
+        }, 8000)
+      }
+      this.showToast('🏆 VITÓRIA! MISSÃO CONCLUÍDA! (Você terminou em 1º/2º lugar!) +$6.000 +10.000 PTS')
     }
     this.rallyRace.onRaceLost = (position) => {
       this.pursuit.setRallyMissionActive(false)
       this.updateHud()
-      this.showToast(`❌ MISSÃO FRACASSADA! Você terminou em ${position}º lugar (necessário 1º ou 2º).`)
+      this.sound.effect('crash')
+      if (this.rallyResultBannerEl && this.rallyResultTitleEl && this.rallyResultSubtitleEl) {
+        this.rallyResultBannerEl.classList.remove('hidden')
+        this.rallyResultBannerEl.classList.add('defeat')
+        this.rallyResultTitleEl.textContent = '❌ DERROTA! MISSÃO FRACASSADA!'
+        this.rallyResultSubtitleEl.textContent = `Você terminou em ${position}º lugar (necessário 1º ou 2º).`
+        setTimeout(() => {
+          this.rallyResultBannerEl?.classList.add('hidden')
+        }, 8000)
+      }
+      this.showToast(`❌ DERROTA! MISSÃO FRACASSADA! Você terminou em ${position}º lugar (necessário 1º ou 2º).`)
     }
 
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
-    this.city.ensureAround(this.player.root.position.z)
+    this.city.ensureAround(this.player.root.position.z, this.player.root.position.x, true)
     this.pedestrians.ensureAround(this.player.root.position.z)
     this.createHud()
     this.bindControls()
@@ -598,6 +641,20 @@ export class Game {
       this.contractsTabCompletedBtn?.classList.add('active')
       this.contractsTabActiveBtn?.classList.remove('active')
       this.updateMissionCards()
+    })
+
+    document.querySelector<HTMLButtonElement>('#close-app-btn')?.addEventListener('click', () => {
+      try {
+        const Capacitor = (window as any).Capacitor;
+        // Only attempt exitApp on native platforms (not 'web')
+        if (Capacitor && Capacitor.getPlatform() !== 'web' && Capacitor.isPluginAvailable('App')) {
+          Capacitor.Plugins.App.exitApp();
+        } else {
+          window.close();
+        }
+      } catch (e) {
+        window.close();
+      }
     })
 
     document.querySelector<HTMLButtonElement>('#start-button')!.addEventListener('click', () => this.start())
@@ -1142,17 +1199,30 @@ export class Game {
     } else if (this.inVehicle) {
       const playerX = this.player.root.position.x
       const playerZ = this.player.root.position.z
-      const duneY = this.city.getDuneHeightAt(playerX, playerZ)
+      const forwardX = -Math.sin(this.player.yaw)
+      const forwardZ = -Math.cos(this.player.yaw)
+      const rightX = Math.cos(this.player.yaw)
+      const rightZ = -Math.sin(this.player.yaw)
+
+      const centerDuneY = this.city.getDuneHeightAt(playerX, playerZ)
+      const frontY = this.city.getDuneHeightAt(playerX + forwardX * 2.2, playerZ + forwardZ * 2.2)
+      const backY = this.city.getDuneHeightAt(playerX - forwardX * 2.2, playerZ - forwardZ * 2.2)
+      const leftY = this.city.getDuneHeightAt(playerX - rightX * 1.1, playerZ - rightZ * 1.1)
+      const rightY = this.city.getDuneHeightAt(playerX + rightX * 1.1, playerZ + rightZ * 1.1)
+
+      const duneY = Math.max(centerDuneY, frontY, backY, leftY, rightY)
       this.player.groundElevation = duneY
 
       if (duneY > 0.1) {
-        const forwardX = -Math.sin(this.player.yaw)
-        const forwardZ = -Math.cos(this.player.yaw)
-        const frontY = this.city.getDuneHeightAt(playerX + forwardX * 2.5, playerZ + forwardZ * 2.5)
-        const backY = this.city.getDuneHeightAt(playerX - forwardX * 2.5, playerZ - forwardZ * 2.5)
         this.player.dunePitch = Math.atan2(frontY - backY, 5.0)
       } else {
         this.player.dunePitch = 0
+      }
+
+      if ((this.rallyRace.isCountingDown || this.rallyRace.raceEnded) && this.player.kind === 'rally_car') {
+        controls.throttle = 0
+        controls.handbrake = true
+        this.player.speed = 0
       }
 
       collided = this.player.drive(controls, dt, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.player.root.position.y + this.player.climbLift))
@@ -1182,8 +1252,8 @@ export class Game {
           for (const m of justCompleted) this.completeMission(m)
           this.cash += Math.round(500 * this.tokenMultiplier)
           localStorage.setItem(CASH_KEY, String(this.cash))
-          this.rewardXp(75)
-          this.showToast('🚀 MEGA SALTO PERFEITO! +$500 (+75 XP)')
+          this.rewardXp(10)
+          this.showToast('🚀 MEGA SALTO PERFEITO! +$500 (+10 XP)')
           this.updateHud()
           this.updateMissionCards()
         }
@@ -1274,11 +1344,11 @@ export class Game {
     const distanceDelta = speed * dt
     this.distance += distanceDelta
     this.distanceXpAccumulator += distanceDelta
-    if (this.distanceXpAccumulator >= 60) {
+    if (this.distanceXpAccumulator >= 300) {
       this.distanceXpAccumulator = 0
-      this.rewardXp(8)
+      this.rewardXp(1)
     }
-    this.city.ensureAround(actorPosition.z)
+    this.city.ensureAround(actorPosition.z, actorPosition.x, true)
     this.pedestrians.ensureAround(actorPosition.z)
     this.city.update(dt)
     this.kingKong.update(dt, this.inPlane ? this.plane.root.position : null)
@@ -1527,9 +1597,9 @@ export class Game {
       } else {
         this.addHeat(6 * pedestrianHits)
       }
-      this.rewardXp(15 * pedestrianHits)
+      this.rewardXp(1 * pedestrianHits)
       this.sound.effect('crash')
-      this.showToast(pedestrianHits > 1 ? `PEDESTRES ATROPELADOS // PROCURADO +${pedestrianHits} NÍVEIS! (+${15 * pedestrianHits} XP)` : 'PEDESTRE ATROPELADO // PROCURADO +1 NÍVEL! (+15 XP)')
+      this.showToast(pedestrianHits > 1 ? `PEDESTRES ATROPELADOS // PROCURADO +${pedestrianHits} NÍVEIS! (+${1 * pedestrianHits} XP)` : 'PEDESTRE ATROPELADO // PROCURADO +1 NÍVEL! (+1 XP)')
     }
 
     const coins = this.city.collectAt(actorPosition.x, actorPosition.z)
@@ -1537,9 +1607,9 @@ export class Game {
       const earned = Math.round(coins * 25 * this.tokenMultiplier)
       this.cash += earned
       localStorage.setItem(CASH_KEY, String(this.cash))
-      this.rewardXp(12 * coins)
+      this.rewardXp(1 * coins)
       this.sound.effect('coin')
-      this.showToast(`FICHA RECOLHIDA +$${earned}${this.tokenMultiplier > 1 ? ' (FICHAS 2X)' : ''} (+${12 * coins} XP)`)
+      this.showToast(`FICHA RECOLHIDA +$${earned}${this.tokenMultiplier > 1 ? ' (FICHAS 2X)' : ''} (+${1 * coins} XP)`)
     }
 
     const oldLevel = this.wanted.level
@@ -1552,13 +1622,13 @@ export class Game {
       this.sound.effect('explosion')
       this.cash += Math.round(200 * this.tokenMultiplier)
       localStorage.setItem(CASH_KEY, String(this.cash))
-      this.rewardXp(40)
-      this.showToast('VIATURA DESTRUÍDA! +$200 (+40 XP)')
+      this.rewardXp(5)
+      this.showToast('VIATURA DESTRUÍDA! +$200 (+5 XP)')
 
       // Rampage / Modo Fúria Progress
       if (this.rampageActive) {
         this.rampagePoliceDestroyed++
-        this.rewardXp(25)
+        this.rewardXp(3)
         this.updateRampageMissionUI()
         if (this.rampagePoliceDestroyed >= this.rampageTargetPolice && !this.rampageCompleted) {
           this.rampageCompleted = true
@@ -1567,9 +1637,9 @@ export class Game {
           localStorage.setItem('smash_trophy_urban', 'true')
           this.cash += 4000
           localStorage.setItem(CASH_KEY, String(this.cash))
-          this.rewardXp(750)
+          this.rewardXp(120)
           this.sound.effect('upgrade')
-          this.showToast('🏆 RAMPAGE CONCLUÍDO! TROFÉU "DESTRUIDOR URBANO" +$4.000 +10.000 PTS (+750 XP)!')
+          this.showToast('🏆 RAMPAGE CONCLUÍDO! TROFÉU "DESTRUIDOR URBANO" +$4.000 +10.000 PTS (+120 XP)!')
           const justCompleted = this.missions.recordRampagePolice(15)
           for (const m of justCompleted) this.completeMission(m)
           this.updateHud()
@@ -2005,9 +2075,9 @@ export class Game {
   private completeMission(mission: MissionState): void {
     this.cash += mission.reward
     localStorage.setItem(CASH_KEY, String(this.cash))
-    this.rewardXp(250)
+    this.rewardXp(100)
     this.sound.effect('mission')
-    this.showToast(`CONTRATO CUMPRIDO  +$${mission.reward} (+250 XP)`)
+    this.showToast(`CONTRATO CUMPRIDO  +$${mission.reward} (+100 XP)`)
     this.updateHud()
   }
 
@@ -2678,7 +2748,7 @@ export class Game {
       if (this.rallyRace.playerInTrack) {
         this.rallyRacePanel.classList.remove('hidden')
         if (this.rallyPositionValEl) {
-          this.rallyPositionValEl.textContent = `${this.rallyRace.playerRacePosition}º / 7`
+          this.rallyPositionValEl.textContent = `${this.rallyRace.playerRacePosition}º / 6`
         }
         if (this.rallyLapValEl) {
           this.rallyLapValEl.textContent = `VOLTA ${Math.min(3, this.rallyRace.playerLap)} / 3`
@@ -2686,6 +2756,10 @@ export class Game {
       } else {
         this.rallyRacePanel.classList.add('hidden')
       }
+    }
+
+    if ((this.rallyRace.isCountingDown || this.rallyRace.raceEnded) && this.inVehicle && this.player.kind === 'rally_car') {
+      this.player.speed = 0
     }
   }
 
@@ -3126,6 +3200,12 @@ export class Game {
         this.showToast(`MISSÃO DA CEGONHA EM ANDAMENTO // RECOLHA OS CARROS RESTANTES [${this.haulerCollectedCount}/5]!`)
       }
       this.updateHaulerMissionUI()
+    }
+
+    if (this.player.kind === 'rally_car') {
+      if (!this.rallyRace.raceStarted && !this.rallyRace.isCountingDown && !this.rallyRace.raceEnded) {
+        this.rallyRace.startCountdownWithPlayerCar(this.player)
+      }
     }
   }
 

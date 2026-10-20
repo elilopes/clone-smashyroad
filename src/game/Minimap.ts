@@ -1186,8 +1186,8 @@ export class Minimap {
       const trackW = (rallyRace.trackWidth / 2) * scale
 
       // 1. Draw Oval Track Base (Dark Asphalt)
-      ctx.lineWidth = trackW * 2
-      ctx.strokeStyle = '#1e293b'
+      ctx.lineWidth = trackW * 3 // Increased line width for better visibility
+      ctx.strokeStyle = '#334155' // Lighter color for better contrast
       ctx.lineCap = 'round'
 
       ctx.beginPath()
@@ -1200,7 +1200,7 @@ export class Minimap {
       ctx.stroke()
 
       // Curbs / track borders
-      ctx.lineWidth = 1.8
+      ctx.lineWidth = 2.4
       ctx.strokeStyle = '#f59e0b'
       ctx.stroke()
 

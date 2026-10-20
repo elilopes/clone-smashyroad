@@ -58,10 +58,40 @@ export class Sound {
     }
   }
 
-  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff' | 'shoot' | 'roar' | 'transform' | 'laser' | 'jump' | 'winch' | 'upgrade'): void {
+  effect(kind: 'coin' | 'crash' | 'mission' | 'wanted' | 'explosion' | 'ring' | 'takeoff' | 'shoot' | 'roar' | 'transform' | 'laser' | 'jump' | 'winch' | 'upgrade' | 'countdown_beep' | 'countdown_go'): void {
     if (!this.context || this.muted) return
     const context = this.context
     const now = context.currentTime
+
+    if (kind === 'countdown_beep') {
+      const osc = context.createOscillator()
+      const gain = context.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(440, now) // Clean 440 Hz beep
+      gain.gain.setValueAtTime(0.28, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18)
+      osc.connect(gain).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 0.18)
+      return
+    }
+
+    if (kind === 'countdown_go') {
+      // High energetic dual tone for start
+      const freqs = [880, 1046.5]
+      freqs.forEach((freq, idx) => {
+        const osc = context.createOscillator()
+        const gain = context.createGain()
+        osc.type = 'triangle'
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07)
+        gain.gain.setValueAtTime(0.35, now + idx * 0.07)
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.35)
+        osc.connect(gain).connect(this.master!)
+        osc.start(now + idx * 0.07)
+        osc.stop(now + idx * 0.07 + 0.36)
+      })
+      return
+    }
 
     if (kind === 'upgrade') {
       const notes = [523.25, 659.25, 783.99, 1046.50] // C5, E5, G5, C6 arpeggio

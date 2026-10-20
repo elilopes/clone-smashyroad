@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.smashcity.wanteddistrict',
-  appName: 'Smash City: Wanted District',
+  appId: 'com.techviva.mwc',
+  appName: 'Most Wanted Car: District 01',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
@@ -23,6 +23,9 @@ const config: CapacitorConfig = {
       overlaysWebView: true,
       style: 'DARK',
       backgroundColor: '#111412'
+    }
+    CapacitorCookies: {
+      enabled: true
     }
   }
 };

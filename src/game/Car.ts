@@ -2518,7 +2518,10 @@ export class Car {
       this.climbPitch *= Math.max(0, 1 - dt * 4.5)
     }
 
-    this.root.position.y = this.groundElevation + this.climbLift
+    this.root.rotation.order = 'YXZ'
+    this.root.position.y = this.groundElevation > 0
+      ? (this.groundElevation + 0.18 + this.climbLift)
+      : (this.groundElevation + this.climbLift)
     this.root.rotation.x = this.dunePitch + this.climbPitch
     this.root.rotation.z = 0
     this.yaw += this.angularVelocity * dt

@@ -16,7 +16,7 @@ app.innerHTML = `
         <div class="stat level-stat"><span class="stat-label">NÍVEL</span><strong id="header-level-value">NV 1</strong></div>
         <div class="stat xp-stat">
           <span class="stat-label">XP</span>
-          <strong id="header-xp-value">0 / 150</strong>
+          <strong id="header-xp-value">0 / 4.000 XP</strong>
           <div class="xp-bar-mini"><div id="header-xp-bar-fill" class="xp-bar-fill" style="width: 0%"></div></div>
         </div>
         <div class="stat cash-stat"><span class="stat-label">DINHEIRO</span><strong id="header-cash-value">$ 0</strong></div>
@@ -25,8 +25,8 @@ app.innerHTML = `
       <div class="topbar-actions">
         <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas Detalhadas">📊 STATUS</button>
         <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Veículos, Upgrades e Garagem">🏪 LOJA & GARAGEM</button>
-        <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro">🏆 RANKING</button>
-        <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS, Som e Gráficos">⚙️ AJUSTES</button>
+        <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro"><span class="btn-icon">🏆</span><span class="btn-text"> RANKING</span></button>
+        <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS, Som e Gráficos"><span class="btn-icon">⚙️</span><span class="btn-text"> AJUSTES</span></button>
         <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
         <button id="camera-button" class="mode-button" type="button" aria-pressed="false" aria-label="Câmera 3D traseira ativada; alternar para visão três quartos" title="Alternar câmera (C)">3D</button>
         <button id="pause-button" class="icon-button pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo (P / ESC)">❚❚</button>
@@ -239,7 +239,7 @@ app.innerHTML = `
         <div class="rally-race-item">
           <div class="rally-row">
             <span class="rally-label">POSIÇÃO NA CORRIDA:</span>
-            <strong id="rally-position-val" class="rally-val" style="color: #facc15; font-size: 14px;">1º / 7</strong>
+            <strong id="rally-position-val" class="rally-val" style="color: #facc15; font-size: 14px;">1º / 6</strong>
           </div>
         </div>
         <div class="rally-race-item">
@@ -252,6 +252,18 @@ app.innerHTML = `
           <span id="rally-tip-info" class="rally-tip-info" style="color: #fbbf24; font-size: 8.5px; font-weight: 700;">⚡ COLETE TURBOS E CRUZE OS ARCOS DE PONTUAÇÃO!</span>
         </div>
       </div>
+    </div>
+
+    <!-- RALLY COUNTDOWN OVERLAY (3, 2, 1, LARGADA!) -->
+    <div id="rally-countdown" class="rally-countdown hidden" aria-live="assertive">
+      <div class="countdown-tag">🏁 RALLY NAS DUNAS</div>
+      <div id="countdown-val" class="countdown-val">3</div>
+    </div>
+
+    <!-- RALLY RESULT BANNER (VITÓRIA / MISSÃO CONCLUÍDA OU DERROTA / MISSÃO FRACASSADA) -->
+    <div id="rally-result-banner" class="rally-result-banner hidden" role="alert">
+      <div id="rally-result-title" class="rally-result-title">🏆 VITÓRIA! MISSÃO CONCLUÍDA!</div>
+      <div id="rally-result-subtitle" class="rally-result-subtitle">Você terminou em 1º lugar!</div>
     </div>
 
     <!-- MISSÃO DE TÁXI / CORRIDA MALUCA (GTA VICE CITY / SAN ANDREAS) -->
@@ -564,11 +576,11 @@ app.innerHTML = `
     <button id="cancel-auto-enter-btn" class="cancel-auto-enter-btn hidden" type="button" aria-label="Cancelar entrada automática no veículo">CANCELAR ENTRADA (10s)</button>
 
     <section id="start-overlay" class="overlay">
+      <button id="close-app-btn" class="close-app-btn" type="button" aria-label="Fechar aplicativo">✕</button>
       <div class="title-kicker"><span></span> UMA CIDADE. DEZ NÍVEIS DE CAOS.</div>
       <h1>MOST<br><em>WANTED CAR.</em></h1>
-      <p class="intro-copy">Pegue a estrada com carros ou decole com o <b>Avião Bimotor</b> na pista larga do aeroporto. Atravesse os círculos flutuantes nos céus e despiste a polícia!</p>
+      <p class="intro-copy">Pegue a estrada com carro ou decole com o avião bimotor ou com o transformer, despiste a polícia e sobreviva!</p>
       <div class="start-details">
-        <span><b>01</b> DIRIJA & VOE</span><span><b>02</b> CÍRCULOS FLUTUANTES</span><span><b>03</b> SOBREVIVA</span>
       </div>
       <button id="start-button" class="primary-button" type="button">INICIAR PERSEGUIÇÃO <span>↗</span></button>
       <div style="margin-top: 14px; text-align: left;">

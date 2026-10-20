@@ -62,6 +62,7 @@ export class RallyRace {
 
   // Estado da Missão e Corrida
   raceStarted = false
+  raceEnded = false
   missionActive = false
   playerInTrack = false
   playerRallyCar: Car | null = null
@@ -71,7 +72,15 @@ export class RallyRace {
   playerLapTimer = 0
   playerRacePosition = 6
   playerHasWon = false
+  hasPassedHalfway = false
   private lastRestrictedWarning = 0
+
+  // Contador Regressivo (3, 2, 1, LARGADA!)
+  isCountingDown = false
+  countdownTimer = 0
+  private lastCountdownNumber = -1
+  currentArchIndex = 0
+  prevPlayerZ = 10
 
   // Callbacks de Eventos
   onScoreCollected?: (points: number, cash: number) => void
@@ -81,6 +90,9 @@ export class RallyRace {
   onRaceLost?: (position: number) => void
   onRaceStarted?: () => void
   onRestrictedAccess?: () => void
+  onCountdownTick?: (count: number) => void
+  onCountdownGo?: () => void
+  onMessage?: (msg: string) => void
 
   // Materiais da pista e elementos
   private readonly trackAsphaltMat = new THREE.MeshStandardMaterial({
@@ -150,8 +162,9 @@ export class RallyRace {
     if (s <= this.straightLength) {
       const z = -halfStraight + s
       const x = this.centerX + this.curveRadius + lateralOffset
+      const duneY = this.city.getDuneHeightAt(x, z)
       return {
-        position: new THREE.Vector3(x, 0.08, z),
+        position: new THREE.Vector3(x, Math.max(0.08, duneY + 0.08), z),
         tangent: new THREE.Vector3(0, 0, 1),
         yaw: Math.PI,
       }
@@ -167,8 +180,9 @@ export class RallyRace {
       const tanX = -Math.sin(angle)
       const tanZ = Math.cos(angle)
       const yaw = Math.atan2(-tanX, -tanZ)
+      const duneY = this.city.getDuneHeightAt(x, z)
       return {
-        position: new THREE.Vector3(x, 0.08, z),
+        position: new THREE.Vector3(x, Math.max(0.08, duneY + 0.08), z),
         tangent: new THREE.Vector3(tanX, 0, tanZ),
         yaw,
       }
@@ -179,8 +193,9 @@ export class RallyRace {
     if (s <= this.straightLength) {
       const z = halfStraight - s
       const x = this.centerX - this.curveRadius - lateralOffset
+      const duneY = this.city.getDuneHeightAt(x, z)
       return {
-        position: new THREE.Vector3(x, 0.08, z),
+        position: new THREE.Vector3(x, Math.max(0.08, duneY + 0.08), z),
         tangent: new THREE.Vector3(0, 0, -1),
         yaw: 0,
       }
@@ -195,8 +210,9 @@ export class RallyRace {
     const tanX = -Math.sin(angle)
     const tanZ = Math.cos(angle)
     const yaw = Math.atan2(-tanX, -tanZ)
+    const duneY = this.city.getDuneHeightAt(x, z)
     return {
-      position: new THREE.Vector3(x, 0.08, z),
+      position: new THREE.Vector3(x, Math.max(0.08, duneY + 0.08), z),
       tangent: new THREE.Vector3(tanX, 0, tanZ),
       yaw,
     }
@@ -487,7 +503,8 @@ export class RallyRace {
         const rad = this.curveRadius + sideSign * (this.trackWidth / 2 + 3.5)
         const cx = this.centerX + rad * Math.cos(angle)
         const cz = halfStraight + rad * Math.sin(angle)
-        dummy.position.set(cx, 0.8, cz)
+        const duneY = this.city.getDuneHeightAt(cx, cz)
+        dummy.position.set(cx, Math.max(0.8, duneY + 0.8), cz)
         const sc = 1.0 + (c % 3) * 0.4
         dummy.scale.set(sc, sc * 0.85, sc)
         dummy.rotation.set(c * 0.4, angle, 0)
@@ -501,7 +518,8 @@ export class RallyRace {
         const rad = this.curveRadius + sideSign * (this.trackWidth / 2 + 3.5)
         const cx = this.centerX + rad * Math.cos(angleSouth)
         const cz = -halfStraight + rad * Math.sin(angleSouth)
-        dummy.position.set(cx, 0.8, cz)
+        const duneY = this.city.getDuneHeightAt(cx, cz)
+        dummy.position.set(cx, Math.max(0.8, duneY + 0.8), cz)
         const sc = 1.0 + (c % 3) * 0.4
         dummy.scale.set(sc, sc * 0.85, sc)
         dummy.rotation.set(c * 0.4, angleSouth, 0)
@@ -536,7 +554,8 @@ export class RallyRace {
         const rad = 6 + (r % 4) * 5
         const rx = dp.x + Math.cos(angle) * rad
         const rz = dp.z + Math.sin(angle) * rad
-        const ry = dp.y + (Math.sin(r * 2.1) * 1.8)
+        const duneY = this.city.getDuneHeightAt(rx, rz)
+        const ry = Math.max(dp.y + (Math.sin(r * 2.1) * 1.8), duneY + 0.8)
 
         dummy.position.set(rx, ry, rz)
         const s = 1.2 + Math.abs(Math.sin(r * 1.7)) * 2.2
@@ -551,13 +570,16 @@ export class RallyRace {
     this.root.add(this.rockBlocksMesh)
   }
 
-  // 4 Arcos do circuito AUMENTADOS, monumentais e imponentes
+  // Arcos do circuito em ordem obrigatória ao longo da pista (Sentido horário / setindo da pista)
   private buildScoreArches(): void {
+    const curveLen = Math.PI * this.curveRadius
+
     const archConfigs = [
-      { id: 0, dist: this.finishLineDist, rotY: 0 },                                        // Linha de largada na reta Oeste (Z=0)
-      { id: 1, dist: this.straightLength + (Math.PI * this.curveRadius * 0.75), rotY: Math.PI * 0.75 }, // Saída da curva Norte
-      { id: 2, dist: this.straightLength + Math.PI * this.curveRadius + this.straightLength * 0.5, rotY: Math.PI }, // Reta Leste
-      { id: 3, dist: this.straightLength * 2 + Math.PI * this.curveRadius + (Math.PI * this.curveRadius * 0.75), rotY: -Math.PI * 0.25 }, // Saída da curva Sul
+      { id: 0, dist: this.finishLineDist, rotY: 0 },                                                           // 1. Linha de Chegada / Reta Oeste (Z=0)
+      { id: 1, dist: this.straightLength + (curveLen * 0.05), rotY: Math.PI * 0.5 },                            // 2. Início da Curva Norte
+      { id: 2, dist: this.straightLength + (curveLen * 0.95), rotY: Math.PI },                                  // 3. Fim da Curva Norte
+      { id: 3, dist: this.straightLength + curveLen + (this.straightLength * 0.5), rotY: Math.PI },             // 4. Reta Leste
+      { id: 4, dist: this.straightLength * 2 + curveLen + (curveLen * 0.5), rotY: -Math.PI * 0.5 },             // 5. Curva Sul
     ]
 
     const archRadius = 14.0 // Raio monumental aumentado cobrindo toda a pista de 18m com folga
@@ -721,15 +743,21 @@ export class RallyRace {
     }
   }
 
-  // Inicia a corrida de rally quando o jogador assume qualquer um dos 6 carros de rally elétrico
-  startRaceWithPlayerCar(selectedCar: Car): void {
-    if (this.raceStarted) return
+  // Inicia o contador regressivo (3, 2, 1, LARGADA!) quando o jogador entra no carro de rally nas dunas
+  startCountdownWithPlayerCar(selectedCar: Car): void {
+    if (this.raceStarted || this.isCountingDown || this.raceEnded) return
 
     this.playerRallyCar = selectedCar
-    this.raceStarted = true
-    this.missionActive = true
+    this.isCountingDown = true
+    this.countdownTimer = 3.6
+    this.lastCountdownNumber = 3
     this.playerLap = 1
     this.playerHasWon = false
+    this.raceStarted = false
+    this.raceEnded = false
+    this.hasPassedHalfway = false
+
+    selectedCar.speed = 0
 
     // Identifica e remove o carro assumido da lista de concorrentes IA (restando 5 concorrentes IA rivais)
     const takenIndex = this.competitors.findIndex(c => c.car === selectedCar)
@@ -737,21 +765,28 @@ export class RallyRace {
       this.competitors.splice(takenIndex, 1)
     }
 
-    // Faz os outros 5 competidores começarem a acelerar imediatamente!
+    // Todos os carros ficam 100% parados esperando o contador regressivo terminar
     for (const comp of this.competitors) {
-      comp.currentSpeed = comp.baseSpeed * 0.82
+      comp.currentSpeed = 0
+      comp.car.speed = 0
     }
 
-    this.sound.effect('upgrade')
-    this.onRaceStarted?.()
+    this.sound.effect('jump')
+    this.onCountdownTick?.(3)
+  }
+
+  // Alias para compatibilidade
+  startRaceWithPlayerCar(selectedCar: Car): void {
+    this.startCountdownWithPlayerCar(selectedCar)
   }
 
   update(dt: number, playerCar: Car, playerPos: THREE.Vector3): void {
     const time = performance.now() * 0.001
 
-    // Verifica se o jogador está na arena do Rally
-    const distToCenter = Math.hypot(playerPos.x - this.centerX, playerPos.z - this.centerZ)
-    this.playerInTrack = distToCenter < (this.curveRadius + 140)
+    // Verifica se o jogador está na arena do Rally (cobre todo o circuito oval, retas e curvas)
+    const inTrackX = Math.abs(playerPos.x - this.centerX) < (this.curveRadius + 150)
+    const inTrackZ = Math.abs(playerPos.z - this.centerZ) < (this.straightLength / 2 + this.curveRadius + 150)
+    this.playerInTrack = inTrackX && inTrackZ
 
     // Se o jogador estiver na pista mas NÃO estiver em um carro de rally elétrico
     if (this.playerInTrack && playerCar.kind !== 'rally_car') {
@@ -761,9 +796,65 @@ export class RallyRace {
       }
     }
 
-    // Se o jogador estiver em um carro de rally e a corrida ainda não iniciou, inicia!
-    if (playerCar.kind === 'rally_car' && !this.raceStarted && this.playerInTrack) {
-      this.startRaceWithPlayerCar(playerCar)
+    // Se o jogador estiver em um carro de rally e a corrida ainda não iniciou e não está contando, inicia o contador regressivo!
+    if (playerCar.kind === 'rally_car' && !this.raceStarted && !this.isCountingDown && !this.raceEnded && this.playerInTrack) {
+      this.startCountdownWithPlayerCar(playerCar)
+    }
+
+    // Se a corrida já foi finalizada, garante que todos os carros permaneçam 100% parados
+    if (this.raceEnded) {
+      if (playerCar.kind === 'rally_car') {
+        playerCar.speed = 0
+      }
+      for (const comp of this.competitors) {
+        comp.baseSpeed = 0
+        comp.currentSpeed = 0
+        comp.car.speed = 0
+      }
+      return
+    }
+
+    // Contador Regressivo (3, 2, 1, LARGADA!): carros de rally NÃO se movimentam enquanto o contador não acabar
+    if (this.isCountingDown) {
+      this.countdownTimer -= dt
+      if (playerCar.kind === 'rally_car') {
+        playerCar.speed = 0
+      }
+      for (const comp of this.competitors) {
+        comp.currentSpeed = 0
+        comp.car.speed = 0
+      }
+
+      let currentCount = 1
+      if (this.countdownTimer > 2.4) {
+        currentCount = 3
+      } else if (this.countdownTimer > 1.2) {
+        currentCount = 2
+      } else if (this.countdownTimer > 0) {
+        currentCount = 1
+      } else {
+        currentCount = 0 // LARGADA!
+      }
+
+      if (currentCount !== this.lastCountdownNumber) {
+        this.lastCountdownNumber = currentCount
+        if (currentCount > 0) {
+          this.sound.effect('jump')
+          this.onCountdownTick?.(currentCount)
+        } else {
+          // Contador regressivo acabou! Todos os carros de rally começam a se movimentar!
+          this.isCountingDown = false
+          this.raceStarted = true
+          this.missionActive = true
+          this.sound.effect('upgrade')
+          this.onCountdownGo?.()
+          this.onRaceStarted?.()
+          for (const comp of this.competitors) {
+            comp.currentSpeed = comp.baseSpeed * 0.85
+          }
+        }
+      }
+      return
     }
 
     // 1. Atualização dos Arcos de Pontuação
@@ -781,11 +872,17 @@ export class RallyRace {
       if (arch.cooldownTimer <= 0 && playerCar.kind === 'rally_car') {
         const distToPlayer = playerPos.distanceTo(arch.position)
         if (distToPlayer < 12.0) {
-          arch.cooldownTimer = 2.0
-          ;(arch.neonMesh.material as THREE.MeshStandardMaterial).emissive.setHex(0xfacc15)
-          this.sound.effect('coin')
-          this.sparks.emit(new THREE.Vector3(arch.position.x, 4.2, arch.position.z))
-          this.onScoreCollected?.(500, 200)
+          if (arch.id === this.currentArchIndex) {
+            arch.cooldownTimer = 2.0
+            ;(arch.neonMesh.material as THREE.MeshStandardMaterial).emissive.setHex(0xfacc15)
+            this.sound.effect('coin')
+            this.sparks.emit(new THREE.Vector3(arch.position.x, 4.2, arch.position.z))
+            this.onScoreCollected?.(500, 200)
+            this.currentArchIndex = (this.currentArchIndex + 1) % this.scoreArches.length
+            this.onMessage?.(`✅ ARCO ${arch.id + 1} PASSED!`)
+          } else {
+            this.onMessage?.(`❌ WRONG ARCH! Pass through Arch ${this.currentArchIndex + 1} first.`)
+          }
         }
       }
     }
@@ -833,8 +930,8 @@ export class RallyRace {
       }
     }
 
-    // 3. Atualização dos Concorrentes de Rally
-    if (this.raceStarted) {
+    // 3. Atualização dos Concorrentes de Rally (Física precisa de subida e descida nas dunas)
+    if (this.raceStarted && !this.raceEnded) {
       for (let i = 0; i < this.competitors.length; i++) {
         const comp = this.competitors[i]
         const car = comp.car
@@ -861,24 +958,47 @@ export class RallyRace {
 
         const prevDist = comp.distanceAlongTrack
         comp.distanceAlongTrack = (comp.distanceAlongTrack + comp.currentSpeed * dt) % this.totalTrackLength
-        if (comp.distanceAlongTrack < prevDist) {
+        if (prevDist < this.finishLineDist && comp.distanceAlongTrack >= this.finishLineDist) {
           comp.lap += 1
         }
 
         const transform = this.getTrackTransform(comp.distanceAlongTrack, comp.laneOffset)
         car.root.position.x = transform.position.x
         car.root.position.z = transform.position.z
-        const duneY = this.city.getDuneHeightAt(transform.position.x, transform.position.z)
-        car.groundElevation = duneY
-        car.root.position.y = Math.max(0.08, duneY + car.climbLift)
+
+        // Física de elevação e subida nas dunas de areia:
+        // Amostra múltiplos pontos em volta do carro (frente, centro, traseira, lados)
+        // para garantir que o carro NUNCA entre ou afunde na duna, mas suba suavemente por cima
+        const forwardX = -Math.sin(transform.yaw)
+        const forwardZ = -Math.cos(transform.yaw)
+        const rightX = Math.cos(transform.yaw)
+        const rightZ = -Math.sin(transform.yaw)
+
+        const centerDuneY = this.city.getDuneHeightAt(transform.position.x, transform.position.z)
+        const frontDuneY = this.city.getDuneHeightAt(transform.position.x + forwardX * 2.2, transform.position.z + forwardZ * 2.2)
+        const backDuneY = this.city.getDuneHeightAt(transform.position.x - forwardX * 2.2, transform.position.z - forwardZ * 2.2)
+        const leftDuneY = this.city.getDuneHeightAt(transform.position.x - rightX * 1.1, transform.position.z - rightZ * 1.1)
+        const rightDuneY = this.city.getDuneHeightAt(transform.position.x + rightX * 1.1, transform.position.z + rightZ * 1.1)
+
+        const maxDuneHeight = Math.max(centerDuneY, frontDuneY, backDuneY, leftDuneY, rightDuneY)
+        car.groundElevation = maxDuneHeight
+        // Mantém as rodas e chassi firmemente sobre o topo das dunas de areia
+        car.root.position.y = Math.max(0.18, maxDuneHeight + 0.18 + car.climbLift)
         car.speed = comp.currentSpeed
+
+        // Inclinação realista (pitch e roll) nas dunas
+        car.root.rotation.order = 'YXZ'
+        const dunePitch = Math.atan2(frontDuneY - backDuneY, 4.4)
+        const duneRoll = Math.atan2(leftDuneY - rightDuneY, 2.2)
+        car.dunePitch = dunePitch
+        car.root.rotation.x = THREE.MathUtils.lerp(car.root.rotation.x, dunePitch, Math.min(1, dt * 10))
 
         const isCurving = Math.abs(transform.position.z) > this.straightLength / 2
         if (isCurving) {
           const driftDirection = transform.position.z > 0 ? 0.28 : -0.28
           comp.driftAngle = THREE.MathUtils.lerp(comp.driftAngle, driftDirection, dt * 4.5)
           if (Math.random() < 0.2) {
-            this.sparks.emit(new THREE.Vector3(car.root.position.x, 0.1, car.root.position.z))
+            this.sparks.emit(new THREE.Vector3(car.root.position.x, car.root.position.y + 0.1, car.root.position.z))
           }
         } else {
           comp.driftAngle = THREE.MathUtils.lerp(comp.driftAngle, 0, dt * 6)
@@ -886,6 +1006,7 @@ export class RallyRace {
 
         car.yaw = transform.yaw + comp.driftAngle
         car.root.rotation.y = car.yaw
+        car.root.rotation.z = THREE.MathUtils.lerp(car.root.rotation.z, Math.sin(comp.driftAngle) * 0.15 + duneRoll * 0.6, Math.min(1, dt * 10))
 
         const wheelSpin = -comp.currentSpeed * dt / 0.38
         for (const wheel of car.wheels) {
@@ -896,7 +1017,7 @@ export class RallyRace {
         if (distToPlayerCar < 3.2) {
           car.collideWith(playerCar, dt)
           this.sound.effect('crash')
-          this.sparks.emit(new THREE.Vector3((car.root.position.x + playerCar.root.position.x) / 2, 0.4, (car.root.position.z + playerCar.root.position.z) / 2))
+          this.sparks.emit(new THREE.Vector3((car.root.position.x + playerCar.root.position.x) / 2, car.root.position.y + 0.4, (car.root.position.z + playerCar.root.position.z) / 2))
         }
       }
     }
@@ -906,31 +1027,55 @@ export class RallyRace {
       const prevPlayerDist = this.playerDistanceAlongTrack
       this.playerDistanceAlongTrack = this.getDistanceAlongTrack(playerPos)
 
-      // Linha de Chegada na Reta Oeste (Z=0, finishLineDist)
-      const crossedLine = prevPlayerDist < this.finishLineDist && this.playerDistanceAlongTrack >= this.finishLineDist
-      if (crossedLine && this.raceStarted) {
-        this.playerLap += 1
-        this.sound.effect('jump')
-        this.onLapCompleted?.(this.playerLap, this.playerRacePosition)
+      // Jogador deve passar pela metade oposta da pista (Reta Leste, X > centerX) antes de poder fechar uma volta
+      if (playerPos.x > this.centerX + 40 || (this.playerDistanceAlongTrack > 400 && this.playerDistanceAlongTrack < (this.finishLineDist - 200))) {
+        this.hasPassedHalfway = true
+      }
 
-        // Vitória ou Derrota ao completar a 3ª volta cruzando o arco final
-        if (this.playerLap > 3 && !this.playerHasWon) {
-          this.playerHasWon = true
+      // Linha de Chegada e Pórtico / Arco Final na Reta Oeste (Z=0, X=westTrackX)
+      // O jogador ultrapassa por dentro do arco final (largura da pista 18m, X por volta de westTrackX, Z cruzando 0)
+      const westTrackX = this.centerX - this.curveRadius
+      const insideArchX = Math.abs(playerPos.x - westTrackX) <= (this.trackWidth / 2 + 2.5)
+      const prevZ = this.prevPlayerZ
+      const currZ = playerPos.z
+      const crossedZPlane = (prevZ >= -0.5 && currZ <= 0.5 && prevZ > currZ) || (Math.abs(currZ) <= 4.0 && prevPlayerDist < this.finishLineDist && this.playerDistanceAlongTrack >= this.finishLineDist)
+      const crossedArch = insideArchX && crossedZPlane
+      const crossedLine = (crossedArch || (prevPlayerDist < this.finishLineDist && this.playerDistanceAlongTrack >= this.finishLineDist)) && this.hasPassedHalfway
+
+      if (crossedLine && this.raceStarted && !this.raceEnded) {
+        this.hasPassedHalfway = false
+        this.sound.effect('jump')
+
+        // Ao completar a 3ª volta cruzando por dentro do arco final da pista
+        if (this.playerLap >= 3) {
+          this.raceEnded = true
+          this.raceStarted = false
           this.missionActive = false
 
-          // Todos os carros do rally param de andar
+          // Todos os carros de rally (jogador e rivais) param de andar imediatamente
+          playerCar.speed = 0
           for (const comp of this.competitors) {
             comp.baseSpeed = 0
             comp.currentSpeed = 0
+            comp.car.speed = 0
           }
 
+          // Se o jogador chegar na primeira ou segunda posição: vitória e missão concluída
+          // Se o jogador chegar na terceira posição ou maior: derrota e missão fracassada
           if (this.playerRacePosition === 1 || this.playerRacePosition === 2) {
+            this.playerHasWon = true
             this.onRaceWon?.(6000, 10000)
           } else {
+            this.playerHasWon = false
             this.onRaceLost?.(this.playerRacePosition)
           }
+        } else {
+          this.onLapCompleted?.(this.playerLap, this.playerRacePosition)
+          this.playerLap += 1
         }
       }
+
+      this.prevPlayerZ = playerPos.z
 
       // Cálculo da posição no ranking (1º ao 6º lugar)
       let rank = 1
