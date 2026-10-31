@@ -142,7 +142,9 @@ export class Car {
   private waterBobTimer = 0
   hitCooldown = 0
   smokeTimer = 0
-  private readonly bodyMaterial: THREE.MeshStandardMaterial
+  private readonly bodyMaterial: THREE.MeshPhysicalMaterial
+  private readonly defaultMetalness: number
+  private readonly defaultRoughness: number
   private readonly scale: number
   private readonly wheelBase: number
   private readonly halfWidth: number
@@ -152,6 +154,7 @@ export class Car {
   private angularVelocity = 0
   private throttleInput = 0
   private disposed = false
+  inRallyMission = false
 
   readonly engineLevel: number
   readonly armorLevel: number
@@ -331,14 +334,17 @@ export class Car {
       pMetalness = 0.25
     }
 
-    this.bodyMaterial = new THREE.MeshStandardMaterial({
+    this.defaultMetalness = pMetalness
+    this.defaultRoughness = pRoughness
+
+    this.bodyMaterial = new THREE.MeshPhysicalMaterial({
       color: pColor,
       roughness: pRoughness,
       metalness: pMetalness,
       ...(pEmissive ? { emissive: pEmissive, emissiveIntensity: pEmissiveIntensity } : {}),
     })
 
-    const currentGMode = (localStorage.getItem('smash_graphics_mode') as 'low' | 'medium' | 'high') || 'medium'
+    const currentGMode = (localStorage.getItem('smash_graphics_mode') as 'low' | 'medium' | 'high' | 'ultra') || 'medium'
     this.graphicsMode = currentGMode
 
     this.root.scale.setScalar(this.scale)
@@ -351,7 +357,7 @@ export class Car {
     this.setGraphicsMode(currentGMode)
   }
 
-  private graphicsMode: 'low' | 'medium' | 'high' = 'medium'
+  private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' = 'medium'
   private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
 
   private addBox(size: [number, number, number], y: number, material: THREE.Material, x = 0, z = 0, isDetail = false): THREE.Mesh {
@@ -365,10 +371,25 @@ export class Car {
     return mesh
   }
 
-  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+  setGraphicsMode(mode: 'low' | 'medium' | 'high' | 'ultra'): void {
     this.graphicsMode = mode
     const isLow = mode === 'low'
-    const isHigh = mode === 'high'
+    const isUltra = mode === 'ultra'
+    const isHigh = mode === 'high' || isUltra
+
+    // PBR Clearcoat & Reflexos em Modo Ultra
+    if (isUltra) {
+      this.bodyMaterial.clearcoat = 1.0
+      this.bodyMaterial.clearcoatRoughness = 0.08
+      this.bodyMaterial.metalness = Math.max(0.65, this.defaultMetalness)
+      this.bodyMaterial.roughness = Math.min(0.2, this.defaultRoughness)
+    } else {
+      this.bodyMaterial.clearcoat = 0
+      this.bodyMaterial.clearcoatRoughness = 0
+      this.bodyMaterial.metalness = this.defaultMetalness
+      this.bodyMaterial.roughness = this.defaultRoughness
+    }
+    this.bodyMaterial.needsUpdate = true
 
     this.root.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
@@ -396,27 +417,41 @@ export class Car {
             })
           }
         } else {
-          // Restore standard lit material for medium / high
+          // Restore standard lit material for medium / high / ultra
           if (this.originalMaterials.has(obj)) {
             obj.material = this.originalMaterials.get(obj)!
           }
         }
 
-        // Cantos arredondados (RoundedBoxGeometry) no modo High para os veículos
+        // Cantos arredondados (RoundedBoxGeometry) com mais polígonos no modo Ultra / High
         if (obj.userData.boxSize) {
           const [w, h, d] = obj.userData.boxSize as [number, number, number]
           const currentIsRounded = obj.userData.isRounded === true
+          const currentIsUltra = obj.userData.isUltraRounded === true
 
-          if (isHigh && !currentIsRounded) {
-            const minDim = Math.min(w, h, d)
-            const radius = Math.min(0.12, minDim * 0.25)
-            if (obj.geometry) obj.geometry.dispose()
-            obj.geometry = new RoundedBoxGeometry(w, h, d, 2, radius)
-            obj.userData.isRounded = true
-          } else if (!isHigh && currentIsRounded) {
+          if (isUltra) {
+            if (!currentIsUltra) {
+              const minDim = Math.min(w, h, d)
+              const radius = Math.min(0.16, minDim * 0.3)
+              if (obj.geometry) obj.geometry.dispose()
+              obj.geometry = new RoundedBoxGeometry(w, h, d, 4, radius)
+              obj.userData.isRounded = true
+              obj.userData.isUltraRounded = true
+            }
+          } else if (isHigh) {
+            if (!currentIsRounded || currentIsUltra) {
+              const minDim = Math.min(w, h, d)
+              const radius = Math.min(0.12, minDim * 0.25)
+              if (obj.geometry) obj.geometry.dispose()
+              obj.geometry = new RoundedBoxGeometry(w, h, d, 2, radius)
+              obj.userData.isRounded = true
+              obj.userData.isUltraRounded = false
+            }
+          } else if (currentIsRounded) {
             if (obj.geometry) obj.geometry.dispose()
             obj.geometry = new THREE.BoxGeometry(w, h, d)
             obj.userData.isRounded = false
+            obj.userData.isUltraRounded = false
           }
         }
       }
@@ -2382,8 +2417,8 @@ export class Car {
     }
 
     const isBoosting = this.hasNitroBooster || this.turboTimer > 0
-    const maxSpeed =
-      (this.kind === 'hyper_f1'
+    const baseMax = this.kind === 'rally_car' && this.inRallyMission ? 85 : (
+      this.kind === 'hyper_f1'
         ? 48
         : this.kind === 'rally_car'
           ? 45
@@ -2391,7 +2426,9 @@ export class Car {
             ? 42
             : this.kind === 'monster_truck' || this.kind === 'tactical_tanker'
               ? 34
-              : 37) *
+              : 37
+    )
+    const maxSpeed = baseMax *
       (1 + (this.engineLevel || 0) * 0.12) *
       (isBoosting ? 1.35 : 1)
 

@@ -548,9 +548,9 @@ export class Traffic {
     )
   }
 
-  private graphicsMode: 'low' | 'medium' | 'high' = 'medium'
+  private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' = 'medium'
 
-  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+  setGraphicsMode(mode: 'low' | 'medium' | 'high' | 'ultra'): void {
     this.graphicsMode = mode
     for (const unit of this.units) {
       unit.car.setGraphicsMode(mode)

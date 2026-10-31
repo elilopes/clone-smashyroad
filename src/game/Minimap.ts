@@ -1175,9 +1175,10 @@ export class Minimap {
   ): void {
     const rx = cx + (rallyRace.centerX - player.x) * scale
     const rz = cy + (rallyRace.centerZ - player.z) * scale
-    const distToCenter = Math.hypot(rx - cx, rz - cy)
+    const maxExtent = (rallyRace.straightLength / 2 + rallyRace.curveRadius + 120) * scale
 
-    if (distToCenter < radius + 150 * scale) {
+    // O circuito tem retas de 1215m e curvas de 250m. Garante visibilidade contínua em todo o circuito.
+    if (Math.abs(rx - cx) < radius + maxExtent && Math.abs(rz - cy) < radius + maxExtent) {
       ctx.save()
       ctx.translate(rx, rz)
 

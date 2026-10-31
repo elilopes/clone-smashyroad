@@ -267,7 +267,7 @@ export class Helicopter {
 
   private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
 
-  setGraphicsMode(mode: 'low' | 'medium' | 'high'): void {
+  setGraphicsMode(mode: 'low' | 'medium' | 'high' | 'ultra'): void {
     const isLow = mode === 'low'
     this.root.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {

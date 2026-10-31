@@ -2,7 +2,63 @@ import * as THREE from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+
+const ColorCorrectionShader = {
+  name: 'ColorCorrectionShader',
+  uniforms: {
+    tDiffuse: { value: null },
+    contrast: { value: 1.14 },
+    saturation: { value: 1.18 },
+    brightness: { value: 1.02 },
+    vignetteIntensity: { value: 0.38 },
+    vignetteWarmth: { value: 1.07 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float contrast;
+    uniform float saturation;
+    uniform float brightness;
+    uniform float vignetteIntensity;
+    uniform float vignetteWarmth;
+    varying vec2 vUv;
+
+    void main() {
+      vec4 tex = texture2D(tDiffuse, vUv);
+      vec3 color = tex.rgb;
+
+      // Brightness & Exposure
+      color *= brightness;
+
+      // Filmic S-curve Contrast
+      color = (color - 0.5) * contrast + 0.5;
+
+      // Vibrant Saturation
+      float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+      color = mix(vec3(lum), color, saturation);
+
+      // Warm Golden Highlight Grading
+      color.r *= vignetteWarmth;
+      color.g *= (1.0 + (vignetteWarmth - 1.0) * 0.5);
+
+      // Subtle Radial Vignette
+      vec2 dist = (vUv - 0.5) * 1.25;
+      float vig = 1.0 - dot(dist, dist) * vignetteIntensity;
+      color *= clamp(vig, 0.0, 1.0);
+
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), tex.a);
+    }
+  `,
+}
 import { BusPassengers } from './BusPassengers'
 import { Car, type DriveInput } from './Car'
 import { City, type GraphicsDesignMode } from './City'
@@ -218,6 +274,13 @@ export class Game {
   private readonly rallyResultBannerEl = document.querySelector<HTMLElement>('#rally-result-banner')
   private readonly rallyResultTitleEl = document.querySelector<HTMLElement>('#rally-result-title')
   private readonly rallyResultSubtitleEl = document.querySelector<HTMLElement>('#rally-result-subtitle')
+  // Estado do Looping 360° Hot Wheels da Corrida de Rally
+  private rallyLoopActive = false
+  private rallyLoopU = 0
+  private rallyLoopLateral = 0
+  private rallyLoopFalling = false
+  private rallyLoopFallVy = 0
+  private rallyLoopFallPitch = 0
 
   // 4. Auth & Progression (Google & Play Games via users.ts)
   private readonly authButton = document.querySelector<HTMLButtonElement>('#auth-button')
@@ -343,6 +406,9 @@ export class Game {
   private graphicsMode: GraphicsDesignMode = 'medium'
   private composer?: EffectComposer
   private ssaoPass?: SSAOPass
+  private bloomPass?: UnrealBloomPass
+  private colorCorrectionPass?: ShaderPass
+  private ultraEnvMap?: THREE.Texture
 
   constructor(host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -367,7 +433,7 @@ export class Game {
 
     this.graphicsMode = (localStorage.getItem('smash_graphics_mode') as GraphicsDesignMode) || 'medium'
     this.initPostProcessing()
-    this.city.setGraphicsMode(this.graphicsMode, 0)
+    this.applyGraphicsMode(this.graphicsMode)
     this.pedestrians = new Pedestrians(this.scene)
     this.plane = new Plane(this.scene, 168, -120, 0)
     this.floatingRings = new FloatingRings(this.scene)
@@ -563,6 +629,51 @@ export class Game {
     this.scene.add(this.sun, this.sun.target)
   }
 
+  private createProceduralEnvironmentMap(): THREE.Texture {
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer)
+    pmremGenerator.compileEquirectangularShader()
+
+    const canvas = document.createElement('canvas')
+    canvas.width = 1024
+    canvas.height = 512
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      // Sky gradient with sun and city horizon
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, 512)
+      skyGrad.addColorStop(0.0, '#38bdf8') // Vibrant sky
+      skyGrad.addColorStop(0.46, '#bae6fd') // Soft horizon haze
+      skyGrad.addColorStop(0.5, '#fef08a') // Warm sunlight line
+      skyGrad.addColorStop(0.54, '#334155') // Ground asphalt bounce
+      skyGrad.addColorStop(1.0, '#0f172a') // Deep road shadow
+      ctx.fillStyle = skyGrad
+      ctx.fillRect(0, 0, 1024, 512)
+
+      // Sun highlight flare
+      const sunGrad = ctx.createRadialGradient(512, 180, 5, 512, 180, 130)
+      sunGrad.addColorStop(0, 'rgba(255, 255, 255, 1.0)')
+      sunGrad.addColorStop(0.25, 'rgba(254, 240, 138, 0.85)')
+      sunGrad.addColorStop(0.65, 'rgba(251, 146, 60, 0.4)')
+      sunGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0)')
+      ctx.fillStyle = sunGrad
+      ctx.fillRect(0, 0, 1024, 512)
+
+      // Distant city silhouette reflections
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.6)'
+      for (let x = 0; x < 1024; x += 32) {
+        const h = 24 + Math.sin(x * 0.05) * 18 + ((x * 13) % 30)
+        ctx.fillRect(x, 256 - h, 28, h)
+      }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.mapping = THREE.EquirectangularReflectionMapping
+    texture.colorSpace = THREE.SRGBColorSpace
+    const envMap = pmremGenerator.fromEquirectangular(texture).texture
+    texture.dispose()
+    pmremGenerator.dispose()
+    return envMap
+  }
+
   private initPostProcessing(): void {
     try {
       this.composer = new EffectComposer(this.renderer)
@@ -575,10 +686,23 @@ export class Game {
       this.ssaoPass.maxDistance = 0.12
       this.composer.addPass(this.ssaoPass)
 
+      this.bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        1.15, // strength
+        0.42, // radius
+        0.82  // threshold
+      )
+      this.bloomPass.enabled = false
+      this.composer.addPass(this.bloomPass)
+
+      this.colorCorrectionPass = new ShaderPass(ColorCorrectionShader)
+      this.colorCorrectionPass.enabled = false
+      this.composer.addPass(this.colorCorrectionPass)
+
       const outputPass = new OutputPass()
       this.composer.addPass(outputPass)
     } catch (err) {
-      console.warn('EffectComposer / SSAO initialization note:', err)
+      console.warn('EffectComposer initialization note:', err)
     }
   }
 
@@ -589,23 +713,60 @@ export class Game {
     const playerZ = this.player ? this.player.root.position.z : 0
     this.city.setGraphicsMode(mode, playerZ)
 
-    if (mode === 'low') {
+    const isUltra = mode === 'ultra'
+    const isHigh = mode === 'high'
+    const isLow = mode === 'low'
+
+    if (isLow) {
       // 1. Remova as sombras dos objetos
       this.renderer.shadowMap.enabled = false
       this.sun.castShadow = false
 
       // 2. Remova a nevoa do horizonte
       this.scene.fog = null
+
+      this.scene.environment = null
+      this.scene.environmentIntensity = 1.0
+
+      if (this.bloomPass) this.bloomPass.enabled = false
+      if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = false
+      if (this.ssaoPass) this.ssaoPass.enabled = false
+    } else if (isUltra) {
+      // Modo ULTRA: Sombras de alta precisão, PBR reflexos de ambiente, Bloom neon e Correção de Cor
+      const shadowsEnabled = localStorage.getItem('smash_shadows_enabled') !== 'false'
+      this.renderer.shadowMap.enabled = shadowsEnabled
+      this.sun.castShadow = shadowsEnabled
+      this.sun.shadow.mapSize.set(2048, 2048)
+
+      this.scene.fog = new THREE.Fog(0xa6c2a1, 180, 480)
+
+      if (!this.ultraEnvMap) {
+        this.ultraEnvMap = this.createProceduralEnvironmentMap()
+      }
+      this.scene.environment = this.ultraEnvMap
+      this.scene.environmentIntensity = 1.35
+
+      if (this.bloomPass) this.bloomPass.enabled = true
+      if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = true
+      if (this.ssaoPass) this.ssaoPass.enabled = true
     } else {
       // Restore shadows and fog for medium / high
       const shadowsEnabled = localStorage.getItem('smash_shadows_enabled') !== 'false'
       this.renderer.shadowMap.enabled = shadowsEnabled
       this.sun.castShadow = shadowsEnabled
+      this.sun.shadow.mapSize.set(1536, 1536)
 
       this.scene.fog = new THREE.Fog(0xa6c2a1, 140, 380)
+
+      this.scene.environment = null
+      this.scene.environmentIntensity = 1.0
+
+      if (this.bloomPass) this.bloomPass.enabled = false
+      if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = false
+      if (this.ssaoPass) this.ssaoPass.enabled = isHigh
     }
 
-    // 3. Remova a iluminação e detalhes dos veículos
+    // 3. Atualiza iluminação, reflexos PBR e geometria de todos os veículos
     this.updateAllVehiclesGraphicsMode(mode)
   }
 
@@ -866,8 +1027,10 @@ export class Game {
         modeDesc = isPt ? 'BAIXA: Low Poly sem iluminação, sombras, detalhes nem névoa' : 'LOW: Low Poly without lighting, shadows, details or fog'
       } else if (graphicsVal === 'medium') {
         modeDesc = isPt ? 'MÉDIA: Voxels com Greeble clássico' : 'MEDIUM: Classic Greeble Voxels'
-      } else {
+      } else if (graphicsVal === 'high') {
         modeDesc = isPt ? 'ALTA: Greeble High Poly + Merged Geo + SSAO' : 'HIGH: High Poly Greeble + Merged Geo + SSAO'
+      } else {
+        modeDesc = isPt ? 'ULTRA ⚡: Bloom neon, Lightmaps HD, Reflexos PBR e Voxels Arredondados' : 'ULTRA ⚡: Neon Bloom, HD Lightmaps, PBR Reflections & Rounded Voxels'
       }
       this.showToast(`🎨 ${modeDesc}`)
     }
@@ -1170,7 +1333,7 @@ export class Game {
       this.getStationaryCarLocations(),
       this.rallyRace,
     )
-    if (this.graphicsMode === 'high' && this.composer) {
+    if ((this.graphicsMode === 'high' || this.graphicsMode === 'ultra') && this.composer) {
       this.composer.render()
     } else {
       this.renderer.render(this.scene, this.camera)
@@ -1180,6 +1343,27 @@ export class Game {
 
   private update(dt: number): void {
     this.elapsed += dt
+
+    // No modo Ultra, ciclo de dia e noite (20 min dia = 1200s, 20 min noite = 1200s, total 40 min / 2400s)
+    if (this.graphicsMode === 'ultra') {
+      const timeInCycle = this.elapsed % 2400
+      const isNight = timeInCycle >= 1200
+
+      const targetSunColor = new THREE.Color(isNight ? 0x3b82f6 : 0xffe6bf)
+      const targetBgColor = new THREE.Color(isNight ? 0x090d16 : 0xa6c2a1)
+      const targetFogColor = new THREE.Color(isNight ? 0x0f172a : 0xa6c2a1)
+      const targetSunIntensity = isNight ? 0.35 : 3.2
+
+      this.sun.color.lerp(targetSunColor, dt * 0.5)
+      this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, targetSunIntensity, dt * 0.5)
+      if (this.scene.background instanceof THREE.Color) {
+        this.scene.background.lerp(targetBgColor, dt * 0.5)
+      }
+      if (this.scene.fog) {
+        this.scene.fog.color.lerp(targetFogColor, dt * 0.5)
+      }
+    }
+
     const controls = this.input.read(this.autoAccelEnabled)
     let collided = false
 
@@ -1197,36 +1381,206 @@ export class Game {
       }
       this.cockpit.update(controls.steer, dt)
     } else if (this.inVehicle) {
-      const playerX = this.player.root.position.x
-      const playerZ = this.player.root.position.z
-      const forwardX = -Math.sin(this.player.yaw)
+      // 3.5 Looping 360° Hot Wheels para o Carro de Rally Elétrico nas Dunas
+      const isRallyCar = this.player.kind === 'rally_car'
+      const loopCenterX = this.rallyRace.loopCenterX // 1350
+      const loopStartZ = this.rallyRace.loopStartZ   // -27.5
+      const loopEndZ = this.rallyRace.loopEndZ       // +32.5
+      const playerPos = this.player.root.position
+      const inLoopCorridor = Math.abs(playerPos.x - loopCenterX) <= (this.rallyRace.trackWidth / 2 + 1.5)
+      
+      // forwardZ = -cos(yaw): positivo quando o carro está apontando no sentido Norte (+Z) da pista
       const forwardZ = -Math.cos(this.player.yaw)
-      const rightX = Math.cos(this.player.yaw)
-      const rightZ = -Math.sin(this.player.yaw)
+      const movingNorth = (forwardZ > -0.25 && this.player.speed > 0.3) || (forwardZ < -0.25 && this.player.speed < -0.3)
+      const inLoopEntryWindow = playerPos.z >= loopStartZ - 5.0 && playerPos.z <= loopEndZ - 4.0
 
-      const centerDuneY = this.city.getDuneHeightAt(playerX, playerZ)
-      const frontY = this.city.getDuneHeightAt(playerX + forwardX * 2.2, playerZ + forwardZ * 2.2)
-      const backY = this.city.getDuneHeightAt(playerX - forwardX * 2.2, playerZ - forwardZ * 2.2)
-      const leftY = this.city.getDuneHeightAt(playerX - rightX * 1.1, playerZ - rightZ * 1.1)
-      const rightY = this.city.getDuneHeightAt(playerX + rightX * 1.1, playerZ + rightZ * 1.1)
-
-      const duneY = Math.max(centerDuneY, frontY, backY, leftY, rightY)
-      this.player.groundElevation = duneY
-
-      if (duneY > 0.1) {
-        this.player.dunePitch = Math.atan2(frontY - backY, 5.0)
-      } else {
-        this.player.dunePitch = 0
+      // Ativação do looping quando o jogador entra no vão do portal 360° no sentido da pista
+      if ((isRallyCar || inLoopCorridor) && !this.rallyLoopActive && !this.rallyLoopFalling && inLoopCorridor && inLoopEntryWindow && movingNorth) {
+        this.rallyLoopActive = true
+        const initialU = THREE.MathUtils.clamp((playerPos.z - loopStartZ) / this.rallyRace.loopZLength, 0.005, 0.95)
+        this.rallyLoopU = initialU
+        this.rallyLoopLateral = THREE.MathUtils.clamp(playerPos.x - loopCenterX, -7.2, 7.2)
+        // Garante impulso e potência dos motores elétricos na subida vertical do looping
+        this.player.speed = Math.max(34.0, Math.abs(this.player.speed) * 1.15)
+        this.sound.effect('upgrade')
+        this.showToast('🌀 SUBINDO NO LOOPING 360°! ACELERE NO MOTOR ELÉTRICO!')
       }
 
-      if ((this.rallyRace.isCountingDown || this.rallyRace.raceEnded) && this.player.kind === 'rally_car') {
-        controls.throttle = 0
-        controls.handbrake = true
+      if (this.rallyLoopActive) {
+        const theta = this.rallyLoopU * Math.PI * 2
+
+        // Aceleração potente com motor elétrico (W / toque / acelerador)
+        if (controls.throttle > 0) {
+          const maxLoopSpeed = this.player.inRallyMission ? 85.0 : 54.0
+          this.player.speed = Math.min(maxLoopSpeed, this.player.speed + 45.0 * controls.throttle * dt)
+        } else if (controls.throttle < 0 || controls.handbrake) {
+          this.player.speed = Math.max(-10.0, this.player.speed - (controls.handbrake ? 38.0 : 24.0) * dt)
+        } else {
+          // Atrito natural do asfalto vermelho de alta aderência
+          this.player.speed *= Math.max(0, 1 - 0.22 * dt)
+        }
+
+        // FÍSICA GRAVITACIONAL TANGENCIAL AO LONGO DO LOOPING 360°:
+        // - Na subida (0 a 0.25): puxa para trás (-22 * sin(theta))
+        // - No topo invertido (0.25 a 0.75): ponto de inversão
+        // - Na descida (0.5 a 1.0): sin(theta) negativo -> acelera fortemente para a frente!
+        const gravityTangent = -22.0 * Math.sin(theta)
+        this.player.speed += gravityTangent * dt
+
+        // Avanço dinâmico ao longo do arco do looping
+        this.rallyLoopU += (this.player.speed * dt) / this.rallyRace.loopArcLength
+
+        // Controle lateral do volante limitado rigidamente pelos muros de proteção esquerdo e direito
+        this.rallyLoopLateral += controls.steer * 14.0 * Math.sign(this.player.speed || 1) * dt
+        if (this.rallyLoopLateral < -7.3) {
+          this.rallyLoopLateral = -7.3
+          this.player.speed *= Math.max(0, 1 - 0.7 * dt)
+          if (Math.random() < 0.35) {
+            this.sparks.emit(this.player.root.position)
+            this.sound.effect('crash')
+          }
+        } else if (this.rallyLoopLateral > 7.3) {
+          this.rallyLoopLateral = 7.3
+          this.player.speed *= Math.max(0, 1 - 0.7 * dt)
+          if (Math.random() < 0.35) {
+            this.sparks.emit(this.player.root.position)
+            this.sound.effect('crash')
+          }
+        }
+
+        // Transformação 3D exata do looping (posição, yaw e rotação de pitch contínua de 0° a 360°)
+        const loopTr = this.rallyRace.getLoopTransform(this.rallyLoopU, this.rallyLoopLateral)
+        this.player.root.position.copy(loopTr.position)
+        this.player.yaw = loopTr.yaw
+        this.player.root.rotation.order = 'YXZ'
+        this.player.root.rotation.y = loopTr.yaw
+        this.player.root.rotation.x = loopTr.pitch
+        this.player.root.rotation.z = -controls.steer * 0.16
+        this.player.groundElevation = loopTr.position.y
+        this.player.climbLift = 0
+
+        // Animação de rotação contínua das rodas com base na velocidade
+        const wheelSpin = -this.player.speed * dt / 0.38
+        for (const wheel of this.player.wheels) {
+          wheel.rotation.x += wheelSpin
+        }
+
+        if (Math.random() < 0.28) {
+          this.sparks.emit(new THREE.Vector3(this.player.root.position.x, this.player.root.position.y - 0.2, this.player.root.position.z))
+        }
+
+        // FÍSICA DE QUEDA DE CABEÇA PARA BAIXO:
+        // Se o carro de rally perder força centrífuga no topo invertido (u entre 0.32 e 0.68) e velocidade < 12 m/s:
+        // O carro descola do teto do looping e cai no chão de cabeça para baixo!
+        const isUpsideDown = this.rallyLoopU >= 0.32 && this.rallyLoopU <= 0.68
+        if (isUpsideDown && Math.abs(this.player.speed) < 12.0) {
+          this.rallyLoopActive = false
+          this.rallyLoopFalling = true
+          this.rallyLoopFallVy = -3.0
+          this.rallyLoopFallPitch = loopTr.pitch
+          this.sound.effect('crash')
+          this.showToast('⚠️ GRAVIDADE! VELOCIDADE INSUFICIENTE NO TOPO! CARRO CAIU DE CABEÇA PARA BAIXO!')
+        }
+
+        // Se o jogador der ré e retornar pela entrada:
+        if (this.rallyLoopU <= 0) {
+          this.rallyLoopActive = false
+          this.rallyLoopU = 0
+          this.player.root.position.set(loopCenterX + this.rallyLoopLateral, 0.18, loopStartZ - 2.5)
+          this.player.root.rotation.set(0, Math.PI, 0)
+          this.player.yaw = Math.PI
+          this.showToast('RETORNOU À ENTRADA DO LOOPING')
+        }
+
+        // Looping 360° completado com sucesso!
+        if (this.rallyLoopU >= 1.0) {
+          this.rallyLoopActive = false
+          this.rallyLoopU = 0
+          this.player.root.position.set(loopCenterX + this.rallyLoopLateral, 0.18, this.rallyRace.loopEndZ + 2.5)
+          this.player.root.rotation.set(0, Math.PI, 0)
+          this.player.yaw = Math.PI
+          this.player.speed = Math.max(38.0, this.player.speed)
+          this.sound.effect('jump')
+          this.sound.effect('coin')
+          this.sparks.emit(this.player.root.position)
+          this.cash += 250
+          this.distance += 500
+          localStorage.setItem(CASH_KEY, String(this.cash))
+          this.showToast('🔥 LOOPING 360° COMPLETADO COM SUCESSO! ACELERAÇÃO MÁXIMA! +$250')
+          this.updateHud()
+        }
+
+        collided = false
+        this.cockpit.update(controls.steer, dt)
+      } else if (this.rallyLoopFalling) {
+        // Gravidade puxando o carro em queda livre de cabeça para baixo até o solo
+        this.rallyLoopFallVy -= 28.0 * dt
+        this.player.root.position.y += this.rallyLoopFallVy * dt
+        this.player.root.rotation.order = 'YXZ'
+        this.player.root.rotation.x = this.rallyLoopFallPitch
+        this.player.root.rotation.z = 0
         this.player.speed = 0
-      }
 
-      collided = this.player.drive(controls, dt, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.player.root.position.y + this.player.climbLift))
-      this.cockpit.update(controls.steer, dt)
+        if (this.player.root.position.y <= 0.18) {
+          this.player.root.position.y = 0.18
+          this.rallyLoopFalling = false
+          this.sound.effect('explosion')
+          this.sparks.emitExplosion(this.player.root.position)
+          this.showToast('💥 IMPACTO! O CARRO CAIU DE CABEÇA PARA BAIXO NO CHÃO!')
+          // Desvira o carro automaticamente após 1.2s para retomar a corrida em pé
+          setTimeout(() => {
+            if (this.player) {
+              this.player.root.rotation.set(0, Math.PI, 0)
+              this.player.yaw = Math.PI
+              this.player.root.position.y = 0.18
+              this.showToast('🚗 CARRO DESVIRADO! ACELERE PARA RETOMAR A CORRIDA!')
+            }
+          }, 1200)
+        }
+        collided = false
+        this.cockpit.update(0, dt)
+      } else {
+        const playerX = this.player.root.position.x
+        const playerZ = this.player.root.position.z
+        const forwardX = -Math.sin(this.player.yaw)
+        const forwardZ = -Math.cos(this.player.yaw)
+        const rightX = Math.cos(this.player.yaw)
+        const rightZ = -Math.sin(this.player.yaw)
+
+        // Verificação se está na rampa de entrada/saída do looping na reta leste
+        const inRallyCorridor = Math.abs(playerX - loopCenterX) <= (this.rallyRace.trackWidth / 2 + 1.2)
+        const onEntranceRamp = inRallyCorridor && playerZ >= loopStartZ - 14.0 && playerZ <= loopStartZ + 1.0
+
+        if (onEntranceRamp) {
+          // Elevação suave e alinhamento sobre a rampa de acesso do looping
+          this.player.groundElevation = 0.08
+          this.player.dunePitch = 0.02
+        } else {
+          const centerDuneY = this.city.getDuneHeightAt(playerX, playerZ)
+          const frontY = this.city.getDuneHeightAt(playerX + forwardX * 2.2, playerZ + forwardZ * 2.2)
+          const backY = this.city.getDuneHeightAt(playerX - forwardX * 2.2, playerZ - forwardZ * 2.2)
+          const leftY = this.city.getDuneHeightAt(playerX - rightX * 1.1, playerZ - rightZ * 1.1)
+          const rightY = this.city.getDuneHeightAt(playerX + rightX * 1.1, playerZ + rightZ * 1.1)
+
+          const duneY = Math.max(centerDuneY, frontY, backY, leftY, rightY)
+          this.player.groundElevation = duneY
+
+          if (duneY > 0.1) {
+            this.player.dunePitch = Math.atan2(frontY - backY, 5.0)
+          } else {
+            this.player.dunePitch = 0
+          }
+        }
+
+        if ((this.rallyRace.isCountingDown || this.rallyRace.raceEnded) && this.player.kind === 'rally_car') {
+          controls.throttle = 0
+          controls.handbrake = true
+          this.player.speed = 0
+        }
+
+        collided = this.player.drive(controls, dt, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.player.root.position.y + this.player.climbLift))
+        this.cockpit.update(controls.steer, dt)
+      }
 
       // Car Hauler Ramp Stunt Jump & Slow Motion Physics
       if (this.rampJumpActive) {
@@ -1350,8 +1704,35 @@ export class Game {
     }
     this.city.ensureAround(actorPosition.z, actorPosition.x, true)
     this.pedestrians.ensureAround(actorPosition.z)
-    this.city.update(dt)
+    this.city.update(dt, actorPosition)
     this.kingKong.update(dt, this.inPlane ? this.plane.root.position : null)
+
+    // Ocultação de performance no modo gráfico baixo na área das dunas (corrida de rally):
+    // Desliga a exibição do arranha-céu/King Kong, pedestres e trânsito da cidade
+    const isLowMode = this.graphicsMode === 'low'
+    const inDunesRaceArea = actorPosition.x > 620
+
+    if (isLowMode && inDunesRaceArea) {
+      this.kingKong.root.visible = false
+      this.pedestrians.root.visible = false
+      for (const car of this.traffic.getCars()) {
+        car.root.visible = false
+      }
+      for (const car of this.abandonedCars) {
+        if (car !== this.monsterTruck && car.root.position.x < 620) {
+          car.root.visible = false
+        }
+      }
+    } else {
+      this.kingKong.root.visible = true
+      this.pedestrians.root.visible = true
+      for (const car of this.traffic.getCars()) {
+        car.root.visible = true
+      }
+      for (const car of this.abandonedCars) {
+        car.root.visible = true
+      }
+    }
 
     // Floating Rings update & check
     const ringResult = this.floatingRings.update(dt, this.plane.root.position, this.inPlane, this.plane.consecutiveRings)
@@ -2767,6 +3148,10 @@ export class Game {
     this.running = false
     this.ended = true
     this.paused = false
+    this.rallyLoopActive = false
+    this.rallyLoopU = 0
+    this.rallyLoopFalling = false
+    this.rallyLoopFallVy = 0
     this.cancelAutoApproach(null)
     this.updateWaterTimerUI(false)
     this.pauseOverlay.classList.add('hidden')
@@ -2860,11 +3245,23 @@ export class Game {
     } else if (this.inVehicle) {
       this.exitVehicle()
     } else {
+      const user = usersDB.getCurrentUser()
       const charPos = this.character.root.position
       const distToPlane = charPos.distanceTo(this.plane.root.position)
       if (distToPlane <= 6.5 && !this.plane.exploded) {
+        if (user.level < 2) {
+          this.sound.effect('crash')
+          this.showToast('⛔ BLOQUEADO: NÍVEL DE XP 2 NECESSÁRIO PARA PILOTAR O AVIÃO BIMOTOR E INICIAR SUAS MISSÕES!')
+          return
+        }
         this.enterPlane()
       } else {
+        const nearby = this.findAnyNearbyCar(2.4) ?? this.findAnyNearbyCar(18.0)
+        if (nearby?.car.kind === 'monster_truck' && user.level < 2) {
+          this.sound.effect('crash')
+          this.showToast('⛔ BLOQUEADO: NÍVEL DE XP 2 NECESSÁRIO PARA ENTRAR NO MONSTER TRUCK E INICIAR SUAS MISSÕES!')
+          return
+        }
         this.enterVehicle()
       }
     }
@@ -2873,6 +3270,13 @@ export class Game {
   private enterPlane(): void {
     if (this.plane.exploded) {
       this.showToast('AVIÃO DESTRUÍDO // IMPOSSÍVEL PILOTAR')
+      return
+    }
+
+    const user = usersDB.getCurrentUser()
+    if (user.level < 2) {
+      this.sound.effect('crash')
+      this.showToast('⛔ BLOQUEADO: NÍVEL DE XP 2 NECESSÁRIO PARA PILOTAR O AVIÃO BIMOTOR E INICIAR SUAS MISSÕES!')
       return
     }
 
@@ -2940,6 +3344,8 @@ export class Game {
     this.player.root.visible = true
     this.inVehicle = false
     this.inPlane = false
+    this.rallyLoopActive = false
+    this.rallyLoopU = 0
     if (this.cameraMode === 'cockpit') this.cameraMode = 'chase'
     this.input.clear()
     this.updateVehicleButton()
@@ -3047,6 +3453,11 @@ export class Game {
 
     const immediateTarget = this.findAnyNearbyCar(2.4)
     if (immediateTarget && !immediateTarget.car.exploded) {
+      if (immediateTarget.car.kind === 'monster_truck' && usersDB.getCurrentUser().level < 2) {
+        this.sound.effect('crash')
+        this.showToast('⛔ BLOQUEADO: NÍVEL DE XP 2 NECESSÁRIO PARA ENTRAR NO MONSTER TRUCK E INICIAR SUAS MISSÕES!')
+        return
+      }
       this.boardVehicle(immediateTarget.car, immediateTarget.source)
       return
     }
@@ -3059,6 +3470,12 @@ export class Game {
 
     if (actionTarget.car.exploded) {
       this.showToast('VEÍCULO DESTRUÍDO // IMPOSSÍVEL DIRIGIR')
+      return
+    }
+
+    if (actionTarget.car.kind === 'monster_truck' && usersDB.getCurrentUser().level < 2) {
+      this.sound.effect('crash')
+      this.showToast('⛔ BLOQUEADO: NÍVEL DE XP 2 NECESSÁRIO PARA ENTRAR NO MONSTER TRUCK E INICIAR SUAS MISSÕES!')
       return
     }
 
@@ -3075,6 +3492,15 @@ export class Game {
     if (chosenCar.exploded) {
       this.showToast('VEÍCULO DESTRUÍDO // IMPOSSÍVEL DIRIGIR')
       return
+    }
+
+    if (chosenCar.kind === 'monster_truck') {
+      const user = usersDB.getCurrentUser()
+      if (user.level < 2) {
+        this.sound.effect('crash')
+        this.showToast('⛔ BLOQUEADO: NÍVEL DE XP 2 NECESSÁRIO PARA ENTRAR NO MONSTER TRUCK E INICIAR SUAS MISSÕES!')
+        return
+      }
     }
 
     const isNewCar = chosenCar !== this.player
@@ -3115,6 +3541,13 @@ export class Game {
     this.updateCameraButton()
     this.updateCamera(1)
     this.updateHud()
+
+    if (this.player.kind === 'monster_truck') {
+      this.wanted.setLevel(6)
+      this.sound.effect('wanted')
+      this.showToast('🚨 NÍVEL DE PROCURADO ELEVADO PARA 6 AO ENTRAR NO MONSTER TRUCK!')
+      this.updateHud()
+    }
 
     const vehicleName = this.player.police
       ? 'VIATURA POLICIAL'
@@ -3223,14 +3656,25 @@ export class Game {
         this.vehicleButton.setAttribute('aria-label', 'Sair do carro (E)')
       }
     } else {
+      const user = usersDB.getCurrentUser()
       const distToPlane = this.character.root.position.distanceTo(this.plane.root.position)
       if (distToPlane <= 6.5 && !this.plane.exploded) {
-        this.vehicleButton.textContent = 'PILOTAR AVIÃO BIMOTOR · E'
-        this.vehicleButton.setAttribute('aria-label', 'Pilotar avião bimotor (E)')
+        if (user.level < 2) {
+          this.vehicleButton.textContent = 'BIMOTOR (BLOQUEADO · NV 2 XP)'
+          this.vehicleButton.setAttribute('aria-label', 'Avião bimotor bloqueado (requer Nível 2 de XP)')
+        } else {
+          this.vehicleButton.textContent = 'PILOTAR AVIÃO BIMOTOR · E'
+          this.vehicleButton.setAttribute('aria-label', 'Pilotar avião bimotor (E)')
+        }
         return
       }
       const nearby = this.findAnyNearbyCar(18.0)
       if (nearby && !nearby.car.exploded) {
+        if (nearby.car.kind === 'monster_truck' && user.level < 2) {
+          this.vehicleButton.textContent = 'MONSTER TRUCK (BLOQUEADO · NV 2 XP)'
+          this.vehicleButton.setAttribute('aria-label', 'Monster truck bloqueado (requer Nível 2 de XP)')
+          return
+        }
         const vehicleName = nearby.car.police
           ? 'VIATURA'
           : nearby.car.kind === 'monster_truck'
@@ -3720,15 +4164,13 @@ export class Game {
     const startIntro = document.querySelector('#start-overlay .intro-copy')
     if (startIntro) {
       startIntro.innerHTML = isPt
-        ? 'Pegue a estrada com carros ou decole com o <b>Avião Bimotor</b> na pista larga do aeroporto. Atravesse os círculos flutuantes nos céus e despiste a polícia!'
-        : 'Hit the road with cars or take off with the <b>Twin-Engine Plane</b> on the airport runway. Fly through floating rings in the sky and escape the police!'
+        ? 'Pegue a estrada com carro ou decole com o avião bimotor ou com o transformer, despiste a polícia e sobreviva!'
+        : 'Hit the road with a car or take off with the twin-engine plane or transformer, outrun the police and survive!'
     }
 
     const startDetails = document.querySelector('#start-overlay .start-details')
     if (startDetails) {
-      startDetails.innerHTML = isPt
-        ? '<span><b>01</b> DIRIJA & VOE</span><span><b>02</b> CÍRCULOS FLUTUANTES</span><span><b>03</b> SOBREVIVA</span>'
-        : '<span><b>01</b> DRIVE & FLY</span><span><b>02</b> FLOATING RINGS</span><span><b>03</b> SURVIVE</span>'
+      startDetails.innerHTML = ''
     }
 
     const startButton = document.querySelector('#start-button')
@@ -5173,6 +5615,7 @@ export class Game {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
     this.composer?.setSize(width, height)
+    this.bloomPass?.resolution.set(width, height)
   }
 
   private readonly onVisibilityChange = (): void => {

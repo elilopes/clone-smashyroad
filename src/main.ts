@@ -485,8 +485,9 @@ app.innerHTML = `
             <button class="settings-option-btn" data-graphics="low" type="button">BAIXA</button>
             <button class="settings-option-btn active" data-graphics="medium" type="button">MÉDIA</button>
             <button class="settings-option-btn" data-graphics="high" type="button">ALTA</button>
+            <button class="settings-option-btn" data-graphics="ultra" type="button" style="color: #ec4899; font-weight: 700;">ULTRA ⚡</button>
           </div>
-          <span class="settings-help" id="graphics-settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Baixa: Voxels Low Poly com Culled Meshing & Instanced Mesh (sem faces ocultas). Média: Voxels com Greeble clássico. Alta: Greeble Voxels High Poly com Geometry Merging & Instanced Mesh.</span>
+          <span class="settings-help" id="graphics-settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Baixa: Low Poly otimizado. Média: Greeble clássico. Alta: High Poly + SSAO. Ultra: Bloom neon, Lightmaps HD pré-calculados, Reflexos PBR automotivos e Voxels com bordas arredondadas.</span>
         </div>
 
         <div class="settings-group" style="margin-top: 20px; text-align: left;">
@@ -589,6 +590,7 @@ app.innerHTML = `
           <button class="settings-option-btn" data-graphics="low" type="button" style="flex:1; height: 32px; font-size: 9px;">BAIXA</button>
           <button class="settings-option-btn active" data-graphics="medium" type="button" style="flex:1; height: 32px; font-size: 9px;">MÉDIA</button>
           <button class="settings-option-btn" data-graphics="high" type="button" style="flex:1; height: 32px; font-size: 9px;">ALTA</button>
+          <button class="settings-option-btn" data-graphics="ultra" type="button" style="flex:1; height: 32px; font-size: 9px; color: #ec4899; font-weight: 700;">ULTRA ⚡</button>
         </div>
       </div>
       <p class="control-hint" style="margin-top: 14px;">WASD / SETAS DIRIGIR / PILOTAR <i>·</i> E ENTRAR NO CARRO OU AVIÃO <i>·</i> C CÂMERA <i>·</i> M MAPA <i>·</i> P PAUSA</p>

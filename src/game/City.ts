@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 const BLOCK = 48
 const ROAD_WIDTH = 15
@@ -34,13 +35,16 @@ export interface LagoonInfo {
   radius: number
 }
 
-export type GraphicsDesignMode = 'low' | 'medium' | 'high'
+export type GraphicsDesignMode = 'low' | 'medium' | 'high' | 'ultra'
 
 type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }
 type Coin = { mesh: THREE.Mesh; x: number; z: number; alive: boolean }
 type BuildingVisual = { matrix: THREE.Matrix4; color: THREE.Color; bounds: Bounds; faded: boolean; roofMatrix?: THREE.Matrix4; roofColor?: THREE.Color }
 type CityChunk = {
   group: THREE.Group
+  buildingsGroup: THREE.Group
+  detailsGroup: THREE.Group
+  centerZ: number
   bounds: Bounds[]
   dunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number; rotY?: number }[]
   coins: Coin[]
@@ -177,9 +181,65 @@ export class City {
   private readonly balconyMaterial = new THREE.MeshStandardMaterial({ color: 0xa8a29e, roughness: 0.85 })
 
   // High-Poly Greeble Merged Geometries (Created via BufferGeometryUtils.mergeGeometries)
-  private readonly sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1)
+  private readonly sharedBoxGeometry = this.initBoxGeometry(new THREE.BoxGeometry(1, 1, 1))
   private readonly sharedCulledBoxGeometry = this.createCulledBoxGeometry()
+  private readonly sharedRoundedBoxGeometry = this.createRoundedBoxGeometry()
   private readonly sharedConeGeometry = new THREE.ConeGeometry(0.72, 1, 4)
+  private readonly ultraLightMap: THREE.CanvasTexture = this.createProceduralLightMap()
+
+  private initBoxGeometry(geo: THREE.BoxGeometry): THREE.BoxGeometry {
+    if (!geo.attributes.uv2 && geo.attributes.uv) {
+      geo.setAttribute('uv2', geo.attributes.uv)
+    }
+    return geo
+  }
+
+  private createRoundedBoxGeometry(): THREE.BufferGeometry {
+    const geo = new RoundedBoxGeometry(1, 1, 1, 3, 0.08)
+    if (!geo.attributes.uv2 && geo.attributes.uv) {
+      geo.setAttribute('uv2', geo.attributes.uv)
+    }
+    return geo
+  }
+
+  private createProceduralLightMap(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas')
+    canvas.width = 512
+    canvas.height = 512
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      // Sky & ground ambient occlusion gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, 512)
+      skyGrad.addColorStop(0, '#f8fafc')
+      skyGrad.addColorStop(0.3, '#f1f5f9')
+      skyGrad.addColorStop(0.7, '#e2e8f0')
+      skyGrad.addColorStop(1.0, '#cbd5e1')
+      ctx.fillStyle = skyGrad
+      ctx.fillRect(0, 0, 512, 512)
+
+      // Warm directional sun bounce (simulating pre-calculated GI bounce)
+      const sunBounce = ctx.createRadialGradient(160, 140, 20, 200, 180, 280)
+      sunBounce.addColorStop(0, 'rgba(255, 237, 213, 0.9)')
+      sunBounce.addColorStop(0.5, 'rgba(254, 215, 170, 0.45)')
+      sunBounce.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.fillStyle = sunBounce
+      ctx.fillRect(0, 0, 512, 512)
+
+      // Corner and contact ambient occlusion
+      const aoGrad = ctx.createRadialGradient(256, 256, 120, 256, 256, 360)
+      aoGrad.addColorStop(0, 'rgba(255, 255, 255, 0)')
+      aoGrad.addColorStop(0.7, 'rgba(203, 213, 225, 0.25)')
+      aoGrad.addColorStop(1, 'rgba(71, 85, 105, 0.55)')
+      ctx.fillStyle = aoGrad
+      ctx.fillRect(0, 0, 512, 512)
+    }
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.colorSpace = THREE.SRGBColorSpace
+    return texture
+  }
 
   private createCulledBoxGeometry(): THREE.BufferGeometry {
     const geo = new THREE.BoxGeometry(1, 1, 1)
@@ -195,6 +255,9 @@ export class City {
         for (let j = 0; j < 6; j++) newIndices.push(index.getX(i + j))
       }
       geo.setIndex(newIndices)
+    }
+    if (!geo.attributes.uv2 && geo.attributes.uv) {
+      geo.setAttribute('uv2', geo.attributes.uv)
     }
     return geo
   }
@@ -241,6 +304,8 @@ export class City {
     this.sharedGeometries = new Set([
       this.coinGeometry,
       this.sharedBoxGeometry,
+      this.sharedCulledBoxGeometry,
+      this.sharedRoundedBoxGeometry,
       this.sharedConeGeometry,
       this.waterTowerMergedGeo,
       this.hvacChillerMergedGeo,
@@ -251,12 +316,71 @@ export class City {
       this.balconyMergedGeo,
     ])
 
+    this.updateMaterialsForGraphicsMode()
     this.selectRandomKingKongLocation()
+  }
+
+  private updateMaterialsForGraphicsMode(): void {
+    const isUltra = this.graphicsMode === 'ultra'
+    const lightMap = isUltra ? this.ultraLightMap : null
+    const lightIntensity = isUltra ? 1.35 : 0
+
+    const mats: (THREE.MeshStandardMaterial | undefined)[] = [
+      this.ground.material as THREE.MeshStandardMaterial,
+      this.buildingBatchMaterial,
+      this.roofBatchMaterial,
+      this.houseBatchMaterial,
+      this.houseRoofMaterial,
+      this.asphalt,
+      this.sidewalk,
+      this.sandMaterial,
+      this.sandDarkMaterial,
+      this.runwayAsphalt,
+      this.airportBuildingMat,
+      this.garageConcreteMat,
+      this.waterTowerMaterial,
+      this.hvacMaterial,
+      this.telecomMaterial,
+      this.solarPanelMaterial,
+      this.fireEscapeMaterial,
+      this.acUnitMaterial,
+      this.balconyMaterial,
+    ]
+
+    for (const mat of mats) {
+      if (!mat) continue
+      mat.lightMap = lightMap
+      mat.lightMapIntensity = lightIntensity
+      if (isUltra) {
+        if (mat === this.asphalt || mat === this.runwayAsphalt) {
+          mat.roughness = 0.55
+          mat.metalness = 0.22
+        } else if (mat === this.sidewalk) {
+          mat.roughness = 1.0
+          mat.metalness = 0.0
+        }
+      } else {
+        if (mat === this.asphalt) {
+          mat.roughness = 0.98
+          mat.metalness = 0
+        }
+        if (mat === this.runwayAsphalt) {
+          mat.roughness = 0.92
+          mat.metalness = 0
+        }
+        if (mat === this.sidewalk) {
+          mat.roughness = 1.0
+          mat.metalness = 0.0
+        }
+      }
+      mat.needsUpdate = true
+    }
   }
 
   setGraphicsMode(mode: GraphicsDesignMode, playerZ: number = 0): void {
     if (this.graphicsMode === mode) return
     this.graphicsMode = mode
+    this.updateMaterialsForGraphicsMode()
     this.clear()
     this.ensureAround(playerZ)
   }
@@ -543,9 +667,13 @@ export class City {
 
     const buildingCapacity = 160
     const isLow = this.graphicsMode === 'low'
-    const isHigh = this.graphicsMode === 'high'
+    const isUltra = this.graphicsMode === 'ultra'
+    const isHigh = this.graphicsMode === 'high' || isUltra
 
-    const geoToUse = isLow ? this.sharedCulledBoxGeometry : this.sharedBoxGeometry
+    const buildingsGroup = new THREE.Group()
+    const detailsGroup = new THREE.Group()
+
+    const geoToUse = isLow ? this.sharedCulledBoxGeometry : (isUltra ? this.sharedRoundedBoxGeometry : this.sharedBoxGeometry)
 
     const buildings = new THREE.InstancedMesh(geoToUse, this.buildingBatchMaterial, buildingCapacity)
     const fadedBuildings = new THREE.InstancedMesh(geoToUse, this.fadedBuildingMaterial, buildingCapacity)
@@ -625,20 +753,20 @@ export class City {
 
         // Check if this block is the airport runway
         if (this.isRunwayAt(blockX, centerZ)) {
-          this.buildAirportRunway(group, centerX, centerZ, bounds, chunkCoins)
+          this.buildAirportRunway(group, buildingsGroup, centerX, centerZ, bounds, chunkCoins)
           continue
         }
 
         // Check if this block is the Fuel Service Garage
         if (this.isGarageAt(blockX, centerZ)) {
-          this.buildFuelGarage(group, centerX, centerZ, bounds, chunkCoins)
+          this.buildFuelGarage(group, buildingsGroup, centerX, centerZ, bounds, chunkCoins)
           continue
         }
 
         // Check if this block is one of the city plazas
         const plaza = this.getPlazaAt(blockX, centerZ)
         if (plaza) {
-          this.buildPlaza(group, plaza, centerX, centerZ, bounds, chunkCoins)
+          this.buildPlaza(group, buildingsGroup, plaza, centerX, centerZ, bounds, chunkCoins)
           continue
         }
 
@@ -651,7 +779,7 @@ export class City {
 
         // Check if this block is King Kong's Skyscraper
         if (this.isKingKongAt(blockX, centerZ)) {
-          this.buildKingKongPlaza(group, centerX, centerZ, bounds, chunkCoins)
+          this.buildKingKongPlaza(group, buildingsGroup, centerX, centerZ, bounds, chunkCoins)
           continue
         }
 
@@ -825,43 +953,46 @@ export class City {
     if (houseRoofs.instanceColor) houseRoofs.instanceColor.needsUpdate = true
     if (fadedHouseRoofs.instanceColor) fadedHouseRoofs.instanceColor.needsUpdate = true
 
-    group.add(sidewalks, buildings, fadedBuildings, houses, fadedHouses, roofInstances, fadedRoofInstances, houseRoofs, fadedHouseRoofs, houseDetails, houseDoors)
+    buildingsGroup.add(sidewalks, buildings, fadedBuildings, houses, fadedHouses, roofInstances, fadedRoofInstances, houseRoofs, fadedHouseRoofs)
+    detailsGroup.add(houseDetails, houseDoors)
 
     if (highWaterTowers && highWaterTowerIndex > 0) {
       highWaterTowers.count = highWaterTowerIndex
       highWaterTowers.instanceMatrix.needsUpdate = true
-      group.add(highWaterTowers)
+      detailsGroup.add(highWaterTowers)
     }
     if (highHVACUnits && highHVACIndex > 0) {
       highHVACUnits.count = highHVACIndex
       highHVACUnits.instanceMatrix.needsUpdate = true
-      group.add(highHVACUnits)
+      detailsGroup.add(highHVACUnits)
     }
     if (highTelecomMasts && highTelecomIndex > 0) {
       highTelecomMasts.count = highTelecomIndex
       highTelecomMasts.instanceMatrix.needsUpdate = true
-      group.add(highTelecomMasts)
+      detailsGroup.add(highTelecomMasts)
     }
     if (highSolarPanels && highSolarIndex > 0) {
       highSolarPanels.count = highSolarIndex
       highSolarPanels.instanceMatrix.needsUpdate = true
-      group.add(highSolarPanels)
+      detailsGroup.add(highSolarPanels)
     }
     if (highFireEscapes && highFireEscapeIndex > 0) {
       highFireEscapes.count = highFireEscapeIndex
       highFireEscapes.instanceMatrix.needsUpdate = true
-      group.add(highFireEscapes)
+      detailsGroup.add(highFireEscapes)
     }
     if (highACUnits && highACIndex > 0) {
       highACUnits.count = highACIndex
       highACUnits.instanceMatrix.needsUpdate = true
-      group.add(highACUnits)
+      detailsGroup.add(highACUnits)
     }
     if (highBalconies && highBalconyIndex > 0) {
       highBalconies.count = highBalconyIndex
       highBalconies.instanceMatrix.needsUpdate = true
-      group.add(highBalconies)
+      detailsGroup.add(highBalconies)
     }
+
+    group.add(buildingsGroup, detailsGroup)
 
     for (let coinIndex = 0; coinIndex < 5; coinIndex += 1) {
       const road = Math.floor(random() * 7) - 3
@@ -878,7 +1009,7 @@ export class City {
     this.root.add(group)
     this.colliders.push(...bounds)
     this.coins.push(...chunkCoins)
-    this.chunks.set(index, { group, bounds, dunes: chunkDunes, coins: chunkCoins, groundMaterial: green, buildingVisuals, houseVisuals, buildings, fadedBuildings, roofInstances, fadedRoofInstances, houses, fadedHouses, houseRoofs, fadedHouseRoofs })
+    this.chunks.set(index, { group, buildingsGroup, detailsGroup, centerZ: zMiddle, bounds, dunes: chunkDunes, coins: chunkCoins, groundMaterial: green, buildingVisuals, houseVisuals, buildings, fadedBuildings, roofInstances, fadedRoofInstances, houses, fadedHouses, houseRoofs, fadedHouseRoofs })
   }
 
   private addRoad(group: THREE.Group, geometry: THREE.PlaneGeometry, x: number, z: number): void {
@@ -1038,6 +1169,7 @@ export class City {
 
   private buildAirportRunway(
     group: THREE.Group,
+    structuresGroup: THREE.Group,
     centerX: number,
     centerZ: number,
     bounds: Bounds[],
@@ -1102,16 +1234,16 @@ export class City {
       towerBase.position.set(centerX + 32, 9, centerZ)
       towerBase.castShadow = true
       towerBase.receiveShadow = true
-      group.add(towerBase)
+      structuresGroup.add(towerBase)
 
       const towerDeck = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 3.2, 12), this.houseWindowMaterial)
       towerDeck.position.set(centerX + 32, 19.5, centerZ)
       towerDeck.castShadow = true
-      group.add(towerDeck)
+      structuresGroup.add(towerDeck)
 
       const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(4.8, 1.8, 12), this.airportRoofMat)
       towerRoof.position.set(centerX + 32, 21.9, centerZ)
-      group.add(towerRoof)
+      structuresGroup.add(towerRoof)
 
       bounds.push({
         minX: centerX + 32 - 4.5,
@@ -1127,13 +1259,13 @@ export class City {
       hangar.position.set(centerX + 34, 4.25, centerZ)
       hangar.castShadow = true
       hangar.receiveShadow = true
-      group.add(hangar)
+      structuresGroup.add(hangar)
 
       const hangarRoof = new THREE.Mesh(new THREE.CylinderGeometry(8.2, 8.2, 28, 14, 1, false, 0, Math.PI), this.airportRoofMat)
       hangarRoof.rotation.z = Math.PI / 2
       hangarRoof.position.set(centerX + 34, 8.5, centerZ)
       hangarRoof.castShadow = true
-      group.add(hangarRoof)
+      structuresGroup.add(hangarRoof)
 
       bounds.push({
         minX: centerX + 34 - 8.5,
@@ -1156,6 +1288,7 @@ export class City {
 
   private buildFuelGarage(
     group: THREE.Group,
+    structuresGroup: THREE.Group,
     centerX: number,
     centerZ: number,
     bounds: Bounds[],
@@ -1173,42 +1306,42 @@ export class City {
     garageMain.position.set(centerX, 3.9, centerZ - 8)
     garageMain.castShadow = true
     garageMain.receiveShadow = true
-    group.add(garageMain)
+    structuresGroup.add(garageMain)
 
     // Garage Flat Industrial Roof with Parapet
     const garageRoof = new THREE.Mesh(new THREE.BoxGeometry(24.6, 0.6, 16.6), this.airportRoofMat)
     garageRoof.position.set(centerX, 8.1, centerZ - 8)
     garageRoof.castShadow = true
-    group.add(garageRoof)
+    structuresGroup.add(garageRoof)
 
     // 3. Roll-up Shutter Garage Doors (Portões de garagem para caminhões)
     for (const d of [-5.5, 5.5]) {
       const door = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 5.4), this.garageDoorMat)
       door.position.set(centerX + d, 2.7, centerZ + 0.05)
-      group.add(door)
+      structuresGroup.add(door)
 
       // Yellow/Black Hazard Border Trim
       const trimTop = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.35, 0.2), this.garageTrimYellowMat)
       trimTop.position.set(centerX + d, 5.5, centerZ + 0.1)
-      group.add(trimTop)
+      structuresGroup.add(trimTop)
 
       const trimL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 5.4, 0.2), this.garageTrimYellowMat)
       trimL.position.set(centerX + d - 3.8, 2.7, centerZ + 0.1)
-      group.add(trimL)
+      structuresGroup.add(trimL)
 
       const trimR = new THREE.Mesh(new THREE.BoxGeometry(0.35, 5.4, 0.2), this.garageTrimYellowMat)
       trimR.position.set(centerX + d + 3.8, 2.7, centerZ + 0.1)
-      group.add(trimR)
+      structuresGroup.add(trimR)
     }
 
     // 4. Large Illuminated Garage Sign
     const signBoard = new THREE.Mesh(new THREE.BoxGeometry(16, 1.4, 0.4), this.airportRoofMat)
     signBoard.position.set(centerX, 6.8, centerZ + 0.2)
-    group.add(signBoard)
+    structuresGroup.add(signBoard)
 
     const signNeon = new THREE.Mesh(new THREE.BoxGeometry(15.2, 0.8, 0.1), this.garageSignMat)
     signNeon.position.set(centerX, 6.8, centerZ + 0.42)
-    group.add(signNeon)
+    structuresGroup.add(signNeon)
 
     // 5. Fuel Storage Silos / Tanks on side
     for (let s = -1; s <= 1; s += 1) {
@@ -1216,11 +1349,11 @@ export class City {
       tankSilo.position.set(centerX + 14.5, 3.6, centerZ - 8 + s * 4.4)
       tankSilo.castShadow = true
       tankSilo.receiveShadow = true
-      group.add(tankSilo)
+      structuresGroup.add(tankSilo)
 
       const tankCap = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), this.airportRoofMat)
       tankCap.position.set(centerX + 14.5, 7.2, centerZ - 8 + s * 4.4)
-      group.add(tankCap)
+      structuresGroup.add(tankCap)
     }
 
     // 6. Delivery Bay Floor Target (Baia de Estacionamento / Entrega do Caminhão)
@@ -1228,53 +1361,53 @@ export class City {
     const bayPad = new THREE.Mesh(new THREE.PlaneGeometry(16, 12), this.asphalt)
     bayPad.rotation.x = -Math.PI / 2
     bayPad.position.set(centerX, 0.026, deliveryZoneZ)
-    group.add(bayPad)
+    structuresGroup.add(bayPad)
 
     // Yellow Hazard Perimeter lines
     for (const side of [-1, 1]) {
       const lineSide = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 12), this.runwayPaintYellow)
       lineSide.rotation.x = -Math.PI / 2
       lineSide.position.set(centerX + side * 7.8, 0.028, deliveryZoneZ)
-      group.add(lineSide)
+      structuresGroup.add(lineSide)
     }
     const lineBack = new THREE.Mesh(new THREE.PlaneGeometry(16, 0.4), this.runwayPaintYellow)
     lineBack.rotation.x = -Math.PI / 2
     lineBack.position.set(centerX, 0.028, deliveryZoneZ + 5.8)
-    group.add(lineBack)
+    structuresGroup.add(lineBack)
 
     // Glowing Delivery Target Circle (Ponto de entrega iluminado)
     const beaconRing = new THREE.Mesh(new THREE.RingGeometry(2.8, 4.4, 24), this.garageBeaconMat)
     beaconRing.rotation.x = -Math.PI / 2
     beaconRing.position.set(centerX, 0.03, deliveryZoneZ)
-    group.add(beaconRing)
+    structuresGroup.add(beaconRing)
 
     const beaconCore = new THREE.Mesh(new THREE.CircleGeometry(2.4, 24), this.garageBeaconMat)
     beaconCore.rotation.x = -Math.PI / 2
     beaconCore.position.set(centerX, 0.029, deliveryZoneZ)
-    group.add(beaconCore)
+    structuresGroup.add(beaconCore)
 
     // Vertical Waypoint Beacon Beam (Feixe de luz para localização à distância)
     const beamGeo = new THREE.CylinderGeometry(2.6, 2.6, 32, 16, 1, true)
     const beamMesh = new THREE.Mesh(beamGeo, this.garageBeaconMat)
     beamMesh.position.set(centerX, 16, deliveryZoneZ)
-    group.add(beamMesh)
+    structuresGroup.add(beamMesh)
 
     // Hovering Target Indicator Ring
     const targetRing = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.38, 10, 24), this.garageTrimYellowMat)
     targetRing.rotation.x = Math.PI / 2
     targetRing.position.set(centerX, 6.5, deliveryZoneZ)
-    group.add(targetRing)
+    structuresGroup.add(targetRing)
 
     // Corner Safety Bollards with Lights
     for (const bx of [-7.6, 7.6]) {
       for (const bz of [deliveryZoneZ - 5.6, deliveryZoneZ + 5.6]) {
         const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.1, 8), this.garageTrimYellowMat)
         bollard.position.set(centerX + bx, 0.55, bz)
-        group.add(bollard)
+        structuresGroup.add(bollard)
 
         const bLight = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), this.garageBeaconMat)
         bLight.position.set(centerX + bx, 1.15, bz)
-        group.add(bLight)
+        structuresGroup.add(bLight)
       }
     }
 
@@ -1307,6 +1440,7 @@ export class City {
 
   private buildPlaza(
     group: THREE.Group,
+    structuresGroup: THREE.Group,
     _plaza: PlazaInfo,
     centerX: number,
     centerZ: number,
@@ -1373,25 +1507,25 @@ export class City {
     fountainBasin.position.set(centerX, 0.38, centerZ)
     fountainBasin.castShadow = true
     fountainBasin.receiveShadow = true
-    group.add(fountainBasin)
+    structuresGroup.add(fountainBasin)
 
     const fountainWater = new THREE.Mesh(new THREE.CylinderGeometry(4.3, 4.3, 0.12, 18), this.plazaWaterMaterial)
     fountainWater.position.set(centerX, 0.68, centerZ)
-    group.add(fountainWater)
+    structuresGroup.add(fountainWater)
 
     const fountainPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 1.1, 2.2, 12), this.plazaStoneMaterial)
     fountainPillar.position.set(centerX, 1.35, centerZ)
     fountainPillar.castShadow = true
-    group.add(fountainPillar)
+    structuresGroup.add(fountainPillar)
 
     const fountainBowl = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 1.6, 0.45, 16), this.plazaStoneMaterial)
     fountainBowl.position.set(centerX, 2.35, centerZ)
     fountainBowl.castShadow = true
-    group.add(fountainBowl)
+    structuresGroup.add(fountainBowl)
 
     const waterPlume = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.4, 10), this.plazaWaterMaterial)
     waterPlume.position.set(centerX, 3.1, centerZ)
-    group.add(waterPlume)
+    structuresGroup.add(waterPlume)
 
     // Collider for the fountain
     bounds.push({
@@ -1431,7 +1565,7 @@ export class City {
         leg.castShadow = true
         bench.add(leg)
       }
-      group.add(bench)
+      structuresGroup.add(bench)
     }
 
     // 5. Colonial Streetlamps (Postes de Iluminação)
@@ -1453,7 +1587,7 @@ export class City {
       const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.48, 0.38), this.plazaLampMaterial)
       lantern.position.set(0, 3.5, 0)
       lamp.add(lantern)
-      group.add(lamp)
+      structuresGroup.add(lamp)
     }
 
     // 6. Perimeter Trees (Árvores da Praça)
@@ -1476,7 +1610,7 @@ export class City {
       crown.castShadow = true
       crown.receiveShadow = true
       tree.add(crown)
-      group.add(tree)
+      structuresGroup.add(tree)
 
       bounds.push({
         minX: centerX + tx - 0.5,
@@ -1607,6 +1741,7 @@ export class City {
 
   private buildKingKongPlaza(
     group: THREE.Group,
+    structuresGroup: THREE.Group,
     centerX: number,
     centerZ: number,
     bounds: Bounds[],
@@ -1631,7 +1766,7 @@ export class City {
         const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), this.plazaLampMaterial)
         lantern.position.y = 3.8
         lamp.add(lantern)
-        group.add(lamp)
+        structuresGroup.add(lamp)
       }
     }
 
@@ -1647,7 +1782,7 @@ export class City {
       crown.position.y = 3.6
       crown.castShadow = true
       tree.add(crown)
-      group.add(tree)
+      structuresGroup.add(tree)
     }
 
     // 4. Solid Bounds for ground and air safety (reaches 110m high!)
@@ -1765,8 +1900,10 @@ export class City {
     oceanEast.receiveShadow = true
     group.add(oceanEast)
 
-    const duneCountPerSide = this.graphicsMode === 'low' ? 7 : 14
-    const duneGeo = new THREE.SphereGeometry(1, 16, 12)
+    const isLow = this.graphicsMode === 'low'
+    const isUltra = this.graphicsMode === 'ultra'
+    const duneCountPerSide = isLow ? 3 : (isUltra ? 16 : 14)
+    const duneGeo = isUltra ? new THREE.SphereGeometry(1, 48, 36) : new THREE.SphereGeometry(1, 16, 12)
 
     const createDunesSide = (sideXCenter: number) => {
       for (let i = 0; i < duneCountPerSide; i++) {
@@ -1788,14 +1925,14 @@ export class City {
         const duneMesh = new THREE.Mesh(duneGeo, random() > 0.4 ? this.sandMaterial : this.sandDarkMaterial)
         duneMesh.position.set(dx, -scaleY * 0.22, dz)
         duneMesh.scale.set(scaleX, scaleY, scaleZ)
-        duneMesh.receiveShadow = true
-        duneMesh.castShadow = true
+        duneMesh.receiveShadow = !isLow
+        duneMesh.castShadow = !isLow
         group.add(duneMesh)
 
         chunkDunes.push({ dx, dz, scaleX, scaleY, scaleZ, rotY })
 
         // Generate multiple detailed objects per dune to populate the beach/sand environment
-        const objCount = this.graphicsMode === 'low' ? Math.floor(random() * 2) : 1 + Math.floor(random() * 3)
+        const objCount = isLow ? 0 : 1 + Math.floor(random() * 3)
         const cosDune = Math.cos(rotY)
         const sinDune = Math.sin(rotY)
         for (let j = 0; j < objCount; j++) {
@@ -2338,7 +2475,7 @@ export class City {
   }
 
   addWallDeformation(x: number, y: number, z: number, normalX: number, normalZ: number, force = 1.0): void {
-    if (this.graphicsMode !== 'high') return
+    if (this.graphicsMode !== 'high' && this.graphicsMode !== 'ultra') return
     for (const wall of this.wallDeformations) {
       const dx = wall.position.x - x
       const dz = wall.position.z - z
@@ -2506,7 +2643,7 @@ export class City {
     }
   }
 
-  update(dt: number): void {
+  update(dt: number, actorPos?: THREE.Vector3): void {
     for (const coin of this.coins) {
       if (coin.alive) coin.mesh.rotation.z += dt * 1.8
     }
@@ -2518,6 +2655,51 @@ export class City {
     }
 
     this.updateTrafficLightVisuals()
+
+    // OTIMIZAÇÃO DE PERFORMANCE // LOD E CULLING DINÂMICO DE PRÉDIOS E CASAS
+    // No modo gráfico baixo nas dunas/rally: oculta TODOS os prédios e casas da cidade para não travar
+    if (actorPos) {
+      const isLow = this.graphicsMode === 'low'
+      const isUltra = this.graphicsMode === 'ultra'
+      const isHigh = this.graphicsMode === 'high' || isUltra
+
+      // Área da corrida das dunas (leste da ponte / rio: x > 620)
+      const inDunesRaceArea = actorPos.x > 620
+
+      if (isLow && inDunesRaceArea) {
+        // No modo gráfico baixo nas dunas, oculta 100% dos edifícios e casas da cidade
+        for (const chunk of this.chunks.values()) {
+          chunk.buildingsGroup.visible = false
+          chunk.detailsGroup.visible = false
+        }
+      } else {
+        // Distâncias ajustadas por qualidade
+        // No modo baixa qualidade: prédios a mais de 240m ficam invisíveis, e a mais de 100m não desenham detalhes finos
+        const cullDist = isLow ? 240 : (isUltra ? 720 : (isHigh ? 560 : 380))
+        const detailsDist = isLow ? 100 : (isUltra ? 380 : (isHigh ? 280 : 180))
+
+        for (const chunk of this.chunks.values()) {
+          // Encontra o ponto da cidade no chunk mais próximo da posição do ator
+          const clampedX = THREE.MathUtils.clamp(actorPos.x, -580, 580)
+          const clampedZ = THREE.MathUtils.clamp(actorPos.z, chunk.centerZ - CHUNK_DEPTH / 2, chunk.centerZ + CHUNK_DEPTH / 2)
+          const distToBuildings = Math.hypot(actorPos.x - clampedX, actorPos.z - clampedZ)
+
+          if (distToBuildings > cullDist) {
+            // Chunk de cidade além da distância de visão: oculta completamente todos os edifícios e casas
+            chunk.buildingsGroup.visible = false
+            chunk.detailsGroup.visible = false
+          } else if (distToBuildings > detailsDist) {
+            // Prédios distantes: NÃO renderizar por completo (oculta janelas, portas, caixas d'água, ar-condicionado e greebles)
+            chunk.buildingsGroup.visible = true
+            chunk.detailsGroup.visible = false
+          } else {
+            // Prédios próximos ao personagem: renderização completa
+            chunk.buildingsGroup.visible = true
+            chunk.detailsGroup.visible = !isLow
+          }
+        }
+      }
+    }
   }
 
   dispose(): void {
