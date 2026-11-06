@@ -1577,6 +1577,34 @@ export class RallyRace {
     return this.turboPickups
   }
 
+  resetRace(playerCar?: Car): void {
+    for (const comp of this.competitors) {
+      if (comp.car !== playerCar) {
+        comp.car.dispose()
+      }
+    }
+    this.competitors.length = 0
+    this.spawnGridCompetitors()
+
+    this.raceEnded = false
+    this.raceStarted = false
+    this.isCountingDown = false
+    this.missionActive = false
+    this.playerLap = 1
+    this.playerHasWon = false
+    this.hasPassedHalfway = false
+    this.currentArchIndex = 1
+    this.playerDistanceAlongTrack = 0
+
+    if (playerCar) {
+      const gridTr = this.getTrackTransform((this.finishLineDist - 4 + this.totalTrackLength) % this.totalTrackLength, -3.5)
+      playerCar.root.position.copy(gridTr.position)
+      playerCar.yaw = gridTr.yaw
+      playerCar.speed = 0
+      this.startCountdownWithPlayerCar(playerCar)
+    }
+  }
+
   dispose(): void {
     for (const comp of this.competitors) {
       comp.car.dispose()

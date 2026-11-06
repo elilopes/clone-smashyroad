@@ -167,41 +167,6 @@ export class Input {
     this.joystickEl.addEventListener('pointerup', handlePointerUp)
     this.joystickEl.addEventListener('pointercancel', handlePointerUp)
     this.joystickEl.addEventListener('lostpointercapture', handlePointerUp)
-
-    const bindArrowButton = (el: HTMLElement | null | undefined, throttleVal: number, steerVal: number) => {
-      if (!el) return
-      el.addEventListener('pointerdown', (e) => {
-        if (this.controlMode !== 'joystick') return
-        e.preventDefault()
-        e.stopPropagation()
-        this.joystickThrottle = throttleVal
-        if (steerVal !== 0) this.joystickSteer = steerVal
-        el.classList.add('active')
-        if (this.joystickKnobEl) {
-          const kx = steerVal !== 0 ? -steerVal * this.joystickRadius : 0
-          const ky = throttleVal !== 0 ? -throttleVal * this.joystickRadius : 0
-          this.joystickKnobEl.style.transform = `translate(${kx}px, ${ky}px)`
-        }
-      })
-      const releaseArrow = (e: Event) => {
-        e.preventDefault()
-        e.stopPropagation()
-        this.joystickThrottle = 0
-        this.joystickSteer = 0
-        el.classList.remove('active')
-        if (this.joystickKnobEl) {
-          this.joystickKnobEl.style.transform = 'translate(0px, 0px)'
-        }
-      }
-      el.addEventListener('pointerup', releaseArrow)
-      el.addEventListener('pointercancel', releaseArrow)
-      el.addEventListener('lostpointercapture', releaseArrow)
-    }
-
-    bindArrowButton(this.joystickArrows.up, 1, 0)
-    bindArrowButton(this.joystickArrows.down, -1, 0)
-    bindArrowButton(this.joystickArrows.left, 0, 1)
-    bindArrowButton(this.joystickArrows.right, 0, -1)
   }
 
   private updateJoystickPosition(clientX: number, clientY: number): void {
@@ -215,6 +180,15 @@ export class Input {
     const dy = clientY - centerY
     const dist = Math.hypot(dx, dy)
 
+    const radialDeadzone = 4.0
+    if (dist < radialDeadzone) {
+      this.joystickSteer = 0
+      this.joystickThrottle = 0
+      this.joystickKnobEl.style.transform = 'translate(0px, 0px)'
+      this.highlightJoystickArrows(0, 0)
+      return
+    }
+
     const clampedDist = Math.min(dist, this.joystickRadius)
     const angle = Math.atan2(dy, dx)
 
@@ -223,23 +197,18 @@ export class Input {
 
     this.joystickKnobEl.style.transform = `translate(${knobX}px, ${knobY}px)`
 
-    const normX = knobX / this.joystickRadius
-    const normY = knobY / this.joystickRadius
+    // Smooth uniform 360° magnitude without asymmetric axis deadzones
+    const mag = Math.min(1, (clampedDist - radialDeadzone) / (this.joystickRadius - radialDeadzone))
+    const normX = Math.cos(angle) * mag
+    const normY = Math.sin(angle) * mag
 
-    // In vehicle physics: normX < 0 (left) => steer > 0 (left)
-    // normX > 0 (right) => steer < 0 (right)
-    // Add small deadzone so pushing straight up doesn't veer left or right
-    const deadzoneX = 0.12
-    if (Math.abs(normX) < deadzoneX) {
-      this.joystickSteer = 0
-    } else {
-      const signX = Math.sign(normX)
-      const scaledX = (Math.abs(normX) - deadzoneX) / (1 - deadzoneX)
-      this.joystickSteer = -signX * scaledX
-    }
+    // Vehicle/character mapping:
+    // Left (normX < 0) => steer > 0 (left)
+    // Right (normX > 0) => steer < 0 (right)
+    this.joystickSteer = -normX
 
-    // normY < 0 (up) => throttle > 0 (accelerate)
-    // normY > 0 (down) => throttle < 0 (reverse/brake)
+    // Up (normY < 0) => throttle > 0 (forward/north)
+    // Down (normY > 0) => throttle < 0 (reverse/south)
     this.joystickThrottle = -normY
 
     this.highlightJoystickArrows(normX, normY)
@@ -401,7 +370,7 @@ export class Input {
     let steer = keySteer
 
     if (this.controlMode === 'joystick') {
-      steer = Math.abs(this.joystickSteer) > 0.05
+      steer = Math.abs(this.joystickSteer) > 0.001
         ? this.joystickSteer
         : keySteer
     } else if (this.controlMode === 'tilt') {
@@ -414,7 +383,7 @@ export class Input {
     steer = THREE.MathUtils.clamp(steer, -1, 1)
 
     let throttle = Number(pressed('w', 'arrowup', 'accelerate')) - Number(pressed('s', 'arrowdown', 'reverse'))
-    if (this.controlMode === 'joystick' && Math.abs(this.joystickThrottle) > 0.05) {
+    if (this.controlMode === 'joystick' && Math.abs(this.joystickThrottle) > 0.001) {
       throttle = this.joystickThrottle
     }
 

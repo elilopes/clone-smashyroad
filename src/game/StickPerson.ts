@@ -15,9 +15,9 @@ export class StickPerson {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene
-    const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x293432, roughness: 0.76 })
-    const accentMaterial = new THREE.MeshStandardMaterial({ color: 0xff7849, roughness: 0.64 })
-    const skinMaterial = new THREE.MeshStandardMaterial({ color: 0xe4b28c, roughness: 0.82 })
+    const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x293432, roughness: 1.0, metalness: 0.0 })
+    const accentMaterial = new THREE.MeshStandardMaterial({ color: 0xff7849, roughness: 0.85, metalness: 0.0 })
+    const skinMaterial = new THREE.MeshStandardMaterial({ color: 0xe4b28c, roughness: 0.9, metalness: 0.0 })
     this.torso = this.makeSegment(stickMaterial, 0.095)
     this.root.add(this.torso)
 
@@ -44,6 +44,7 @@ export class StickPerson {
   }
 
   isSwimming = false
+  speedMultiplier = 1.0
 
   setPosition(x: number, z: number, yaw = 0): void {
     this.root.position.set(x, this.isSwimming ? -0.52 : 0, z)
@@ -55,25 +56,82 @@ export class StickPerson {
     this.animateLimbs(0)
   }
 
-  update(dt: number, input: DriveInput, collides: (x: number, z: number, radius: number) => boolean, isSwimming = false): boolean {
+  update(
+    dt: number,
+    input: DriveInput,
+    collides: (x: number, z: number, radius: number) => boolean,
+    isSwimming = false,
+    cameraYaw = 0,
+  ): boolean {
     this.isSwimming = isSwimming
-    const targetMaxSpeed = this.isSwimming ? 5.2 : 7.5
-    const desiredSpeed = input.throttle * targetMaxSpeed
-    this.speed += (desiredSpeed - this.speed) * Math.min(1, dt * 5)
-    if (Math.abs(this.speed) < 0.08) this.speed = 0
-    this.yaw += input.steer * dt * 2.35 * Math.sign(this.speed || 1)
-    this.root.rotation.y = this.yaw
+    const targetMaxSpeed = (this.isSwimming ? 5.2 : 7.8) * this.speedMultiplier
+
+    // Omnidirectional movement support (WASD / Arrows / Joystick / Touch)
+    // Screen-space coordinates:
+    // screenRight: +1 for D/right, -1 for A/left
+    // screenForward: +1 for W/up, -1 for S/down
+    const screenRight = -input.steer
+    const screenForward = input.throttle
+    const rawMagnitude = Math.hypot(screenRight, screenForward)
+
+    if (rawMagnitude > 0.04) {
+      const inputMagnitude = Math.min(1, rawMagnitude)
+
+      // Transform screen movement by camera yaw so W is always UP on screen,
+      // S is always DOWN on screen, A is always LEFT on screen, D is always RIGHT on screen
+      const cosY = Math.cos(cameraYaw)
+      const sinY = Math.sin(cameraYaw)
+      const worldDirX = screenRight * cosY - screenForward * sinY
+      const worldDirZ = -screenRight * sinY - screenForward * cosY
+
+      const targetYaw = Math.atan2(-worldDirX, -worldDirZ)
+      let diff = targetYaw - this.yaw
+      while (diff > Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      if (this.speed < 0.2) {
+        this.yaw = targetYaw
+      } else {
+        this.yaw += diff * Math.min(1, dt * 18)
+      }
+      this.root.rotation.y = this.yaw
+
+      const targetSpeed = targetMaxSpeed * (inputMagnitude * 0.85 + 0.15 * inputMagnitude * inputMagnitude)
+      this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 12)
+    } else {
+      this.speed *= Math.max(0, 1 - dt * 12)
+      if (Math.abs(this.speed) < 0.05) this.speed = 0
+    }
+
     this.root.rotation.x = this.isSwimming ? 0.42 : 0
 
     const oldX = this.root.position.x
     const oldZ = this.root.position.z
-    this.root.position.x += -Math.sin(this.yaw) * this.speed * dt
-    this.root.position.z += -Math.cos(this.yaw) * this.speed * dt
-    const collided = collides(this.root.position.x, this.root.position.z, 0.34)
-    if (collided) {
-      this.root.position.x = oldX
-      this.root.position.z = oldZ
-      this.speed *= -0.12
+    const step = this.speed * dt
+    let collided = false
+
+    if (step > 0.001) {
+      const stepX = -Math.sin(this.yaw) * step
+      const stepZ = -Math.cos(this.yaw) * step
+
+      this.root.position.x += stepX
+      this.root.position.z += stepZ
+
+      if (collides(this.root.position.x, this.root.position.z, 0.34)) {
+        collided = true
+        // Wall sliding: try X only
+        this.root.position.z = oldZ
+        if (collides(this.root.position.x, this.root.position.z, 0.34)) {
+          // Try Z only
+          this.root.position.x = oldX
+          this.root.position.z = oldZ + stepZ
+          if (collides(this.root.position.x, this.root.position.z, 0.34)) {
+            // Blocked in both
+            this.root.position.x = oldX
+            this.root.position.z = oldZ
+            this.speed *= 0.2
+          }
+        }
+      }
     }
 
     this.root.position.y = this.isSwimming ? -0.52 + Math.sin(this.walkPhase * 1.8) * 0.08 : (this.groundElevation || 0)

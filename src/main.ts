@@ -23,8 +23,9 @@ app.innerHTML = `
         <div class="stat time-stat"><span class="stat-label">TEMPO</span><strong id="header-time-value">00:00</strong></div>
       </div>
       <div class="topbar-actions">
-        <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas Detalhadas">📊 STATUS</button>
-        <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Veículos, Upgrades e Garagem">🏪 LOJA & GARAGEM</button>
+        <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas e Missões do Piloto">📊 STATUS</button>
+        <button id="garage-btn" class="mode-button garage-btn" type="button" title="Abrir Garagem e Concessionária de Veículos">🚗 GARAGEM</button>
+        <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Upgrades, Pinturas e Peças">🏪 LOJA</button>
         <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro"><span class="btn-icon">🏆</span><span class="btn-text"> RANKING</span></button>
         <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS, Som e Gráficos"><span class="btn-icon">⚙️</span><span class="btn-text"> AJUSTES</span></button>
         <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
@@ -264,6 +265,10 @@ app.innerHTML = `
     <div id="rally-result-banner" class="rally-result-banner hidden" role="alert">
       <div id="rally-result-title" class="rally-result-title">🏆 VITÓRIA! MISSÃO CONCLUÍDA!</div>
       <div id="rally-result-subtitle" class="rally-result-subtitle">Você terminou em 1º lugar!</div>
+      <div class="rally-result-actions" style="margin-top: 10px; display: flex; gap: 8px; justify-content: center;">
+        <button id="rally-replay-btn" class="rally-replay-btn" type="button" style="background: #10b981; color: #fff; border: none; padding: 7px 14px; font-weight: 800; border-radius: 4px; cursor: pointer; font-size: 11px;">🔄 CORRER NOVAMENTE</button>
+        <button id="rally-close-btn" class="rally-close-btn" type="button" style="background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 7px 12px; font-weight: 700; border-radius: 4px; cursor: pointer; font-size: 11px;">FECHAR</button>
+      </div>
     </div>
 
     <!-- MISSÃO DE TÁXI / CORRIDA MALUCA (GTA VICE CITY / SAN ANDREAS) -->
@@ -332,6 +337,57 @@ app.innerHTML = `
         </div>
         <div class="rampage-hint">ESMAGUE 15 VIATURAS POLICIAIS EM 60 SEGUNDOS!</div>
       </div>
+    </div>
+
+    <!-- ARENA ZUMBI & MONSTROS (MISSÃO DE SOBREVIVÊNCIA DE 4 PRÉDIOS) -->
+    <div id="zombie-mission-panel" class="zombie-mission-panel hidden" aria-label="Arena Zumbi e Monstros">
+      <div class="zombie-mission-header">
+        <div class="zombie-header-left">
+          <span class="zombie-mission-badge">☣️ ARENA ZUMBI</span>
+          <span id="zombie-wave-label" class="zombie-wave-label">ONDA 1/4</span>
+        </div>
+        <button id="zombie-exit-btn" class="zombie-exit-btn" type="button" title="Sair da arena">SAIR ✕</button>
+      </div>
+      <div class="zombie-mission-body">
+        <div class="zombie-stats-grid">
+          <div class="zombie-stat-col">
+            <span class="zombie-stat-title">VIDAS DO PALITO:</span>
+            <div id="zombie-hearts-container" style="font-size: 15px; letter-spacing: 2px;">❤️❤️❤️</div>
+            <strong id="zombie-hp-val" style="font-size: 9px; opacity: 0.85;">3 / 3 VIDAS</strong>
+          </div>
+          <div class="zombie-stat-col">
+            <span class="zombie-stat-title">XP DOS 3 CARDS:</span>
+            <div class="zombie-xp-track">
+              <div id="zombie-xp-fill" class="zombie-xp-fill" style="width: 0%"></div>
+            </div>
+            <strong id="zombie-xp-val">0 / 5 ABATES</strong>
+          </div>
+        </div>
+        <div class="zombie-info-footer">
+          <span id="zombie-weapon-label">🔫 ARMA: REVÓLVER</span>
+          <span id="zombie-kills-label">💀 ABATES: 0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BANNER DE RESULTADO DA ARENA ZUMBI (VITÓRIA OU FRACASSO) -->
+    <div id="zombie-result-banner" class="zombie-result-banner hidden" role="alert" style="position: absolute; top: 22%; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); border: 2px solid #ef4444; border-radius: 8px; padding: 18px 26px; text-align: center; color: #fff; z-index: 120; box-shadow: 0 0 30px rgba(0,0,0,0.85); min-width: 300px; pointer-events: auto;">
+      <div id="zombie-result-title" style="font-size: 16px; font-weight: 900; color: #22c55e; margin-bottom: 6px;">🏆 VITÓRIA! SOBREVIVENTE DA ARENA!</div>
+      <div id="zombie-result-subtitle" style="font-size: 11px; opacity: 0.9; margin-bottom: 14px;">Você completou as 4 ondas de ataque!</div>
+      <div style="display: flex; gap: 8px; justify-content: center;">
+        <button id="zombie-replay-btn" type="button" style="background: #22c55e; color: #000; border: none; padding: 8px 16px; font-weight: 800; border-radius: 4px; cursor: pointer; font-size: 11px;">🔄 JOGAR NOVAMENTE</button>
+        <button id="zombie-result-exit-btn" type="button" style="background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4); padding: 8px 14px; font-weight: 700; border-radius: 4px; cursor: pointer; font-size: 11px;">SAIR DA ARENA</button>
+      </div>
+    </div>
+
+    <!-- BANNER DE ENTRADA NA ARENA ZUMBI -->
+    <div id="zombie-arena-prompt" class="zombie-arena-prompt hidden">
+      <div class="zombie-prompt-icon">☣️</div>
+      <div class="zombie-prompt-text">
+        <strong>ARENA DE SOBREVIVÊNCIA ZUMBI (4 PRÉDIOS)</strong>
+        <span>ENTRE A PÉ COM O PERSONAGEM PALITO PARA INICIAR</span>
+      </div>
+      <button id="zombie-start-btn" class="primary-button zombie-start-btn" type="button">INICIAR MISSÃO [E]</button>
     </div>
 
     <!-- AUTH MODAL (LOGIN COM GOOGLE & PLAY GAMES & BANCO USERS.TS) -->
@@ -414,6 +470,17 @@ app.innerHTML = `
           </div>
         </div>
 
+        <!-- LISTA COM TODAS AS MISSÕES DO JOGO (CONCLUÍDAS NO INÍCIO) -->
+        <div class="status-missions-section" style="margin-top: 16px; text-align: left; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
+            <span style="font: 700 11px var(--mono); color: #facc15; letter-spacing: .08em;">📜 TODAS AS MISSÕES & CONTRATOS DO JOGO</span>
+            <span id="status-missions-counter" style="font: 700 11px var(--mono); color: #4ade80;">0 CONCLUÍDAS</span>
+          </div>
+          <div id="status-missions-list" class="status-missions-list" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+            <!-- Renderizado dinamicamente via TypeScript -->
+          </div>
+        </div>
+
         <!-- Elementos ocultos para retrocompatibilidade de seletores de estatísticas -->
         <span id="level-value" class="hidden" style="display:none;"></span>
         <span id="xp-value" class="hidden" style="display:none;"></span>
@@ -487,7 +554,7 @@ app.innerHTML = `
             <button class="settings-option-btn" data-graphics="high" type="button">ALTA</button>
             <button class="settings-option-btn" data-graphics="ultra" type="button" style="color: #ec4899; font-weight: 700;">ULTRA ⚡</button>
           </div>
-          <span class="settings-help" id="graphics-settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Baixa: Low Poly otimizado. Média: Greeble clássico. Alta: High Poly + SSAO. Ultra: Bloom neon, Lightmaps HD pré-calculados, Reflexos PBR automotivos e Voxels com bordas arredondadas.</span>
+          <span class="settings-help" id="graphics-settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Baixa: Low Poly otimizado. Média: Greeble clássico. Alta: High Poly + SSAO. Ultra ⚡: Iluminação PBR HD (DirectionalLight + Hemisphere/Ambient), Oclusão Ambiental SSAO nos cantos dos blocos (Minecraft / MagicaVoxel), Path Tracing em tempo real (three-gpu-pathtracer) e Ciclo Dia/Noite (20 min).</span>
         </div>
 
         <div class="settings-group" style="margin-top: 20px; text-align: left;">
@@ -538,12 +605,41 @@ app.innerHTML = `
       </div>
     </div>
 
-    <!-- GARAGE & CUSTOMIZATION SHOP MODAL (LOJA DE CARROS & UPGRADES) -->
-    <div id="shop-modal" class="shop-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Loja e Garagem de Carros">
+    <!-- GARAGE MODAL (GARAGEM DE VEÍCULOS & CONCESSIONÁRIA) -->
+    <div id="garage-modal" class="garage-modal shop-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Garagem de Veículos">
       <div class="shop-card">
         <div class="shop-header">
           <div>
-            <div class="title-kicker"><span></span> GARAGEM & OFICINA ESPECIALIZADA</div>
+            <div class="title-kicker"><span></span> CONCESSIONÁRIA & COLEÇÃO DE CARROS</div>
+            <h2>🚗 GARAGEM DO PILOTO</h2>
+          </div>
+          <div class="shop-cash-badge">
+            <span class="shop-cash-label">SEU SALDO</span>
+            <strong id="garage-user-cash">$ 0</strong>
+          </div>
+        </div>
+
+        <p class="intro-copy" style="margin: 0; font-size: 11px; color: #94a3b8; text-align: left;">
+          Selecione qual veículo dirigir na cidade ou adquira novos modelos e viaturas com o dinheiro das suas missões:
+        </p>
+
+        <div id="garage-content-area" class="shop-content-area" style="max-height: 58vh; overflow-y: auto;">
+          <!-- Conteúdo dinâmico de veículos renderizado via TypeScript -->
+        </div>
+
+        <div class="shop-footer">
+          <div id="garage-feedback-msg" class="shop-feedback-msg">Selecione o veículo desejado para acelerar pelas ruas.</div>
+          <button id="close-garage-btn" class="primary-button" type="button" style="margin-top: 0; width: auto; min-width: 180px;">SAIR DA GARAGEM ✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOMIZATION SHOP MODAL (OFICINA, UPGRADES, PINTURAS & PEÇAS) -->
+    <div id="shop-modal" class="shop-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Loja de Upgrades e Peças">
+      <div class="shop-card">
+        <div class="shop-header">
+          <div>
+            <div class="title-kicker"><span></span> OFICINA & TUNING DE ALTA PERFORMANCE</div>
             <h2>🏪 LOJA SMASH MOTORSPORT</h2>
           </div>
           <div class="shop-cash-badge">
@@ -553,21 +649,33 @@ app.innerHTML = `
         </div>
 
         <div class="shop-tabs">
-          <button id="shop-tab-vehicles" class="shop-tab-btn active" type="button">🏎️ VEÍCULOS</button>
-          <button id="shop-tab-engine" class="shop-tab-btn" type="button">⚡ MOTOR</button>
+          <button id="shop-tab-engine" class="shop-tab-btn active" type="button">⚡ MOTOR</button>
           <button id="shop-tab-armor" class="shop-tab-btn" type="button">🛡️ BLINDAGEM</button>
           <button id="shop-tab-paints" class="shop-tab-btn" type="button">🎨 PINTURAS</button>
           <button id="shop-tab-decals" class="shop-tab-btn" type="button">🏷️ ADESIVOS</button>
           <button id="shop-tab-parts" class="shop-tab-btn" type="button">🔧 PEÇAS EXCLUSIVAS</button>
+          <button id="shop-tab-teleport" class="shop-tab-btn" type="button">✈️ TELETRANSPORTE</button>
         </div>
 
-        <div id="shop-content-area" class="shop-content-area">
-          <!-- Conteúdo dinâmico renderizado via TypeScript -->
+        <div id="shop-content-area" class="shop-content-area" style="max-height: 58vh; overflow-y: auto;">
+          <!-- Conteúdo dinâmico de upgrades renderizado via TypeScript -->
         </div>
 
         <div class="shop-footer">
-          <div id="shop-feedback-msg" class="shop-feedback-msg">Escolha melhorias e novos bólides com o dinheiro conquistado em missões.</div>
+          <div id="shop-feedback-msg" class="shop-feedback-msg">Escolha melhorias de motor, blindagem, cores e itens especiais com suas moedas.</div>
           <button id="close-shop-btn" class="primary-button" type="button" style="margin-top: 0; width: auto; min-width: 180px;">SAIR DA LOJA ✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ZOMBIE UPGRADE CARDS MODAL (3 CARDS ROGUELITE) -->
+    <div id="zombie-cards-modal" class="zombie-cards-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Escolha de Melhoria e Booster">
+      <div class="zombie-cards-card">
+        <div class="title-kicker"><span></span> EVOLUÇÃO DE SOBREVIVÊNCIA // NÍVEL <span id="zombie-card-level-num">1</span></div>
+        <h2>⭐ ESCOLHA SEU UPGRADE</h2>
+        <p class="intro-copy">Selecione uma arma melhor ou booster tático para enfrentar as hordas:</p>
+        <div id="zombie-cards-row" class="zombie-cards-row">
+          <!-- 3 Cards dynamically rendered here -->
         </div>
       </div>
     </div>

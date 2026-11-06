@@ -103,6 +103,78 @@ function getHazardStripeTexture(): THREE.CanvasTexture {
   return tex
 }
 
+let cachedBeamTexture: THREE.CanvasTexture | null = null
+function getGiroflexBeamTexture(): THREE.CanvasTexture {
+  if (cachedBeamTexture) return cachedBeamTexture
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.clearRect(0, 0, 256, 256)
+    const imgData = ctx.createImageData(256, 256)
+    const data = imgData.data
+    for (let y = 0; y < 256; y++) {
+      const v = y / 255 // 0 no giroflex, 1 na ponta máxima
+      const vFalloff = Math.pow(1 - v, 1.25)
+      for (let x = 0; x < 256; x++) {
+        const u = (x / 255) * 2 - 1 // -1 a +1
+        const hFalloff = Math.max(0, Math.cos((u * Math.PI) / 2))
+        const intensity = Math.round(255 * vFalloff * Math.pow(hFalloff, 2.0))
+        const idx = (y * 256 + x) * 4
+        data[idx] = 255
+        data[idx + 1] = 255
+        data[idx + 2] = 255
+        data[idx + 3] = intensity
+      }
+    }
+    ctx.putImageData(imgData, 0, 0)
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.ClampToEdgeWrapping
+  tex.wrapT = THREE.ClampToEdgeWrapping
+  cachedBeamTexture = tex
+  return tex
+}
+
+let cachedGroundProjectionTexture: THREE.CanvasTexture | null = null
+function getGiroflexGroundTexture(): THREE.CanvasTexture {
+  if (cachedGroundProjectionTexture) return cachedGroundProjectionTexture
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.clearRect(0, 0, 256, 256)
+    const imgData = ctx.createImageData(256, 256)
+    const data = imgData.data
+    for (let y = 0; y < 256; y++) {
+      const v = y / 255
+      const distFalloff = Math.sin(v * Math.PI * 0.95) * (1 - v * 0.35)
+      for (let x = 0; x < 256; x++) {
+        const u = (x / 255) * 2 - 1
+        const spread = 0.22 + v * 0.78
+        const normU = u / spread
+        if (Math.abs(normU) <= 1) {
+          const latFalloff = Math.cos(normU * Math.PI * 0.5)
+          const alpha = Math.round(255 * THREE.MathUtils.clamp(distFalloff * latFalloff, 0, 1))
+          const idx = (y * 256 + x) * 4
+          data[idx] = 255
+          data[idx + 1] = 255
+          data[idx + 2] = 255
+          data[idx + 3] = alpha
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0)
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.ClampToEdgeWrapping
+  tex.wrapT = THREE.ClampToEdgeWrapping
+  cachedGroundProjectionTexture = tex
+  return tex
+}
+
 export class Car {
   readonly scene: THREE.Scene
   readonly root = new THREE.Group()
@@ -170,6 +242,10 @@ export class Car {
   swordSlashCooldown = 0
   turboTimer = 0
   private swordSlashTrailGroup?: THREE.Group
+  private giroflexGroup?: THREE.Group
+  private giroflexAngle = 0
+  private redSirenMat?: THREE.MeshStandardMaterial
+  private blueSirenMat?: THREE.MeshStandardMaterial
 
   applyTurbo(duration = 2.5, boostSpeed = 18): void {
     this.turboTimer = Math.max(this.turboTimer, duration)
@@ -432,9 +508,9 @@ export class Car {
           if (isUltra) {
             if (!currentIsUltra) {
               const minDim = Math.min(w, h, d)
-              const radius = Math.min(0.16, minDim * 0.3)
+              const radius = Math.min(0.42, minDim * 0.44)
               if (obj.geometry) obj.geometry.dispose()
-              obj.geometry = new RoundedBoxGeometry(w, h, d, 4, radius)
+              obj.geometry = new RoundedBoxGeometry(w, h, d, 6, radius)
               obj.userData.isRounded = true
               obj.userData.isUltraRounded = true
             }
@@ -456,6 +532,29 @@ export class Car {
         }
       }
     })
+
+    // Rodas com contornos altamente suavizados (24 segmentos) no modo Ultra
+    if (isUltra) {
+      for (const wheel of this.wheels) {
+        if (wheel.geometry && !wheel.userData.isUltraWheel) {
+          wheel.geometry.dispose()
+          wheel.geometry = new THREE.CylinderGeometry(0.38, 0.38, 0.25, 24)
+          wheel.userData.isUltraWheel = true
+        }
+      }
+    } else {
+      for (const wheel of this.wheels) {
+        if (wheel.userData.isUltraWheel) {
+          wheel.geometry.dispose()
+          wheel.geometry = wheelGeometry
+          wheel.userData.isUltraWheel = false
+        }
+      }
+    }
+
+    if (this.giroflexGroup) {
+      this.giroflexGroup.visible = isUltra && !this.exploded && !this.isCrushed && !this.inWater
+    }
   }
 
   private buildBody(police: boolean): void {
@@ -652,8 +751,8 @@ export class Car {
       this.addBox([0.18, 0.08, 0.14], 1.6, chromeMat, -0.4, 3.43, true) // Handle L
       this.addBox([0.18, 0.08, 0.14], 1.6, chromeMat, 0.4, 3.43, true) // Handle R
     } else if (this.kind === 'bus') {
-      const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.85 })
-      const busRoofMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.75 })
+      const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.85, metalness: 0.0 })
+      const busRoofMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 1.0, metalness: 0.0 })
       const marqueeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, emissive: 0xf59e0b, emissiveIntensity: 1.4 })
 
       // 1. Bus Monocoque Hull with Tiberian Sun Aerodynamic Chamfer
@@ -942,6 +1041,8 @@ export class Car {
       const red = new THREE.MeshStandardMaterial({ color: 0xff3d45, emissive: 0xff1a24, emissiveIntensity: 1.5 })
       const blue = new THREE.MeshStandardMaterial({ color: 0x42b9ff, emissive: 0x168bff, emissiveIntensity: 1.5 })
       const white = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.5 })
+      this.redSirenMat = red
+      this.blueSirenMat = blue
       this.addBox([0.42, 0.15, 0.28], 1.84, red, -0.32)
       this.addBox([0.16, 0.15, 0.28], 1.84, white, 0)
       this.addBox([0.42, 0.15, 0.28], 1.84, blue, 0.32)
@@ -949,7 +1050,101 @@ export class Car {
       this.addBox([1.4, 0.42, 0.1], 0.68, bar, 0, -2.25)
       this.addBox([0.08, 0.52, 0.12], 0.72, bar, -0.45, -2.26)
       this.addBox([0.08, 0.52, 0.12], 0.72, bar, 0.45, -2.26)
+
+      this.buildGiroflexVBeams()
     }
+  }
+
+  private buildGiroflexVBeams(): void {
+    const group = new THREE.Group()
+    group.position.set(0, 1.84, 0)
+
+    const beamTex = getGiroflexBeamTexture()
+    const groundTex = getGiroflexGroundTexture()
+
+    const beamLength = 8.2
+    const beamRadius = 2.25
+    const beamGeo = new THREE.ConeGeometry(beamRadius, beamLength, 24, 1, true)
+    beamGeo.translate(0, -beamLength / 2, 0)
+    // Rotaciona para apontar para +Z e inclina ~12 graus para baixo em direção ao solo
+    beamGeo.rotateX(-Math.PI / 2 + 0.21)
+
+    // Projeção do feixe no chão em formato de leque/V
+    const groundWidth = 4.2
+    const groundLength = 8.4
+    const groundGeo = new THREE.PlaneGeometry(groundWidth, groundLength)
+    groundGeo.translate(0, groundLength / 2, 0)
+    groundGeo.rotateX(-Math.PI / 2)
+
+    // 1. Feixe Vermelho (ângulo 0 rad, voltado para frente +Z)
+    const redGroup = new THREE.Group()
+    const redBeamMat = new THREE.MeshBasicMaterial({
+      color: 0xff1e2e,
+      map: beamTex,
+      transparent: true,
+      opacity: 0.52,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+    const redGroundMat = new THREE.MeshBasicMaterial({
+      color: 0xff0a1e,
+      map: groundTex,
+      transparent: true,
+      opacity: 0.58,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+
+    const redCone = new THREE.Mesh(beamGeo, redBeamMat)
+    redCone.renderOrder = 5
+    redGroup.add(redCone)
+
+    const redGround = new THREE.Mesh(groundGeo, redGroundMat)
+    redGround.position.y = -1.72
+    redGround.renderOrder = 5
+    redGroup.add(redGround)
+
+    group.add(redGroup)
+
+    // 2. Feixe Azul (Lado Oposto exato a 180° / Math.PI radianos)
+    const blueGroup = new THREE.Group()
+    blueGroup.rotation.y = Math.PI
+
+    const blueBeamMat = new THREE.MeshBasicMaterial({
+      color: 0x1e88ff,
+      map: beamTex,
+      transparent: true,
+      opacity: 0.52,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+    const blueGroundMat = new THREE.MeshBasicMaterial({
+      color: 0x0f66ff,
+      map: groundTex,
+      transparent: true,
+      opacity: 0.58,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+
+    const blueCone = new THREE.Mesh(beamGeo.clone(), blueBeamMat)
+    blueCone.renderOrder = 5
+    blueGroup.add(blueCone)
+
+    const blueGround = new THREE.Mesh(groundGeo.clone(), blueGroundMat)
+    blueGround.position.y = -1.72
+    blueGround.renderOrder = 5
+    blueGroup.add(blueGround)
+
+    group.add(blueGroup)
+
+    group.visible = this.graphicsMode === 'ultra' && !this.exploded && !this.isCrushed && !this.inWater
+    this.root.add(group)
+    this.giroflexGroup = group
   }
 
   private buildCarHauler(): void {
@@ -2542,6 +2737,7 @@ export class Car {
       this.waterBobTimer += dt
       this.root.position.y = -0.32 + Math.sin(this.waterBobTimer * 3.2) * 0.12
       this.root.rotation.z = Math.sin(this.waterBobTimer * 2.2) * 0.06
+      if (this.giroflexGroup) this.giroflexGroup.visible = false
       return
     }
 
@@ -2572,6 +2768,30 @@ export class Car {
 
     const wheelSpin = -this.speed * dt / 0.38
     for (const wheel of this.wheels) wheel.rotation.x += wheelSpin
+
+    this.updateGiroflex(dt)
+  }
+
+  updateGiroflex(dt: number): void {
+    if (!this.police || !this.giroflexGroup) return
+    const shouldBeVisible = this.graphicsMode === 'ultra' && !this.exploded && !this.isCrushed && !this.inWater
+    this.giroflexGroup.visible = shouldBeVisible
+    if (!shouldBeVisible) return
+
+    // Rotação contínua dos feixes em V do giroflex (~1.3 voltas completas por segundo)
+    this.giroflexAngle += dt * 8.2
+    this.giroflexGroup.rotation.y = this.giroflexAngle
+
+    // Pulsação sutil na escala do feixe simulando dispersão da luz no ar
+    const pulse = 0.94 + Math.sin(this.giroflexAngle * 2) * 0.06
+    this.giroflexGroup.scale.set(pulse, 1.0, pulse)
+
+    // Efeito estroboscópico sincronizado nas lâmpadas vermelha e azul do teto
+    if (this.redSirenMat && this.blueSirenMat) {
+      const sinVal = Math.sin(this.giroflexAngle)
+      this.redSirenMat.emissiveIntensity = 1.2 + Math.max(0, sinVal) * 2.8
+      this.blueSirenMat.emissiveIntensity = 1.2 + Math.max(0, -sinVal) * 2.8
+    }
   }
 
   crush(_monsterPos?: THREE.Vector3, _monsterSpeed = 10): void {
@@ -2579,6 +2799,7 @@ export class Car {
     if (this.isCrushed) return
     this.isCrushed = true
     this.exploded = true
+    if (this.giroflexGroup) this.giroflexGroup.visible = false
     this.hits = this.maxHits
     this.speed *= 0.02
     this.driftVelocity.multiplyScalar(0.02)
@@ -2806,6 +3027,7 @@ export class Car {
   explode(): void {
     if (this.exploded) return
     this.exploded = true
+    if (this.giroflexGroup) this.giroflexGroup.visible = false
     this.hits = this.maxHits
     this.speed = 0
     this.driftVelocity.set(0, 0)
@@ -2823,6 +3045,9 @@ export class Car {
     this.exploded = false
     this.hitCooldown = 0
     this.smokeTimer = 0
+    if (this.giroflexGroup) {
+      this.giroflexGroup.visible = this.graphicsMode === 'ultra' && !this.inWater
+    }
   }
 
   setPosition(x: number, z: number, yaw = 0): void {

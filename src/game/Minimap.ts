@@ -74,6 +74,7 @@ export class Minimap {
     monsterTruckInfo?: { position: THREE.Vector3; inMonsterTruck: boolean },
     stationaryCars?: { x: number; z: number; collected: boolean }[],
     rallyRace?: RallyRace,
+    zombieArenaActive?: boolean,
   ): void {
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2)
 
@@ -139,6 +140,9 @@ export class Minimap {
     if (rallyRace) {
       this.drawRallyRace(ctx, cx, cy, playerPosition, scale, radius, rallyRace)
     }
+
+    // 5.75. Zombie Arena Compound (4-building area at 72, -120)
+    this.drawZombieArena(ctx, cx, cy, playerPosition, scale, radius, city.getZombieArenaInfo(), zombieArenaActive)
 
     // 5.8. Bus Passengers (Pessoas marcadas para o ônibus)
     if (busPassengers) {
@@ -944,6 +948,130 @@ export class Minimap {
         ctx.font = '800 8px monospace'
         ctx.textAlign = 'center'
         ctx.fillText(`GARAGEM ${Math.round(dist)}m`, textDistX, textDistY + 3)
+        ctx.restore()
+      }
+    }
+  }
+
+  private drawZombieArena(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    player: THREE.Vector3,
+    scale: number,
+    radius: number,
+    arena: {
+      x: number
+      z: number
+      width: number
+      depth: number
+      entranceX: number
+      entranceZ: number
+      northEntranceX?: number
+      northEntranceZ?: number
+      eastEntranceX?: number
+      eastEntranceZ?: number
+      westEntranceX?: number
+      westEntranceZ?: number
+    },
+    isActive?: boolean,
+  ): void {
+    const ax = cx + (arena.x - player.x) * scale
+    const az = cy + (arena.z - player.z) * scale
+    const aw = arena.width * scale
+    const ad = arena.depth * scale
+
+    const enX = cx + (arena.entranceX - player.x) * scale
+    const enZ = cy + (arena.entranceZ - player.z) * scale
+    const nEnX = arena.northEntranceX !== undefined ? cx + (arena.northEntranceX - player.x) * scale : enX
+    const nEnZ = arena.northEntranceZ !== undefined ? cy + (arena.northEntranceZ - player.z) * scale : enZ
+    const eEnX = arena.eastEntranceX !== undefined ? cx + (arena.eastEntranceX - player.x) * scale : ax + aw / 2
+    const eEnZ = arena.eastEntranceZ !== undefined ? cy + (arena.eastEntranceZ - player.z) * scale : az
+    const wEnX = arena.westEntranceX !== undefined ? cx + (arena.westEntranceX - player.x) * scale : ax - aw / 2
+    const wEnZ = arena.westEntranceZ !== undefined ? cy + (arena.westEntranceZ - player.z) * scale : az
+    const dist = Math.hypot(arena.x - player.x, arena.z - player.z)
+
+    // Arena Compound Rect on map
+    if (ax + aw > 0 && ax - aw < this.canvas.width && az + ad > 0 && az - ad < this.canvas.height) {
+      ctx.fillStyle = isActive ? 'rgba(22, 101, 52, 0.55)' : 'rgba(15, 23, 42, 0.8)'
+      ctx.fillRect(ax - aw / 2, az - ad / 2, aw, ad)
+
+      ctx.strokeStyle = isActive ? '#4ade80' : '#22c55e'
+      ctx.lineWidth = isActive ? 2.4 : 1.6
+      ctx.strokeRect(ax - aw / 2, az - ad / 2, aw, ad)
+
+      // 4 Entrance markers (South, North, East, West)
+      ctx.fillStyle = '#facc15'
+      ctx.beginPath()
+      ctx.arc(enX, enZ, 3.5, 0, Math.PI * 2)
+      ctx.fill()
+
+      if (arena.northEntranceX !== undefined) {
+        ctx.beginPath()
+        ctx.arc(nEnX, nEnZ, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      if (arena.eastEntranceX !== undefined) {
+        ctx.beginPath()
+        ctx.arc(eEnX, eEnZ, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      if (arena.westEntranceX !== undefined) {
+        ctx.beginPath()
+        ctx.arc(wEnX, wEnZ, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // Arena label
+      ctx.fillStyle = isActive ? '#4ade80' : '#86efac'
+      ctx.font = '700 8px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText(isActive ? '☣️ ARENA (4 PORTÕES)' : '☣️ ARENA ZUMBI (4 PORTÕES)', ax, az - ad / 2 - 4)
+    }
+
+    // Waypoint pointer when active or within proximity
+    if (isActive || dist < 220) {
+      const pulse = 1 + 0.3 * Math.sin(Date.now() / 180)
+      const distFromCenterSq = (ax - cx) * (ax - cx) + (az - cy) * (az - cy)
+      const maxRad = radius - 14
+
+      if (distFromCenterSq <= maxRad * maxRad) {
+        ctx.strokeStyle = '#22c55e'
+        ctx.lineWidth = 1.8
+        ctx.beginPath()
+        ctx.arc(ax, az, 7 * pulse, 0, Math.PI * 2)
+        ctx.stroke()
+      } else {
+        const angle = Math.atan2(az - cy, ax - cx)
+        const edgeX = cx + Math.cos(angle) * (radius - 16)
+        const edgeY = cy + Math.sin(angle) * (radius - 16)
+
+        ctx.save()
+        ctx.translate(edgeX, edgeY)
+        ctx.rotate(angle)
+
+        ctx.fillStyle = '#22c55e'
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(9, 0)
+        ctx.lineTo(-5, -6)
+        ctx.lineTo(-1, 0)
+        ctx.lineTo(-5, 6)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.restore()
+
+        ctx.save()
+        const textDistX = cx + Math.cos(angle) * (radius - 30)
+        const textDistY = cy + Math.sin(angle) * (radius - 30)
+        ctx.fillStyle = '#22c55e'
+        ctx.font = '800 7px monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText(`☣️ ZUMBIS ${Math.round(dist)}m`, textDistX, textDistY + 3)
         ctx.restore()
       }
     }

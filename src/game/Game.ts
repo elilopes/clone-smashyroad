@@ -5,16 +5,121 @@ import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js'
+import { WebGLPathTracer } from 'three-gpu-pathtracer'
+
+const VoxelPathTracingShader = {
+  name: 'VoxelPathTracingShader',
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(512, 512) },
+    aoIntensity: { value: 1.45 },
+    cornerIntensity: { value: 1.6 },
+    bounceIntensity: { value: 0.1 },
+    isNight: { value: 0.0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float aoIntensity;
+    uniform float cornerIntensity;
+    uniform float bounceIntensity;
+    uniform float isNight;
+    varying vec2 vUv;
+
+    // Matriz de dispersão 64x64 para Raymarching suave e sem ruído/banding
+    float dither64(vec2 p) {
+      vec2 m = mod(p, 64.0);
+      return fract(sin(dot(m, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
+    void main() {
+      vec2 texel = 1.0 / resolution;
+      vec4 centerTex = texture2D(tDiffuse, vUv);
+      vec3 centerColor = centerTex.rgb;
+      float centerLum = dot(centerColor, vec3(0.2126, 0.7152, 0.0722));
+
+      // 64 Amostras de Raymarching (8 direções radiais x 8 passos de profundidade por raio)
+      float jitter = dither64(gl_FragCoord.xy);
+      float baseAngle = jitter * 6.2831853;
+
+      float totalOcclusion = 0.0;
+      float cornerOcclusion = 0.0;
+      vec3 accumulatedBounce = vec3(0.0);
+      float totalWeight = 0.0;
+
+      // 8 Direções de raios no plano da tela
+      for (int i = 0; i < 8; i++) {
+        float angle = baseAngle + float(i) * 0.78539816; // 2 * PI / 8
+        vec2 rayDir = vec2(cos(angle), sin(angle));
+        float prevLum = centerLum;
+
+        // 8 Passos de Raymarching ao longo de cada raio (totalizando 64 passos)
+        for (int j = 1; j <= 8; j++) {
+          float stepFrac = float(j) * 0.125;
+          // Distribuição não-linear: passos concentrados em quinas próximas e alcance amplo
+          float stepDist = (stepFrac * stepFrac * 6.5 + stepFrac * 1.5);
+          vec2 sampleUv = vUv + rayDir * (stepDist * texel);
+
+          vec3 sCol = texture2D(tDiffuse, sampleUv).rgb;
+          float sLum = dot(sCol, vec3(0.2126, 0.7152, 0.0722));
+          float lumDiff = abs(sLum - centerLum);
+
+          // Detecção de quinas e cantos (descontinuidade angular em junções ortogonais de voxels)
+          float creviceStep = abs(sLum - prevLum);
+          prevLum = sLum;
+
+          float distWeight = 1.0 / (1.0 + stepDist * 0.32);
+
+          // Oclusão focada em quinas e cantos
+          float cornerStep = smoothstep(0.04, 0.36, lumDiff + creviceStep * 1.5) * distWeight;
+          cornerOcclusion += cornerStep;
+
+          // Oclusão ambiental contínua
+          float rayStep = smoothstep(0.02, 0.30, lumDiff) * distWeight;
+          totalOcclusion += rayStep;
+
+          // Rebote difuso de luz indireta ao longo do raio
+          accumulatedBounce += sCol * distWeight;
+          totalWeight += distWeight;
+        }
+      }
+
+      totalOcclusion /= 64.0;
+      cornerOcclusion /= 64.0;
+      vec3 avgBounce = accumulatedBounce / max(0.001, totalWeight);
+
+      // Oclusão ambiental acentuada em quinas, fendas e cantos
+      float cornerFactor = smoothstep(0.05, 0.52, cornerOcclusion * cornerIntensity);
+      float finalOcclusion = 1.0 - (totalOcclusion * 0.40 * aoIntensity + cornerFactor * 0.60 * aoIntensity);
+      finalOcclusion = clamp(finalOcclusion, 0.35, 1.0);
+
+      // Rebote de luz indireta rebatida
+      vec3 bounceTint = mix(vec3(1.0, 0.94, 0.82), vec3(0.42, 0.65, 0.98), isNight);
+      vec3 bounce = avgBounce * bounceTint * bounceIntensity * max(0.0, 0.85 - centerLum);
+
+      vec3 finalColor = centerColor * finalOcclusion + bounce;
+      gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), centerTex.a);
+    }
+  `,
+}
 
 const ColorCorrectionShader = {
   name: 'ColorCorrectionShader',
   uniforms: {
     tDiffuse: { value: null },
-    contrast: { value: 1.14 },
-    saturation: { value: 1.18 },
-    brightness: { value: 1.02 },
-    vignetteIntensity: { value: 0.38 },
-    vignetteWarmth: { value: 1.07 },
+    contrast: { value: 1.05 },
+    saturation: { value: 1.08 },
+    brightness: { value: 1.0 },
+    vignetteIntensity: { value: 0.35 },
+    vignetteWarmth: { value: 1.02 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -80,6 +185,7 @@ import { StickPerson } from './StickPerson'
 import { Tank } from './Tank'
 import { Traffic } from './Traffic'
 import { WantedSystem } from './WantedSystem'
+import { ZombieArena, type UpgradeCard } from './ZombieArena'
 import { usersDB, getXpRequiredForLevel, SHOP_CATALOG, type UserProfile } from '../db/users'
 import { triggerHapticImpact, triggerHapticNotification } from '../native/capacitor'
 
@@ -91,6 +197,8 @@ export class Game {
   private readonly scene = new THREE.Scene()
   private readonly camera = new THREE.PerspectiveCamera(61, 1, 0.1, 700)
   private readonly sun = new THREE.DirectionalLight(0xffe6bf, 3.2)
+  private readonly hemisphere = new THREE.HemisphereLight(0xe0f2fe, 0x334137, 2.15)
+  private readonly ambient = new THREE.AmbientLight(0xfff7ed, 0.42)
   private readonly renderer: THREE.WebGLRenderer
   private readonly city: City
   private readonly pedestrians: Pedestrians
@@ -274,6 +382,8 @@ export class Game {
   private readonly rallyResultBannerEl = document.querySelector<HTMLElement>('#rally-result-banner')
   private readonly rallyResultTitleEl = document.querySelector<HTMLElement>('#rally-result-title')
   private readonly rallyResultSubtitleEl = document.querySelector<HTMLElement>('#rally-result-subtitle')
+  private readonly rallyReplayBtn = document.querySelector<HTMLButtonElement>('#rally-replay-btn')
+  private readonly rallyCloseBtn = document.querySelector<HTMLButtonElement>('#rally-close-btn')
   // Estado do Looping 360° Hot Wheels da Corrida de Rally
   private rallyLoopActive = false
   private rallyLoopU = 0
@@ -281,6 +391,29 @@ export class Game {
   private rallyLoopFalling = false
   private rallyLoopFallVy = 0
   private rallyLoopFallPitch = 0
+
+  // 3.7. Missão de Ataque de Zumbis e Monstros (Arena 4 Prédios)
+  private readonly zombieArena: ZombieArena
+  private readonly zombieMissionPanel = document.querySelector<HTMLElement>('#zombie-mission-panel')
+  private readonly zombieWaveLabel = document.querySelector<HTMLElement>('#zombie-wave-label')
+  private readonly zombieHpFill = document.querySelector<HTMLElement>('#zombie-hp-fill')
+  private readonly zombieHpVal = document.querySelector<HTMLElement>('#zombie-hp-val')
+  private readonly zombieHeartsContainer = document.querySelector<HTMLElement>('#zombie-hearts-container')
+  private readonly zombieXpFill = document.querySelector<HTMLElement>('#zombie-xp-fill')
+  private readonly zombieXpVal = document.querySelector<HTMLElement>('#zombie-xp-val')
+  private readonly zombieWeaponLabel = document.querySelector<HTMLElement>('#zombie-weapon-label')
+  private readonly zombieKillsLabel = document.querySelector<HTMLElement>('#zombie-kills-label')
+  private readonly zombieExitBtn = document.querySelector<HTMLButtonElement>('#zombie-exit-btn')
+  private readonly zombieArenaPrompt = document.querySelector<HTMLElement>('#zombie-arena-prompt')
+  private readonly zombieStartBtn = document.querySelector<HTMLButtonElement>('#zombie-start-btn')
+  private readonly zombieCardsModal = document.querySelector<HTMLElement>('#zombie-cards-modal')
+  private readonly zombieCardLevelNum = document.querySelector<HTMLElement>('#zombie-card-level-num')
+  private readonly zombieCardsRow = document.querySelector<HTMLElement>('#zombie-cards-row')
+  private readonly zombieResultBanner = document.querySelector<HTMLElement>('#zombie-result-banner')
+  private readonly zombieResultTitle = document.querySelector<HTMLElement>('#zombie-result-title')
+  private readonly zombieResultSubtitle = document.querySelector<HTMLElement>('#zombie-result-subtitle')
+  private readonly zombieReplayBtn = document.querySelector<HTMLButtonElement>('#zombie-replay-btn')
+  private readonly zombieResultExitBtn = document.querySelector<HTMLButtonElement>('#zombie-result-exit-btn')
 
   // 4. Auth & Progression (Google & Play Games via users.ts)
   private readonly authButton = document.querySelector<HTMLButtonElement>('#auth-button')
@@ -352,22 +485,35 @@ export class Game {
   private autoAccelEnabled = false
   private mobileControlsMode: MobileControlMode = 'joystick'
 
-  // 6. Garage & Customization Shop (Loja de Carros e Upgrades)
+  // 6. Garage Modal (Garagem de Veículos)
+  private readonly garageBtn = document.querySelector<HTMLButtonElement>('#garage-btn')
+  private readonly garageModal = document.querySelector<HTMLElement>('#garage-modal')
+  private readonly closeGarageBtn = document.querySelector<HTMLButtonElement>('#close-garage-btn')
+  private readonly garageUserCash = document.querySelector<HTMLElement>('#garage-user-cash')
+  private readonly garageFeedbackMsg = document.querySelector<HTMLElement>('#garage-feedback-msg')
+  private readonly garageContentArea = document.querySelector<HTMLElement>('#garage-content-area')
+  private wasPausedBeforeGarage = false
+
+  // 7. Customization Shop (Loja de Upgrades & Oficina)
   private readonly shopBtn = document.querySelector<HTMLButtonElement>('#shop-btn')
   private readonly shopModal = document.querySelector<HTMLElement>('#shop-modal')
   private readonly closeShopBtn = document.querySelector<HTMLButtonElement>('#close-shop-btn')
   private readonly shopUserCash = document.querySelector<HTMLElement>('#shop-user-cash')
   private readonly shopFeedbackMsg = document.querySelector<HTMLElement>('#shop-feedback-msg')
   private readonly shopContentArea = document.querySelector<HTMLElement>('#shop-content-area')
-  private readonly shopTabVehicles = document.querySelector<HTMLButtonElement>('#shop-tab-vehicles')
   private readonly shopTabEngine = document.querySelector<HTMLButtonElement>('#shop-tab-engine')
   private readonly shopTabArmor = document.querySelector<HTMLButtonElement>('#shop-tab-armor')
   private readonly shopTabPaints = document.querySelector<HTMLButtonElement>('#shop-tab-paints')
   private readonly shopTabDecals = document.querySelector<HTMLButtonElement>('#shop-tab-decals')
   private readonly shopTabParts = document.querySelector<HTMLButtonElement>('#shop-tab-parts')
+  private readonly shopTabTeleport = document.querySelector<HTMLButtonElement>('#shop-tab-teleport')
   private readonly hydraulicJumpBtn = document.querySelector<HTMLButtonElement>('#hydraulic-jump-btn')
-  private currentShopTab: 'vehicles' | 'engine' | 'armor' | 'paints' | 'decals' | 'parts' = 'vehicles'
+  private currentShopTab: 'engine' | 'armor' | 'paints' | 'decals' | 'parts' | 'teleport' = 'engine'
   private wasPausedBeforeShop = false
+
+  // Status Modal: lista de missões existentes e concluídas
+  private readonly statusMissionsList = document.querySelector<HTMLElement>('#status-missions-list')
+  private readonly statusMissionsCounter = document.querySelector<HTMLElement>('#status-missions-counter')
 
   private readonly startOverlay = document.querySelector<HTMLElement>('#start-overlay')!
   private readonly endOverlay = document.querySelector<HTMLElement>('#end-overlay')!
@@ -378,6 +524,7 @@ export class Game {
   private readonly occlusionTarget = new THREE.Vector3()
   private readonly verticalAxis = new THREE.Vector3(0, 1, 0)
   private cameraMode: 'chase' | 'quarter' | 'cockpit' = 'chase'
+  private characterCameraYaw = 0
   private inVehicle = true
   private inPlane = false
   private running = false
@@ -406,9 +553,14 @@ export class Game {
   private graphicsMode: GraphicsDesignMode = 'medium'
   private composer?: EffectComposer
   private ssaoPass?: SSAOPass
+  private voxelPathTracingPass?: ShaderPass
   private bloomPass?: UnrealBloomPass
   private colorCorrectionPass?: ShaderPass
+  private smaaPass?: SMAAPass
   private ultraEnvMap?: THREE.Texture
+  private pathTracer?: WebGLPathTracer
+  private pathTracingMode = false
+  private pathTracerNeedsUpdate = true
 
   constructor(host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -521,7 +673,12 @@ export class Game {
       this.distance += rewardPoints
       localStorage.setItem(CASH_KEY, String(this.cash))
       this.pursuit.setRallyMissionActive(false)
+      const justCompleted = this.missions.recordRallyRaceWin()
+      if (justCompleted.length > 0) {
+        this.rewardXp(justCompleted[0].reward / 2)
+      }
       this.updateHud()
+      this.updateMissionCards()
       this.sound.effect('upgrade')
       if (this.rallyResultBannerEl && this.rallyResultTitleEl && this.rallyResultSubtitleEl) {
         this.rallyResultBannerEl.classList.remove('hidden', 'defeat')
@@ -545,9 +702,22 @@ export class Game {
         setTimeout(() => {
           this.rallyResultBannerEl?.classList.add('hidden')
         }, 8000)
-      }
       this.showToast(`❌ DERROTA! MISSÃO FRACASSADA! Você terminou em ${position}º lugar (necessário 1º ou 2º).`)
+      }
     }
+
+    this.rallyReplayBtn?.addEventListener('click', () => {
+      this.rallyResultBannerEl?.classList.add('hidden')
+      const playerRallyCar = (this.inVehicle && this.player.kind === 'rally_car') ? this.player : undefined
+      this.rallyRace.resetRace(playerRallyCar)
+    })
+    this.rallyCloseBtn?.addEventListener('click', () => {
+      this.rallyResultBannerEl?.classList.add('hidden')
+    })
+
+    // Inicialização da Arena Zumbi
+    this.zombieArena = new ZombieArena(this.scene, this.sound, this.sparks)
+    this.initZombieArena()
 
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
     this.city.ensureAround(this.player.root.position.z, this.player.root.position.x, true)
@@ -613,19 +783,20 @@ export class Game {
   }
 
   private createLighting(): void {
-    const hemisphere = new THREE.HemisphereLight(0xe4eedc, 0x334137, 2.15)
-    this.scene.add(hemisphere)
+    this.scene.add(this.hemisphere)
+    this.scene.add(this.ambient)
 
-    this.sun.position.set(-36, 62, -28)
+    this.sun.position.set(-42, 68, -32)
     this.sun.castShadow = true
-    this.sun.shadow.mapSize.set(1536, 1536)
-    this.sun.shadow.camera.left = -76
-    this.sun.shadow.camera.right = 76
-    this.sun.shadow.camera.top = 76
-    this.sun.shadow.camera.bottom = -76
+    this.sun.shadow.mapSize.set(2048, 2048)
+    this.sun.shadow.camera.left = -78
+    this.sun.shadow.camera.right = 78
+    this.sun.shadow.camera.top = 78
+    this.sun.shadow.camera.bottom = -78
     this.sun.shadow.camera.near = 1
-    this.sun.shadow.camera.far = 210
-    this.sun.shadow.bias = -0.0002
+    this.sun.shadow.camera.far = 220
+    this.sun.shadow.bias = -0.0003
+    this.sun.shadow.normalBias = 0.035
     this.scene.add(this.sun, this.sun.target)
   }
 
@@ -680,17 +851,22 @@ export class Game {
       const renderPass = new RenderPass(this.scene, this.camera)
       this.composer.addPass(renderPass)
 
-      this.ssaoPass = new SSAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight)
-      this.ssaoPass.kernelRadius = 14
-      this.ssaoPass.minDistance = 0.002
-      this.ssaoPass.maxDistance = 0.12
+      this.ssaoPass = new SSAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight, 64)
+      this.ssaoPass.kernelRadius = 16
+      this.ssaoPass.minDistance = 0.0006
+      this.ssaoPass.maxDistance = 0.09
       this.composer.addPass(this.ssaoPass)
+
+      this.voxelPathTracingPass = new ShaderPass(VoxelPathTracingShader)
+      this.voxelPathTracingPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight)
+      this.voxelPathTracingPass.enabled = false
+      this.composer.addPass(this.voxelPathTracingPass)
 
       this.bloomPass = new UnrealBloomPass(
         new THREE.Vector2(window.innerWidth, window.innerHeight),
-        1.15, // strength
-        0.42, // radius
-        0.82  // threshold
+        0.35, // strength calibrado para eliminar clarão cegante
+        0.28, // radius
+        1.05  // threshold elevado para que calçadas e asfalto jamais emitam bloom
       )
       this.bloomPass.enabled = false
       this.composer.addPass(this.bloomPass)
@@ -699,10 +875,38 @@ export class Game {
       this.colorCorrectionPass.enabled = false
       this.composer.addPass(this.colorCorrectionPass)
 
+      this.smaaPass = new SMAAPass()
+      this.smaaPass.enabled = false
+      this.composer.addPass(this.smaaPass)
+
       const outputPass = new OutputPass()
       this.composer.addPass(outputPass)
     } catch (err) {
       console.warn('EffectComposer initialization note:', err)
+    }
+  }
+
+  private initPathTracer(): void {
+    try {
+      this.pathTracer = new WebGLPathTracer(this.renderer)
+      this.pathTracer.bounces = 2
+      this.pathTracer.renderScale = 0.85
+      this.pathTracer.dynamicLowRes = true
+      this.pathTracer.tiles.set(1, 1)
+      this.pathTracer.enablePathTracing = true
+    } catch (err) {
+      console.warn('WebGLPathTracer init note:', err)
+    }
+  }
+
+  public togglePathTracing(enable?: boolean): void {
+    this.pathTracingMode = enable !== undefined ? enable : !this.pathTracingMode
+    if (this.pathTracingMode) {
+      if (!this.pathTracer) this.initPathTracer()
+      this.pathTracerNeedsUpdate = true
+      this.showToast('⚡ PATH TRACING (RTX / MAGICAVOXEL) ATIVADO!')
+    } else {
+      this.showToast('RENDERIZADOR EM TEMPO REAL ATIVADO')
     }
   }
 
@@ -721,6 +925,8 @@ export class Game {
       // 1. Remova as sombras dos objetos
       this.renderer.shadowMap.enabled = false
       this.sun.castShadow = false
+      this.sun.intensity = 3.2
+      this.hemisphere.intensity = 2.15
 
       // 2. Remova a nevoa do horizonte
       this.scene.fog = null
@@ -728,15 +934,34 @@ export class Game {
       this.scene.environment = null
       this.scene.environmentIntensity = 1.0
 
+      this.renderer.setPixelRatio(1.0)
+      if (this.smaaPass) this.smaaPass.enabled = false
       if (this.bloomPass) this.bloomPass.enabled = false
       if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = false
       if (this.ssaoPass) this.ssaoPass.enabled = false
+      if (this.voxelPathTracingPass) this.voxelPathTracingPass.enabled = false
+      this.pathTracingMode = false
     } else if (isUltra) {
-      // Modo ULTRA: Sombras de alta precisão, PBR reflexos de ambiente, Bloom neon e Correção de Cor
+      // Modo ULTRA: Iluminação física DirectionalLight + Hemisphere + Ambient, Sombras PCFSoft 2048x2048, SSAO e Raymarching
       const shadowsEnabled = localStorage.getItem('smash_shadows_enabled') !== 'false'
       this.renderer.shadowMap.enabled = shadowsEnabled
       this.sun.castShadow = shadowsEnabled
       this.sun.shadow.mapSize.set(2048, 2048)
+      this.sun.shadow.bias = -0.0003
+      this.sun.shadow.normalBias = 0.035
+
+      // Aumentar o Antialiasing com Super-Sampling (pixel ratio até 2.0x) e SMAA Pass
+      const ultraRatio = Math.min(window.devicePixelRatio || 1, 2.0)
+      this.renderer.setPixelRatio(Math.max(ultraRatio, 1.75))
+      if (this.smaaPass) {
+        this.smaaPass.enabled = true
+        const pr = this.renderer.getPixelRatio()
+        this.smaaPass.setSize(window.innerWidth * pr, window.innerHeight * pr)
+      }
+
+      // Intensidades balanceadas para evitar saturação e ofuscamento
+      this.sun.intensity = 2.3
+      this.hemisphere.intensity = 1.35
 
       this.scene.fog = new THREE.Fog(0xa6c2a1, 180, 480)
 
@@ -744,17 +969,45 @@ export class Game {
         this.ultraEnvMap = this.createProceduralEnvironmentMap()
       }
       this.scene.environment = this.ultraEnvMap
-      this.scene.environmentIntensity = 1.35
+      this.scene.environmentIntensity = 0.55
 
-      if (this.bloomPass) this.bloomPass.enabled = true
+      if (this.bloomPass) {
+        this.bloomPass.enabled = true
+        this.bloomPass.threshold = 1.05
+        this.bloomPass.strength = 0.35
+        this.bloomPass.radius = 0.28
+      }
       if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = true
-      if (this.ssaoPass) this.ssaoPass.enabled = true
+
+      // Oclusão ambiental acentuada em quinas e cantos com matriz de 64 amostras
+      if (this.ssaoPass) {
+        this.ssaoPass.enabled = true
+        this.ssaoPass.kernelRadius = 16
+        this.ssaoPass.minDistance = 0.0006
+        this.ssaoPass.maxDistance = 0.09
+      }
+      // Raymarching em shaders com 64 passos e detecção de cantos/quinas
+      if (this.voxelPathTracingPass) {
+        this.voxelPathTracingPass.enabled = true
+        this.voxelPathTracingPass.uniforms.aoIntensity.value = 1.45
+        this.voxelPathTracingPass.uniforms.cornerIntensity.value = 1.6
+      }
+      if (!this.pathTracer) {
+        this.initPathTracer()
+      }
     } else {
       // Restore shadows and fog for medium / high
       const shadowsEnabled = localStorage.getItem('smash_shadows_enabled') !== 'false'
       this.renderer.shadowMap.enabled = shadowsEnabled
       this.sun.castShadow = shadowsEnabled
+      this.sun.intensity = 3.0
+      this.hemisphere.intensity = 2.0
       this.sun.shadow.mapSize.set(1536, 1536)
+      this.sun.shadow.bias = -0.0002
+      this.sun.shadow.normalBias = 0.0
+
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35))
+      if (this.smaaPass) this.smaaPass.enabled = false
 
       this.scene.fog = new THREE.Fog(0xa6c2a1, 140, 380)
 
@@ -763,7 +1016,12 @@ export class Game {
 
       if (this.bloomPass) this.bloomPass.enabled = false
       if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = false
-      if (this.ssaoPass) this.ssaoPass.enabled = isHigh
+      if (this.ssaoPass) {
+        this.ssaoPass.enabled = isHigh
+        this.ssaoPass.kernelRadius = 18
+      }
+      if (this.voxelPathTracingPass) this.voxelPathTracingPass.enabled = false
+      this.pathTracingMode = false
     }
 
     // 3. Atualiza iluminação, reflexos PBR e geometria de todos os veículos
@@ -844,6 +1102,7 @@ export class Game {
     const statusModal = document.querySelector<HTMLElement>('#status-modal')
     document.querySelector<HTMLButtonElement>('#status-button')?.addEventListener('click', () => {
       this.updateHud()
+      this.renderStatusMissionsList()
       statusModal?.classList.remove('hidden')
     })
     document.querySelector<HTMLButtonElement>('#close-status-btn')?.addEventListener('click', () => {
@@ -932,19 +1191,33 @@ export class Game {
       void this.loadDailyLeaderboardData()
     })
 
-    // Garage & Customization Shop Events
+    // Garage Events
+    this.garageBtn?.addEventListener('click', () => {
+      this.openGarage()
+    })
+    this.closeGarageBtn?.addEventListener('click', () => {
+      this.closeGarage()
+    })
+    this.garageModal?.addEventListener('click', (e) => {
+      if (e.target === this.garageModal) this.closeGarage()
+    })
+
+    // Customization Shop Events
     this.shopBtn?.addEventListener('click', () => {
       this.openShop()
     })
     this.closeShopBtn?.addEventListener('click', () => {
       this.closeShop()
     })
-    this.shopTabVehicles?.addEventListener('click', () => this.switchShopTab('vehicles'))
+    this.shopModal?.addEventListener('click', (e) => {
+      if (e.target === this.shopModal) this.closeShop()
+    })
     this.shopTabEngine?.addEventListener('click', () => this.switchShopTab('engine'))
     this.shopTabArmor?.addEventListener('click', () => this.switchShopTab('armor'))
     this.shopTabPaints?.addEventListener('click', () => this.switchShopTab('paints'))
     this.shopTabDecals?.addEventListener('click', () => this.switchShopTab('decals'))
     this.shopTabParts?.addEventListener('click', () => this.switchShopTab('parts'))
+    this.shopTabTeleport?.addEventListener('click', () => this.switchShopTab('teleport'))
 
     // Hydraulic Jump Mobile Button
     this.hydraulicJumpBtn?.addEventListener('click', () => {
@@ -1110,6 +1383,14 @@ export class Game {
         statusModal.classList.add('hidden')
         return
       }
+      if (event.key === 'Escape' && this.garageModal && !this.garageModal.classList.contains('hidden') && !event.repeat) {
+        this.closeGarage()
+        return
+      }
+      if (event.key === 'Escape' && this.shopModal && !this.shopModal.classList.contains('hidden') && !event.repeat) {
+        this.closeShop()
+        return
+      }
       if ((event.key.toLowerCase() === 'p' || event.key === 'Escape') && !event.repeat) {
         this.togglePause()
         return
@@ -1119,7 +1400,14 @@ export class Game {
         return
       }
       if (event.key.toLowerCase() === 'c' && !event.repeat && !this.paused) this.toggleCamera()
-      if (event.key.toLowerCase() === 'e' && !event.repeat && !this.paused) this.toggleVehicle()
+      if (event.key.toLowerCase() === 'e' && !event.repeat && !this.paused) {
+        const actorPos = this.inPlane ? this.plane.root.position : this.inVehicle ? this.player.root.position : this.character.root.position
+        if (!this.zombieArena.active && this.city.isNearZombieArenaEntrance(actorPos.x, actorPos.z)) {
+          this.startZombieArenaMission()
+          return
+        }
+        this.toggleVehicle()
+      }
       if (event.code === 'Space' && !event.repeat && !this.paused) {
         if (this.inVehicle && !this.inPlane && this.player.hasHydraulicJump) {
           this.triggerHydraulicJump()
@@ -1242,6 +1530,7 @@ export class Game {
     this.rallyRace.playerHasWon = false
     this.rallyRacePanel?.classList.add('hidden')
     this.pursuit.setRallyMissionActive(false)
+    this.stopZombieArenaMission()
     this.updateVehicleButton()
     this.startOverlay.classList.add('hidden')
     this.endOverlay.classList.add('hidden')
@@ -1332,8 +1621,15 @@ export class Game {
       },
       this.getStationaryCarLocations(),
       this.rallyRace,
+      this.zombieArena.active,
     )
-    if ((this.graphicsMode === 'high' || this.graphicsMode === 'ultra') && this.composer) {
+    if (this.graphicsMode === 'ultra' && this.pathTracingMode && this.pathTracer) {
+      if (this.pathTracerNeedsUpdate) {
+        this.pathTracer.setScene(this.scene, this.camera)
+        this.pathTracerNeedsUpdate = false
+      }
+      this.pathTracer.renderSample()
+    } else if ((this.graphicsMode === 'high' || this.graphicsMode === 'ultra') && this.composer) {
       this.composer.render()
     } else {
       this.renderer.render(this.scene, this.camera)
@@ -1344,27 +1640,52 @@ export class Game {
   private update(dt: number): void {
     this.elapsed += dt
 
+    // Tracking shadow camera around active player for high-density voxel shadows
+    const actorPos = this.inPlane
+      ? this.plane.root.position
+      : this.inVehicle
+        ? this.player.root.position
+        : this.character.root.position
+
+    this.sun.target.position.set(actorPos.x, actorPos.y, actorPos.z)
+    this.sun.position.set(actorPos.x - 42, actorPos.y + 68, actorPos.z - 32)
+
     // No modo Ultra, ciclo de dia e noite (20 min dia = 1200s, 20 min noite = 1200s, total 40 min / 2400s)
     if (this.graphicsMode === 'ultra') {
       const timeInCycle = this.elapsed % 2400
       const isNight = timeInCycle >= 1200
 
-      const targetSunColor = new THREE.Color(isNight ? 0x3b82f6 : 0xffe6bf)
+      const targetSunColor = new THREE.Color(isNight ? 0x60a5fa : 0xffe6bf)
       const targetBgColor = new THREE.Color(isNight ? 0x090d16 : 0xa6c2a1)
       const targetFogColor = new THREE.Color(isNight ? 0x0f172a : 0xa6c2a1)
-      const targetSunIntensity = isNight ? 0.35 : 3.2
+      const targetSunIntensity = isNight ? 0.65 : 3.2
+
+      const targetHemiSky = new THREE.Color(isNight ? 0x1e293b : 0xe0f2fe)
+      const targetHemiGround = new THREE.Color(isNight ? 0x090d16 : 0x334137)
+      const targetHemiIntensity = isNight ? 0.75 : 1.95
+      const targetAmbientColor = new THREE.Color(isNight ? 0x172554 : 0xfff7ed)
+      const targetAmbientIntensity = isNight ? 0.22 : 0.42
 
       this.sun.color.lerp(targetSunColor, dt * 0.5)
       this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, targetSunIntensity, dt * 0.5)
+      this.hemisphere.color.lerp(targetHemiSky, dt * 0.5)
+      this.hemisphere.groundColor.lerp(targetHemiGround, dt * 0.5)
+      this.hemisphere.intensity = THREE.MathUtils.lerp(this.hemisphere.intensity, targetHemiIntensity, dt * 0.5)
+      this.ambient.color.lerp(targetAmbientColor, dt * 0.5)
+      this.ambient.intensity = THREE.MathUtils.lerp(this.ambient.intensity, targetAmbientIntensity, dt * 0.5)
+
       if (this.scene.background instanceof THREE.Color) {
         this.scene.background.lerp(targetBgColor, dt * 0.5)
       }
       if (this.scene.fog) {
         this.scene.fog.color.lerp(targetFogColor, dt * 0.5)
       }
+      if (this.voxelPathTracingPass) {
+        this.voxelPathTracingPass.uniforms.isNight.value = isNight ? 1.0 : 0.0
+      }
     }
 
-    const controls = this.input.read(this.autoAccelEnabled)
+    const controls = this.input.read((this.inVehicle || this.inPlane) && this.autoAccelEnabled)
     let collided = false
 
     if (this.inPlane) {
@@ -1672,7 +1993,7 @@ export class Game {
       } else {
         this.character.groundElevation = this.city.getDuneHeightAt(this.character.root.position.x, this.character.root.position.z)
         const charInWater = !this.inVehicle && !this.inPlane && this.city.isInWater(this.character.root.position.x, this.character.root.position.z)
-        this.character.update(dt, controls, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.character.root.position.y).collided, charInWater)
+        this.character.update(dt, controls, (x, z, radius) => this.resolveFullCollision(x, z, radius, this.character.root.position.y).collided, charInWater, this.characterCameraYaw)
       }
       this.cockpit.update(0, dt)
     }
@@ -1704,7 +2025,8 @@ export class Game {
     }
     this.city.ensureAround(actorPosition.z, actorPosition.x, true)
     this.pedestrians.ensureAround(actorPosition.z)
-    this.city.update(dt, actorPosition)
+    const isNightTime = this.graphicsMode === 'ultra' && (this.elapsed % 2400) >= 1200
+    this.city.update(dt, actorPosition, isNightTime, this.elapsed)
     this.kingKong.update(dt, this.inPlane ? this.plane.root.position : null)
 
     // Ocultação de performance no modo gráfico baixo na área das dunas (corrida de rally):
@@ -1915,6 +2237,8 @@ export class Game {
         if (Math.abs(abandoned.speed) > 0.05) {
           abandoned.speed *= Math.max(0, 1 - 2.5 * dt)
           abandoned.integrateMovement(dt)
+        } else if (abandoned.police) {
+          abandoned.updateGiroflex(dt)
         }
         if (this.inVehicle && this.player.collideWith(abandoned, dt)) {
           this.sparks.emit(this.player.root.position)
@@ -1978,9 +2302,14 @@ export class Game {
       } else {
         this.addHeat(6 * pedestrianHits)
       }
+      const earnedCoin = Math.round(pedestrianHits * 25 * this.tokenMultiplier)
+      this.cash += earnedCoin
+      localStorage.setItem(CASH_KEY, String(this.cash))
       this.rewardXp(1 * pedestrianHits)
       this.sound.effect('crash')
-      this.showToast(pedestrianHits > 1 ? `PEDESTRES ATROPELADOS // PROCURADO +${pedestrianHits} NÍVEIS! (+${1 * pedestrianHits} XP)` : 'PEDESTRE ATROPELADO // PROCURADO +1 NÍVEL! (+1 XP)')
+      this.sound.effect('coin')
+      this.showToast(pedestrianHits > 1 ? `PEDESTRES ATROPELADOS // +$${earnedCoin} MOEDAS! PROCURADO +${pedestrianHits} NÍVEIS! (+${1 * pedestrianHits} XP)` : `PEDESTRE ATROPELADO // +$${earnedCoin} MOEDAS! PROCURADO +1 NÍVEL! (+1 XP)`)
+      this.updateHud()
     }
 
     const coins = this.city.collectAt(actorPosition.x, actorPosition.z)
@@ -1996,7 +2325,22 @@ export class Game {
     const oldLevel = this.wanted.level
     this.wanted.update(dt, actorSpeed)
 
-    const pursuit = this.pursuit.update(dt, this.player, actorPosition, !this.inVehicle && !this.inPlane, actorSpeed)
+    const pursuit = this.pursuit.update(dt, this.player, actorPosition, !this.inVehicle && !this.inPlane, actorSpeed, (x, z, r) => this.city.collides(x, z, r))
+    if (this.zombieArena.active) {
+      const arenaInfo = this.city.getZombieArenaInfo()
+      for (const cop of this.pursuit.getCars()) {
+        if (Math.abs(cop.root.position.x - arenaInfo.x) <= arenaInfo.width / 2 + 1.5 &&
+            Math.abs(cop.root.position.z - arenaInfo.z) <= arenaInfo.depth / 2 + 1.5) {
+          const dx = cop.root.position.x - arenaInfo.x
+          const dz = cop.root.position.z - arenaInfo.z
+          const dist = Math.hypot(dx, dz) || 1
+          const pushDist = arenaInfo.width / 2 + 2.5
+          cop.root.position.x = arenaInfo.x + (dx / dist) * pushDist
+          cop.root.position.z = arenaInfo.z + (dz / dist) * pushDist
+          cop.speed *= -0.2
+        }
+      }
+    }
     for (const point of pursuit.collisionPoints) this.sparks.emit(point)
     for (const pt of pursuit.explosions) {
       this.sparks.emitExplosion(pt)
@@ -2401,6 +2745,7 @@ export class Game {
     }
     const completed = this.missions.update(dt, event)
     for (const mission of completed) this.completeMission(mission)
+    this.checkMissionTeleportDiscoveries(actorPosition)
     this.sound.update(this.inPlane ? this.plane.speed : this.inVehicle ? this.player.speed : 0, this.wanted.level)
 
     // Atualização das Missões do Caminhão Tanque
@@ -2422,7 +2767,21 @@ export class Game {
     // 4. Corrida de Rally nas Dunas (6 Carros)
     this.updateRallyRace(dt)
 
-    if (!this.inPlane && pursuit.busted) this.endRun('busted')
+    // 5. Arena de Sobrevivência contra Zumbis e Monstros
+    const nearZombieArena = this.city.isNearZombieArenaEntrance(actorPosition.x, actorPosition.z)
+    if (this.zombieArenaPrompt) {
+      if (nearZombieArena && !this.zombieArena.active) {
+        this.zombieArenaPrompt.classList.remove('hidden')
+      } else {
+        this.zombieArenaPrompt.classList.add('hidden')
+      }
+    }
+
+    if (this.zombieArena.active) {
+      this.zombieArena.update(dt, actorPosition, this.character)
+    }
+
+    if (!this.inPlane && !this.zombieArena.active && pursuit.busted) this.endRun('busted')
     this.hudTimer += dt
     if (this.hudTimer >= 0.1) {
       this.hudTimer = 0
@@ -3152,6 +3511,7 @@ export class Game {
     this.rallyLoopU = 0
     this.rallyLoopFalling = false
     this.rallyLoopFallVy = 0
+    this.stopZombieArenaMission()
     this.cancelAutoApproach(null)
     this.updateWaterTimerUI(false)
     this.pauseOverlay.classList.add('hidden')
@@ -3381,6 +3741,7 @@ export class Game {
   }
 
   private findAnyNearbyCar(maxDistance = 4.2): { car: Car; distance: number; source: 'current' | 'abandoned' | 'traffic' | 'police' } | null {
+    if (this.zombieArena.active) return null
     const charPos = this.character.root.position
     const candidates: { car: Car; distance: number; source: 'current' | 'abandoned' | 'traffic' | 'police' }[] = []
 
@@ -3446,12 +3807,17 @@ export class Game {
   }
 
   private enterVehicle(): void {
+    if (this.zombieArena.active) {
+      this.sound.effect('crash')
+      this.showToast('⛔ IMPOSSÍVEL ENTRAR EM VEÍCULOS DURANTE A MISSÃO DE SOBREVIVÊNCIA ZUMBI!')
+      return
+    }
     if (this.autoApproachCar) {
       this.cancelAutoApproach('ENTRADA AUTOMÁTICA CANCELADA')
       return
     }
 
-    const immediateTarget = this.findAnyNearbyCar(2.4)
+    const immediateTarget = this.findAnyNearbyCar(5.5)
     if (immediateTarget && !immediateTarget.car.exploded) {
       if (immediateTarget.car.kind === 'monster_truck' && usersDB.getCurrentUser().level < 2) {
         this.sound.effect('crash')
@@ -3508,8 +3874,9 @@ export class Game {
     if (isNewCar) {
       if (source === 'traffic') {
         this.traffic.removeCar(chosenCar)
-      } else if (source === 'police') {
+      } else if (source === 'police' || chosenCar.police) {
         this.pursuit.removeCar(chosenCar)
+        chosenCar.speed = 0
       } else if (source === 'abandoned') {
         const idx = this.abandonedCars.indexOf(chosenCar)
         if (idx !== -1) this.abandonedCars.splice(idx, 1)
@@ -3690,8 +4057,9 @@ export class Game {
                     : nearby.car.kind === 'bicycle'
                       ? 'BICICLETA'
                       : 'CARRO'
-        this.vehicleButton.textContent = `ENTRAR NO ${vehicleName} · E`
-        this.vehicleButton.setAttribute('aria-label', `Entrar no ${vehicleName} (E)`)
+        const article = nearby.car.police ? 'NA' : 'NO'
+        this.vehicleButton.textContent = `ENTRAR ${article} ${vehicleName} · E`
+        this.vehicleButton.setAttribute('aria-label', `Entrar ${article.toLowerCase()} ${vehicleName} (E)`)
       } else {
         this.vehicleButton.textContent = 'ENTRAR NO CARRO · E'
         this.vehicleButton.setAttribute('aria-label', 'Entrar no carro (E)')
@@ -3719,11 +4087,20 @@ export class Game {
     const position = this.inPlane
       ? this.plane.root.position
       : playerElevatedPos
-    const yaw = this.inPlane
+    let yaw = this.inPlane
       ? this.plane.yaw
       : this.inVehicle
         ? this.player.yaw
         : this.character.yaw
+
+    const onFoot = !this.inVehicle && !this.inPlane
+    if (onFoot) {
+      // Câmera perfeitamente estável a pé: não rotaciona com o giro do personagem,
+      // eliminando oscilações, balanços bruscos e feedback loop no joystick virtual
+      yaw = this.characterCameraYaw
+    } else {
+      this.characterCameraYaw = yaw
+    }
 
     if (this.inPlane) {
       if (this.cameraMode === 'quarter') {
@@ -3788,8 +4165,8 @@ export class Game {
     } else {
       this.camera.position.lerp(this.cameraTarget, alpha)
     }
-    const lookAhead = this.cameraMode === 'quarter' ? 11 : this.cameraMode === 'cockpit' && this.inVehicle ? (isRobot ? 14 : 12) : (isRobot ? 8.5 : 5.2)
-    const lookHeight = this.cameraMode === 'cockpit' && this.inVehicle ? (isRobot ? 4.8 : 1.56) : this.cameraMode === 'quarter' ? (isRobot ? 3.0 : 1.1) : (isRobot ? 3.6 : 1.3)
+    const lookAhead = onFoot ? 0.0 : (this.cameraMode === 'quarter' ? 11 : this.cameraMode === 'cockpit' && this.inVehicle ? (isRobot ? 14 : 12) : (isRobot ? 8.5 : 5.2))
+    const lookHeight = onFoot ? 1.0 : (this.cameraMode === 'cockpit' && this.inVehicle ? (isRobot ? 4.8 : 1.56) : this.cameraMode === 'quarter' ? (isRobot ? 3.0 : 1.1) : (isRobot ? 3.6 : 1.3))
     this.lookTarget.set(position.x - Math.sin(yaw) * lookAhead, position.y + lookHeight, position.z - Math.cos(yaw) * lookAhead)
     this.camera.lookAt(this.lookTarget)
     this.cockpit.setVisible(this.inVehicle && this.cameraMode === 'cockpit')
@@ -4082,6 +4459,8 @@ export class Game {
       'monster-crush': 'Crush 10 cars with the Monster Truck',
       'tanker-fuel': 'Deliver flammable fuel to the gas station',
       'bus-commuters': 'Pick up 10 commuters with the bus',
+      'rally-dunes': 'Dune Rally: Finish in 1st or 2nd place in the circuit',
+      'zombie-arena': 'Survival Arena: Survive all 4 waves of zombies and monsters',
       'stretch-1': 'Drive 350 meters through the city',
       'cash-1': 'Collect 4 scattered tokens',
       'survivor-1': 'Survive for 45 seconds escaping the police',
@@ -4101,7 +4480,8 @@ export class Game {
     const user = usersDB.getCurrentUser()
 
     // Topbar buttons
-    if (this.shopBtn) this.shopBtn.textContent = isPt ? '🏪 LOJA & GARAGEM' : '🏪 SHOP & GARAGE'
+    if (this.garageBtn) this.garageBtn.textContent = isPt ? '🚗 GARAGEM' : '🚗 GARAGE'
+    if (this.shopBtn) this.shopBtn.textContent = isPt ? '🏪 LOJA' : '🏪 SHOP'
     if (this.leaderboardBtn) this.leaderboardBtn.textContent = isPt ? '🏆 RANKING' : '🏆 LEADERBOARD'
     if (this.settingsButton) this.settingsButton.textContent = isPt ? '⚙️ AJUSTES' : '⚙️ SETTINGS'
     if (this.pauseSettingsBtn) this.pauseSettingsBtn.textContent = isPt ? '⚙️ CONFIGURAÇÕES' : '⚙️ SETTINGS'
@@ -4806,6 +5186,188 @@ export class Game {
     }
   }
 
+  // ==========================================
+  // 3.7. ARENA ZUMBI & MONSTROS (ROGUELITE)
+  // ==========================================
+  private initZombieArena(): void {
+    this.zombieArena.onLevelUp = (cards: UpgradeCard[], level: number) => {
+      if (!this.zombieCardsModal || !this.zombieCardsRow) return
+      if (this.zombieCardLevelNum) {
+        this.zombieCardLevelNum.textContent = `NÍVEL ${level}`
+      }
+      this.zombieCardsRow.innerHTML = ''
+      for (const card of cards) {
+        const item = document.createElement('div')
+        item.className = 'zombie-card-item'
+        item.innerHTML = `
+          <div class="zombie-card-tag">${card.tag}</div>
+          <div class="zombie-card-icon">${card.icon}</div>
+          <div class="zombie-card-title">${card.title}</div>
+          <div class="zombie-card-desc">${card.description}</div>
+          <div class="zombie-card-btn">ESCOLHER</div>
+        `
+        item.addEventListener('click', () => {
+          this.zombieArena.applyUpgrade(card.id, this.character)
+          this.zombieCardsModal?.classList.add('hidden')
+          this.sound.effect('upgrade')
+          this.showToast(`⚡ UPGRADE ESCOLHIDO: ${card.title}!`)
+        })
+        this.zombieCardsRow.appendChild(item)
+      }
+      this.sound.effect('upgrade')
+      this.zombieCardsModal.classList.remove('hidden')
+    }
+
+    this.zombieArena.onWaveChanged = (wave: number, totalWaves?: number) => {
+      const tot = totalWaves ?? 4
+      if (this.zombieWaveLabel) this.zombieWaveLabel.textContent = `ONDA ${wave}/${tot}`
+    }
+
+    this.zombieArena.onLivesChanged = (lives: number, maxLives: number) => {
+      if (this.zombieHeartsContainer) {
+        this.zombieHeartsContainer.textContent = '❤️'.repeat(lives) + '🖤'.repeat(Math.max(0, maxLives - lives))
+      }
+      if (this.zombieHpVal) {
+        this.zombieHpVal.textContent = `${lives} / ${maxLives} VIDAS`
+      }
+    }
+
+    this.zombieArena.onHpChanged = (hp: number, maxHp: number) => {
+      const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100))
+      if (this.zombieHpFill) this.zombieHpFill.style.width = `${pct}%`
+    }
+
+    this.zombieArena.onXpChanged = (xp: number, needed: number, _level: number) => {
+      const pct = Math.max(0, Math.min(100, (xp / needed) * 100))
+      if (this.zombieXpFill) this.zombieXpFill.style.width = `${pct}%`
+      if (this.zombieXpVal) this.zombieXpVal.textContent = `${xp} / ${needed} XP`
+    }
+
+    this.zombieArena.onWeaponChanged = (weaponName: string, icon: string) => {
+      if (this.zombieWeaponLabel) this.zombieWeaponLabel.textContent = `${icon} ${weaponName}`
+    }
+
+    this.zombieArena.onKillsChanged = (kills: number) => {
+      if (this.zombieKillsLabel) this.zombieKillsLabel.textContent = `${kills} ELIMINAÇÕES`
+    }
+
+    this.zombieArena.onGameOver = (survivedWaves: number, kills: number) => {
+      this.pursuit.setRallyMissionActive(false)
+      this.zombieMissionPanel?.classList.add('hidden')
+      this.zombieCardsModal?.classList.add('hidden')
+      const rewardCash = kills * 50 + survivedWaves * 500
+      const rewardXpPoints = kills * 5 + survivedWaves * 25
+      this.cash += rewardCash
+      localStorage.setItem(CASH_KEY, String(this.cash))
+      this.rewardXp(rewardXpPoints)
+      this.updateHud()
+      this.sound.effect('crash')
+
+      if (this.zombieResultBanner && this.zombieResultTitle && this.zombieResultSubtitle) {
+        this.zombieResultBanner.classList.remove('hidden')
+        this.zombieResultBanner.style.borderColor = '#ef4444'
+        this.zombieResultTitle.textContent = '❌ DERROTA! MISSÃO FRACASSADA!'
+        this.zombieResultTitle.style.color = '#ef4444'
+        this.zombieResultSubtitle.textContent = `Você sofreu 3 colisões com os monstros! Sobreviveu até a Onda ${survivedWaves} com ${kills} abates. +$${rewardCash} (+${rewardXpPoints} XP)`
+      }
+
+      this.showToast(`💀 MISSÃO FRACASSADA! 3 COLISÕES SOFRIDAS! SOBREVIVEU A ${survivedWaves} ONDAS!`)
+    }
+
+    this.zombieArena.onVictory = (_kills: number, waves: number) => {
+      this.pursuit.setRallyMissionActive(false)
+      this.zombieMissionPanel?.classList.add('hidden')
+      this.zombieCardsModal?.classList.add('hidden')
+      const rewardCash = 8000
+      const rewardPoints = 15000
+      this.cash += rewardCash
+      this.distance += rewardPoints
+      localStorage.setItem(CASH_KEY, String(this.cash))
+      this.rewardXp(250)
+      this.missions.recordZombieArenaVictory()
+      this.updateHud()
+      this.updateMissionCards()
+      this.sound.effect('upgrade')
+
+      if (this.zombieResultBanner && this.zombieResultTitle && this.zombieResultSubtitle) {
+        this.zombieResultBanner.classList.remove('hidden')
+        this.zombieResultBanner.style.borderColor = '#22c55e'
+        this.zombieResultTitle.textContent = '🏆 VITÓRIA! MISSÃO CONCLUÍDA!'
+        this.zombieResultTitle.style.color = '#22c55e'
+        this.zombieResultSubtitle.textContent = `Você completou todas as ${waves} ondas e derrotou os monstros gigantes! +$8.000 +15.000 PTS (+250 XP)`
+      }
+
+      this.showToast(`🏆 VITÓRIA ÉPICA! ARENA DE SOBREVIVÊNCIA CONCLUÍDA! +$8.000 +15.000 PTS`)
+    }
+
+    this.zombieArena.onToast = (msg: string) => {
+      this.showToast(msg)
+    }
+
+    this.zombieStartBtn?.addEventListener('click', () => {
+      this.startZombieArenaMission()
+    })
+
+    this.zombieExitBtn?.addEventListener('click', () => {
+      this.stopZombieArenaMission()
+    })
+
+    this.zombieReplayBtn?.addEventListener('click', () => {
+      this.zombieResultBanner?.classList.add('hidden')
+      this.startZombieArenaMission()
+    })
+
+    this.zombieResultExitBtn?.addEventListener('click', () => {
+      this.zombieResultBanner?.classList.add('hidden')
+      this.stopZombieArenaMission()
+    })
+  }
+
+  private startZombieArenaMission(): void {
+    if (this.zombieArena.active) return
+    const arenaInfo = this.city.getZombieArenaInfo()
+
+    if (this.inVehicle) {
+      this.player.setRiderVisible(false)
+      this.player.speed = 0
+      this.inVehicle = false
+      this.inPlane = false
+      this.character.root.visible = true
+    } else if (this.inPlane) {
+      this.inPlane = false
+      this.inVehicle = false
+      this.character.root.visible = true
+    }
+
+    this.character.setPosition(arenaInfo.entranceX, arenaInfo.entranceZ - 2.5, 0)
+    this.character.root.visible = true
+    this.characterCameraYaw = 0
+    this.cameraMode = 'chase'
+    this.updateVehicleButton()
+    this.updateCameraButton()
+
+    this.pursuit.removeAll()
+    this.pursuit.setRallyMissionActive(true)
+    this.wanted.setLevel(1)
+    this.zombieResultBanner?.classList.add('hidden')
+    this.zombieArena.startMission(arenaInfo.x, arenaInfo.z, this.character)
+    this.zombieMissionPanel?.classList.remove('hidden')
+    this.zombieArenaPrompt?.classList.add('hidden')
+    this.sound.effect('mission')
+    this.showToast('☣️ ARENA ZUMBI INICIADA! DERROTE AS 4 ONDAS E ESCOLHA SEUS UPGRADES!')
+  }
+
+  private stopZombieArenaMission(): void {
+    if (!this.zombieArena.active) return
+    this.pursuit.setRallyMissionActive(false)
+    this.zombieArena.stopMission(this.character)
+    this.zombieResultBanner?.classList.add('hidden')
+    this.zombieMissionPanel?.classList.add('hidden')
+    this.zombieCardsModal?.classList.add('hidden')
+    this.updateVehicleButton()
+    this.showToast('MISSÃO ZUMBI ENCERRADA')
+  }
+
   private rewardXp(amount: number): void {
     const res = usersDB.addXp(amount)
     if (res.leveledUp) {
@@ -4952,7 +5514,237 @@ export class Game {
     }
   }
 
-  // ================= GARAGE & SHOP METHODS =================
+  // ================= MISSION TELEPORT METHODS =================
+
+  private missionTeleportLocations = [
+    { id: 'rally-dunes', name: 'Rally das Dunas', x: 1100, z: 0 },
+    { id: 'zombie-arena', name: 'Arena de Sobrevivência', x: -1100, z: 0 },
+    { id: 'king-kong', name: 'Chefão King Kong', x: 0, z: -200 },
+  ]
+
+  private checkMissionTeleportDiscoveries(pos: THREE.Vector3): void {
+    const user = usersDB.getCurrentUser()
+    for (const m of this.missionTeleportLocations) {
+      if (Math.hypot(pos.x - m.x, pos.z - m.z) <= 22) {
+        if (!user.unlockedTeleports.includes(m.id)) {
+          const unlocked = usersDB.unlockTeleport(m.id)
+          if (unlocked) {
+            this.sound.effect('upgrade')
+            this.showToast(`📍 ÁREA DA MISSÃO "${m.name}" DESCOBERTA! Teletransporte desbloqueado na Loja!`)
+          }
+        }
+      }
+    }
+  }
+
+  private teleportToMission(x: number, z: number, missionId: string): void {
+    if (this.inVehicle) {
+      this.player.root.position.set(x, 0.18, z)
+      this.player.speed = 0
+      this.player.yaw = 0
+    } else if (this.inPlane) {
+      this.plane.root.position.set(x, 45, z)
+      this.plane.speed = 30
+    } else {
+      this.character.root.position.set(x, 0.18, z)
+      this.character.yaw = 0
+    }
+    this.sound.effect('upgrade')
+    this.showToast(`✈️ TELETRANSPORTE REALIZADO PARA A ÁREA DA MISSÃO!`)
+    if (missionId === 'zombie-arena' && !this.zombieArena.active) {
+      this.startZombieArenaMission()
+    }
+  }
+
+  // ================= STATUS MISSIONS LIST =================
+
+  private renderStatusMissionsList(): void {
+    if (!this.statusMissionsList) return
+    const all = this.missions.allMissions
+    const completedCount = this.missions.completed.length
+    const totalCount = all.length
+    if (this.statusMissionsCounter) {
+      this.statusMissionsCounter.textContent = `${completedCount} / ${totalCount} CONCLUÍDAS`
+    }
+
+    const sorted = [...all].sort((a, b) => {
+      if (a.completed && !b.completed) return -1
+      if (!a.completed && b.completed) return 1
+      return 0
+    })
+
+    this.statusMissionsList.innerHTML = sorted.map((m) => {
+      const isDone = m.completed
+      const title = this.getTranslatedTitle(m.id, m.title)
+      const progress = Math.floor(m.progress)
+      const pct = Math.min(100, Math.round((m.progress / m.target) * 100))
+
+      return `
+        <div class="status-mission-item ${isDone ? 'completed' : ''}">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+              <span style="font-weight: 700; font-size: 11px; color: ${isDone ? '#4ade80' : '#f8fafc'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                ${isDone ? '✓ ' : '◆ '}${title}
+              </span>
+              <span style="padding: 2px 6px; border-radius: 4px; font: 700 8.5px var(--mono); white-space: nowrap; ${
+                isDone
+                  ? 'background: rgba(74, 222, 128, 0.2); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.4);'
+                  : 'background: rgba(250, 204, 21, 0.15); color: #facc15; border: 1px solid rgba(250, 204, 21, 0.4);'
+              }">
+                ${isDone ? 'CONCLUÍDA' : 'EM ANDAMENTO'}
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                <div style="height: 100%; width: ${pct}%; background: ${isDone ? '#4ade80' : '#facc15'}; transition: width 0.3s ease;"></div>
+              </div>
+              <span style="font: 600 9px var(--mono); color: #94a3b8; white-space: nowrap;">${progress} / ${m.target} ${m.unit === 'm' ? 'm' : ''} (${pct}%)</span>
+            </div>
+          </div>
+          <div style="text-align: right; margin-left: 8px; min-width: 60px;">
+            <strong style="font: 700 11px var(--mono); color: ${isDone ? '#4ade80' : '#f7bf4a'};">+$${m.reward.toLocaleString('pt-BR')}</strong>
+          </div>
+        </div>
+      `
+    }).join('')
+  }
+
+  // ================= GARAGE MODAL METHODS =================
+
+  private openGarage(): void {
+    if (!this.garageModal) return
+    this.wasPausedBeforeGarage = this.paused
+    if (this.running && !this.ended && !this.paused) {
+      this.paused = true
+      this.input.clear()
+      this.sound.update(0, 0)
+      if (this.pauseButton) {
+        this.pauseButton.textContent = '▶'
+        this.pauseButton.setAttribute('aria-label', 'Continuar corrida')
+      }
+    }
+    this.garageModal.classList.remove('hidden')
+    this.updateGarageCashDisplay()
+    this.renderGarage()
+  }
+
+  private closeGarage(): void {
+    this.garageModal?.classList.add('hidden')
+    this.rebuildPlayerVehicle()
+    if (this.running && !this.ended && !this.wasPausedBeforeGarage) {
+      this.paused = false
+      this.lastFrame = performance.now()
+      this.lastRenderTime = performance.now()
+      if (this.pauseButton) {
+        this.pauseButton.textContent = '❚❚'
+        this.pauseButton.setAttribute('aria-label', 'Pausar corrida')
+      }
+    }
+  }
+
+  private updateGarageCashDisplay(): void {
+    const user = usersDB.getCurrentUser()
+    this.currentAuthUser = user
+    if (this.garageUserCash) {
+      this.garageUserCash.textContent = `$ ${user.cash.toLocaleString('pt-BR')}`
+    }
+    if (this.garageFeedbackMsg) {
+      if (user.isGuest) {
+        this.garageFeedbackMsg.textContent = '👤 Modo Anônimo: Todos os veículos que você desbloquear ou selecionar ficam ativos nesta corrida. Faça login para salvar na nuvem!'
+      } else {
+        this.garageFeedbackMsg.textContent = `☁️ Conectado como ${user.displayName}: Sua frota e carros desbloqueados são salvos no Firestore.`
+      }
+    }
+  }
+
+  private renderGarage(): void {
+    if (!this.garageContentArea) return
+    this.updateGarageCashDisplay()
+    const user = this.currentAuthUser
+
+    this.garageContentArea.innerHTML = `
+      <div class="shop-grid">
+        ${SHOP_CATALOG.vehicles
+          .map((v) => {
+            const isUnlocked = user.unlockedVehicles.includes(v.id)
+            const isSelected = user.selectedVehicle === v.id
+            const canAfford = user.cash >= v.price
+
+            return `
+              <div class="shop-item-card ${isUnlocked ? 'unlocked' : ''} ${isSelected ? 'equipped' : ''}">
+                <div class="shop-item-top">
+                  <div class="shop-item-icon">${v.icon}</div>
+                  <div class="shop-item-info">
+                    <div class="shop-item-title">${v.name}</div>
+                    <div class="shop-item-desc">${v.description}</div>
+                  </div>
+                </div>
+                <div class="shop-stat-bars">
+                  <div class="shop-stat-row">
+                    <span>VELOCIDADE</span>
+                    <div class="shop-stat-track"><div class="shop-stat-fill speed-fill-bar" style="width: ${v.stats.speed * 10}%"></div></div>
+                    <span>${v.stats.speed}/10</span>
+                  </div>
+                  <div class="shop-stat-row">
+                    <span>BLINDAGEM</span>
+                    <div class="shop-stat-track"><div class="shop-stat-fill armor-fill-bar" style="width: ${v.stats.armor * 10}%"></div></div>
+                    <span>${v.stats.armor}/10</span>
+                  </div>
+                  <div class="shop-stat-row">
+                    <span>ESPECIAL:</span>
+                    <span style="color: #facc15; font-size: 7.5px;">${v.stats.special}</span>
+                  </div>
+                </div>
+                <div class="shop-item-action">
+                  <div class="shop-item-price ${v.price === 0 ? 'free' : ''}">${v.price === 0 ? 'PADRÃO' : `$ ${v.price.toLocaleString('pt-BR')}`}</div>
+                  ${
+                    isSelected
+                      ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ EM USO</button>`
+                      : isUnlocked
+                        ? `<button class="shop-select-btn" type="button" data-action="select-vehicle" data-id="${v.id}">DIRIGIR ESTE</button>`
+                        : `<button class="shop-buy-btn" type="button" data-action="buy-vehicle" data-id="${v.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                  }
+                </div>
+              </div>
+            `
+          })
+          .join('')}
+      </div>
+    `
+
+    // Attach click handlers to buy/select buttons inside garage
+    const buttons = this.garageContentArea.querySelectorAll<HTMLButtonElement>('button[data-action]')
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action
+        const id = btn.dataset.id
+
+        if (action === 'buy-vehicle' && id) {
+          const res = usersDB.buyVehicle(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🏎️ VEÍCULO ADQUIRIDO COM SUCESSO!`)
+            if (this.garageFeedbackMsg) this.garageFeedbackMsg.textContent = res.message
+            this.rebuildPlayerVehicle()
+          } else {
+            this.showToast(res.message)
+          }
+        } else if (action === 'select-vehicle' && id) {
+          const res = usersDB.selectVehicle(id)
+          if (res.success) {
+            this.sound.effect('upgrade')
+            this.showToast(`🏎️ VEÍCULO EQUIPADO!`)
+            this.rebuildPlayerVehicle()
+          }
+        }
+
+        this.renderGarage()
+        this.updateHud()
+      })
+    })
+  }
+
+  // ================= CUSTOMIZATION SHOP METHODS =================
 
   private openShop(): void {
     if (!this.shopModal) return
@@ -4985,14 +5777,14 @@ export class Game {
     }
   }
 
-  private switchShopTab(tab: 'vehicles' | 'engine' | 'armor' | 'paints' | 'decals' | 'parts'): void {
+  private switchShopTab(tab: 'engine' | 'armor' | 'paints' | 'decals' | 'parts' | 'teleport'): void {
     this.currentShopTab = tab
-    this.shopTabVehicles?.classList.toggle('active', tab === 'vehicles')
     this.shopTabEngine?.classList.toggle('active', tab === 'engine')
     this.shopTabArmor?.classList.toggle('active', tab === 'armor')
     this.shopTabPaints?.classList.toggle('active', tab === 'paints')
     this.shopTabDecals?.classList.toggle('active', tab === 'decals')
     this.shopTabParts?.classList.toggle('active', tab === 'parts')
+    this.shopTabTeleport?.classList.toggle('active', tab === 'teleport')
     this.renderShop()
   }
 
@@ -5006,7 +5798,7 @@ export class Game {
       if (user.isGuest) {
         this.shopFeedbackMsg.textContent = '👤 Modo Anônimo: Você pode comprar e usar tudo nesta sessão! Conecte-se com Google ou Play Games para salvar permanentemente na nuvem.'
       } else {
-        this.shopFeedbackMsg.textContent = `☁️ Conectado como ${user.displayName}: Suas compras e garagem são salvas no Firestore.`
+        this.shopFeedbackMsg.textContent = `☁️ Conectado como ${user.displayName}: Suas compras e upgrades são salvos no Firestore.`
       }
     }
   }
@@ -5017,57 +5809,7 @@ export class Game {
     const user = this.currentAuthUser
     const tab = this.currentShopTab
 
-    if (tab === 'vehicles') {
-      this.shopContentArea.innerHTML = `
-        <div class="shop-grid">
-          ${SHOP_CATALOG.vehicles
-            .map((v) => {
-              const isUnlocked = user.unlockedVehicles.includes(v.id)
-              const isSelected = user.selectedVehicle === v.id
-              const canAfford = user.cash >= v.price
-
-              return `
-                <div class="shop-item-card ${isUnlocked ? 'unlocked' : ''} ${isSelected ? 'equipped' : ''}">
-                  <div class="shop-item-top">
-                    <div class="shop-item-icon">${v.icon}</div>
-                    <div class="shop-item-info">
-                      <div class="shop-item-title">${v.name}</div>
-                      <div class="shop-item-desc">${v.description}</div>
-                    </div>
-                  </div>
-                  <div class="shop-stat-bars">
-                    <div class="shop-stat-row">
-                      <span>VELOCIDADE</span>
-                      <div class="shop-stat-track"><div class="shop-stat-fill speed-fill-bar" style="width: ${v.stats.speed * 10}%"></div></div>
-                      <span>${v.stats.speed}/10</span>
-                    </div>
-                    <div class="shop-stat-row">
-                      <span>BLINDAGEM</span>
-                      <div class="shop-stat-track"><div class="shop-stat-fill armor-fill-bar" style="width: ${v.stats.armor * 10}%"></div></div>
-                      <span>${v.stats.armor}/10</span>
-                    </div>
-                    <div class="shop-stat-row">
-                      <span>ESPECIAL:</span>
-                      <span style="color: #facc15; font-size: 7.5px;">${v.stats.special}</span>
-                    </div>
-                  </div>
-                  <div class="shop-item-action">
-                    <div class="shop-item-price ${v.price === 0 ? 'free' : ''}">${v.price === 0 ? 'PADRÃO' : `$ ${v.price.toLocaleString('pt-BR')}`}</div>
-                    ${
-                      isSelected
-                        ? `<button class="shop-select-btn is-selected" type="button" disabled>✓ SELECIONADO</button>`
-                        : isUnlocked
-                          ? `<button class="shop-select-btn" type="button" data-action="select-vehicle" data-id="${v.id}">DIRIGIR ESTE</button>`
-                          : `<button class="shop-buy-btn" type="button" data-action="buy-vehicle" data-id="${v.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
-                    }
-                  </div>
-                </div>
-              `
-            })
-            .join('')}
-        </div>
-      `
-    } else if (tab === 'engine') {
+    if (tab === 'engine') {
       const currentLevel = user.engineUpgradeLevel || 0
       this.shopContentArea.innerHTML = `
         <div class="shop-grid">
@@ -5261,6 +6003,54 @@ export class Game {
             .join('')}
         </div>
       `
+    } else if (tab === 'teleport') {
+      const teleportMissions = [
+        { id: 'rally-dunes', name: '🏁 Rally das Dunas (Deserto Leste)', desc: 'Circuito oval de alta velocidade e looping 360°', x: 1100, z: 0, price: 250 },
+        { id: 'zombie-arena', name: '🧟 Arena de Sobrevivência (Deserto Oeste)', desc: 'Hordas de zumbis e monstros gigantes em área isolada', x: -1100, z: 0, price: 300 },
+        { id: 'king-kong', name: '🦍 Chefão King Kong (Praça Central)', desc: 'Batalha épica contra o gorila gigante no arranha-céu', x: 0, z: -200, price: 200 },
+      ]
+
+      this.shopContentArea.innerHTML = `
+        <div class="shop-grid">
+          ${teleportMissions
+            .map((m) => {
+              const isDiscovered = user.unlockedTeleports.includes(m.id)
+              const isPurchased = user.purchasedTeleports.includes(m.id)
+              const canAfford = user.cash >= m.price
+
+              return `
+                <div class="shop-item-card ${isPurchased ? 'equipped' : isDiscovered ? 'unlocked' : ''}">
+                  <div class="shop-item-top">
+                    <div class="shop-item-icon">✈️</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-title">${m.name}</div>
+                      <div class="shop-item-desc">${m.desc}</div>
+                    </div>
+                  </div>
+                  <div class="shop-stat-bars">
+                    <div class="shop-stat-row">
+                      <span>STATUS:</span>
+                      <span style="color: ${isPurchased ? '#4ade80' : isDiscovered ? '#facc15' : '#ef4444'}; font-weight: 700;">
+                        ${isPurchased ? '✓ DESBLOQUEADO PARA VIAGEM' : isDiscovered ? '🔓 DESCOBERTO (PRONTO PARA COMPRAR)' : '🔒 BLOQUEADO (VISITE O LOCAL NO MUNDO)'}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="shop-item-action">
+                    <div class="shop-item-price">$ ${m.price.toLocaleString('pt-BR')}</div>
+                    ${
+                      isPurchased
+                        ? `<button class="shop-select-btn" type="button" data-action="teleport-to" data-id="${m.id}" data-x="${m.x}" data-z="${m.z}">✈️ TELEPORTAR AGORA</button>`
+                        : isDiscovered
+                          ? `<button class="shop-buy-btn" type="button" data-action="buy-teleport" data-id="${m.id}" ${canAfford ? '' : 'disabled'}>COMPRAR ↗</button>`
+                          : `<button class="shop-buy-btn" type="button" disabled>EXPLORE O MAPA</button>`
+                    }
+                  </div>
+                </div>
+              `
+            })
+            .join('')}
+        </div>
+      `
     }
 
     // Attach click handlers to buy/select buttons inside shop
@@ -5270,23 +6060,21 @@ export class Game {
         const action = btn.dataset.action
         const id = btn.dataset.id
 
-        if (action === 'buy-vehicle' && id) {
-          const res = usersDB.buyVehicle(id)
+        if (action === 'buy-teleport' && id) {
+          const price = id === 'zombie-arena' ? 300 : id === 'rally-dunes' ? 250 : 200
+          const res = usersDB.buyTeleport(id, price)
           if (res.success) {
             this.sound.effect('upgrade')
-            this.showToast(`🏎️ VEÍCULO ADQUIRIDO COM SUCESSO!`)
+            this.showToast(res.message)
             if (this.shopFeedbackMsg) this.shopFeedbackMsg.textContent = res.message
-            this.rebuildPlayerVehicle()
           } else {
             this.showToast(res.message)
           }
-        } else if (action === 'select-vehicle' && id) {
-          const res = usersDB.selectVehicle(id)
-          if (res.success) {
-            this.sound.effect('upgrade')
-            this.showToast(`🏎️ VEÍCULO EQUIPADO!`)
-            this.rebuildPlayerVehicle()
-          }
+        } else if (action === 'teleport-to' && id) {
+          const tx = Number(btn.dataset.x || 0)
+          const tz = Number(btn.dataset.z || 0)
+          this.closeShop()
+          this.teleportToMission(tx, tz, id)
         } else if (action === 'buy-engine') {
           const res = usersDB.buyEngineUpgrade()
           if (res.success) {
@@ -5616,6 +6404,14 @@ export class Game {
     this.renderer.setSize(width, height)
     this.composer?.setSize(width, height)
     this.bloomPass?.resolution.set(width, height)
+    if (this.voxelPathTracingPass) {
+      this.voxelPathTracingPass.uniforms.resolution.value.set(width, height)
+    }
+    if (this.smaaPass) {
+      const pr = this.renderer.getPixelRatio()
+      this.smaaPass.setSize(width * pr, height * pr)
+    }
+    this.pathTracerNeedsUpdate = true
   }
 
   private readonly onVisibilityChange = (): void => {
@@ -5666,7 +6462,9 @@ export class Game {
     this.traffic.dispose()
     this.busPassengers.dispose()
     this.rallyRace.dispose()
+    this.zombieArena.dispose()
     this.sound.dispose()
+    this.pathTracer?.dispose()
     this.composer?.dispose()
     this.renderer.dispose()
   }

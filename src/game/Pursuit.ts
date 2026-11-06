@@ -77,6 +77,7 @@ export class Pursuit {
     targetPosition: THREE.Vector3 = player.root.position,
     onFoot = false,
     targetSpeed = player.speed,
+    collides?: (x: number, z: number, radius: number) => boolean,
   ): PursuitResult {
     const level = this.wanted.level
     if (level === 0) {
@@ -186,8 +187,8 @@ export class Pursuit {
           const nz = pdz / pdist
           uA.car.root.position.x -= nx * overlap
           uA.car.root.position.z -= nz * overlap
-          uB.car.root.position.x += nx * overlap
-          uB.car.root.position.z += nz * overlap
+          uA.car.root.position.x += nx * overlap
+          uA.car.root.position.z += nz * overlap
 
           uA.car.speed *= 0.92
           uB.car.speed *= 0.92
@@ -215,15 +216,21 @@ export class Pursuit {
           const nx = dx / dist
           const nz = dz / dist
 
-          // Push the character's position so the police car physically bumps the character!
-          playerPosition.x += nx * overlap
-          playerPosition.z += nz * overlap
+          // Push police car away strongly to prevent pinning against walls
+          car.root.position.x -= nx * overlap * 1.8
+          car.root.position.z -= nz * overlap * 1.8
+          car.speed = 0
+          unit.stunned = Math.max(unit.stunned, 1.5)
 
-          // Speed response on the police car
-          car.speed = Math.min(car.speed * 0.4, 4)
-          unit.stunned = Math.max(unit.stunned, 0.6)
+          // Test new player position against walls so player never gets pinned against walls
+          const testX = px + nx * overlap
+          const testZ = pz + nz * overlap
+          if (!collides || !collides(testX, testZ, 0.34)) {
+            playerPosition.x = testX
+            playerPosition.z = testZ
+          }
 
-          // Emit crash spark sparks, but NO DAMAGE/HARM to the player (sem dano)
+          // Emit crash spark sparks
           unit.sparkCooldown = Math.max(0, unit.sparkCooldown - dt)
           if (unit.sparkCooldown === 0) {
             collisionPoints.push(new THREE.Vector3(
@@ -324,7 +331,8 @@ export class Pursuit {
     }
   }
 
-  private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' = 'medium'
+  private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' =
+    (localStorage.getItem('smash_graphics_mode') as 'low' | 'medium' | 'high' | 'ultra') || 'medium'
 
   setGraphicsMode(mode: 'low' | 'medium' | 'high' | 'ultra'): void {
     this.graphicsMode = mode

@@ -2311,6 +2311,18 @@ button { font: inherit; }
 }
 
 /* ================= GARAGE & SHOP STYLES ================= */
+.garage-btn {
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.25), rgba(3, 105, 161, 0.35));
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #bae6fd;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+.garage-btn:hover {
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.4), rgba(3, 105, 161, 0.5));
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+}
+
 .shop-btn {
   background: linear-gradient(180deg, rgba(234, 179, 8, 0.25), rgba(180, 83, 9, 0.35));
   border-color: rgba(250, 204, 21, 0.6);
@@ -2679,6 +2691,30 @@ button { font: inherit; }
   align-items: center !important;
   justify-content: center !important;
 }
+.status-modal .settings-card {
+  max-width: 680px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+.status-mission-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.2s ease;
+}
+.status-mission-item.completed {
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.1);
+}
+.status-mission-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
 
 .close-app-btn {
   position: absolute;
@@ -2704,5 +2740,333 @@ button { font: inherit; }
   border-color: var(--orange);
   transform: scale(1.08);
 }
+
+/* ============================================================
+   ARENA ZUMBI & MONSTROS (4 PRÉDIOS) & 3 CARDS ROGUELITE
+   ============================================================ */
+.zombie-mission-panel {
+  position: absolute;
+  top: 76px;
+  right: 18px;
+  z-index: 15;
+  width: 275px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1.5px solid #22c55e;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(34, 197, 94, 0.3);
+  backdrop-filter: blur(10px);
+  color: #f8fafc;
+  animation: pulse-green-border 2.5s infinite alternate;
+}
+
+@keyframes pulse-green-border {
+  0% { border-color: rgba(34, 197, 94, 0.5); box-shadow: 0 0 8px rgba(34, 197, 94, 0.2); }
+  100% { border-color: rgba(34, 197, 94, 0.95); box-shadow: 0 0 20px rgba(34, 197, 94, 0.45); }
+}
+
+.zombie-mission-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+}
+.zombie-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zombie-mission-badge {
+  font: 800 10px/1 var(--mono);
+  color: #4ade80;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.zombie-wave-label {
+  font: 800 9px/1 var(--mono);
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.18);
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+}
+.zombie-exit-btn {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font: 700 8.5px/1 var(--mono);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.zombie-exit-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+.zombie-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.zombie-stat-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zombie-stat-title {
+  font: 700 8px/1 var(--mono);
+  color: #94a3b8;
+  letter-spacing: .05em;
+}
+.zombie-hp-track, .zombie-xp-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.zombie-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+  transition: width 0.15s ease;
+}
+.zombie-xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+  transition: width 0.15s ease;
+}
+.zombie-stat-col strong {
+  font: 800 8.5px/1 var(--mono);
+  color: #f1f5f9;
+}
+
+.zombie-info-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 700 8.5px/1 var(--mono);
+  color: #cbd5e1;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+#zombie-weapon-label {
+  color: #38bdf8;
+}
+#zombie-kills-label {
+  color: #f87171;
+}
+
+/* Prompt de Entrada na Arena Zumbi */
+.zombie-arena-prompt {
+  position: absolute;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid #22c55e;
+  border-radius: 12px;
+  padding: 10px 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(34, 197, 94, 0.4);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  animation: prompt-bounce 2s infinite ease-in-out;
+}
+@keyframes prompt-bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-6px); }
+}
+.zombie-prompt-icon {
+  font-size: 26px;
+}
+.zombie-prompt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zombie-prompt-text strong {
+  font: 800 12px/1 var(--mono);
+  color: #4ade80;
+  letter-spacing: .06em;
+}
+.zombie-prompt-text span {
+  font: 600 9.5px/1 var(--mono);
+  color: #94a3b8;
+}
+.zombie-start-btn {
+  margin-top: 0 !important;
+  background: #22c55e !important;
+  color: #0f172a !important;
+  font-weight: 800 !important;
+  padding: 8px 14px !important;
+  font-size: 11px !important;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.6) !important;
+}
+.zombie-start-btn:hover {
+  background: #16a34a !important;
+  transform: scale(1.05);
+}
+
+/* Modal de Escolha dos 3 Cards (Roguelite Compacto) */
+.zombie-cards-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 600 !important;
+  background: rgba(3, 7, 18, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 12px !important;
+}
+.zombie-cards-modal.hidden {
+  display: none !important;
+}
+.zombie-cards-card {
+  max-width: 580px;
+  width: 100%;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1.5px solid rgba(250, 204, 21, 0.6);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(250, 204, 21, 0.2);
+  padding: 14px 16px;
+  text-align: center;
+}
+.zombie-cards-card h2 {
+  font: 900 16px/1.2 var(--mono);
+  color: #facc15;
+  margin: 2px 0 4px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.zombie-card-level {
+  display: inline-block;
+  font: 800 9.5px/1 var(--mono);
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: .06em;
+}
+.zombie-cards-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.zombie-card-item {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1.2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.zombie-card-item:hover {
+  transform: translateY(-3px);
+  border-color: #facc15;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), 0 0 14px rgba(250, 204, 21, 0.3);
+  background: rgba(30, 41, 59, 0.98);
+}
+.zombie-card-tag {
+  font: 800 7.5px/1 var(--mono);
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  letter-spacing: .06em;
+}
+.zombie-card-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+}
+.zombie-card-title {
+  font: 800 11px/1.2 var(--mono);
+  color: #f8fafc;
+  margin-bottom: 4px;
+  letter-spacing: .03em;
+}
+.zombie-card-desc {
+  font: 500 8.5px/1.3 var(--mono);
+  color: #94a3b8;
+  margin-bottom: 8px;
+  flex: 1;
+}
+.zombie-card-btn {
+  width: 100%;
+  padding: 5px 8px;
+  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid #facc15;
+  color: #facc15;
+  font: 800 8.5px/1 var(--mono);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: .05em;
+}
+.zombie-card-item:hover .zombie-card-btn {
+  background: #facc15;
+  color: #0f172a;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+}
+
+@media (max-width: 760px) {
+  .zombie-mission-panel {
+    top: 56px;
+    right: 10px;
+    width: 220px;
+    padding: 6px 10px;
+  }
+  .zombie-cards-card {
+    max-width: 95vw;
+    padding: 12px 10px;
+  }
+  .zombie-cards-row {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .zombie-card-item {
+    padding: 8px 4px;
+  }
+  .zombie-card-icon {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .zombie-card-title {
+    font-size: 9.5px;
+  }
+  .zombie-card-desc {
+    font-size: 8px;
+  }
+  .zombie-card-btn {
+    padding: 4px 6px;
+    font-size: 8px;
+  }
+  .zombie-arena-prompt {
+    bottom: 140px;
+    width: 90%;
+    padding: 8px 12px;
+  }
+}
+
 
 

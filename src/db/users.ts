@@ -50,6 +50,8 @@ export interface UserProfile {
   // Missions & Trophies
   completedMissions: string[]
   trophies: string[]
+  unlockedTeleports: string[]
+  purchasedTeleports: string[]
   updatedAt: number
   pendingSync?: boolean
 }
@@ -355,6 +357,8 @@ function createDefaultGuestProfile(): UserProfile {
     equippedParts: [],
     completedMissions: [],
     trophies: [],
+    unlockedTeleports: [],
+    purchasedTeleports: [],
     updatedAt: Date.now(),
     pendingSync: false,
   }
@@ -439,6 +443,8 @@ class UserDatabaseManager {
       equippedParts: Array.isArray(profile.equippedParts) ? profile.equippedParts : [],
       completedMissions: Array.isArray(profile.completedMissions) ? profile.completedMissions : [],
       trophies: Array.isArray(profile.trophies) ? profile.trophies : [],
+      unlockedTeleports: Array.isArray(profile.unlockedTeleports) ? profile.unlockedTeleports : [],
+      purchasedTeleports: Array.isArray(profile.purchasedTeleports) ? profile.purchasedTeleports : [],
       updatedAt: profile.updatedAt || Date.now(),
       pendingSync: profile.pendingSync ?? false,
     }
@@ -580,6 +586,8 @@ class UserDatabaseManager {
       equippedParts: Array.from(new Set([...(cloudData?.equippedParts || []), ...(baseData.equippedParts || [])])),
       completedMissions: Array.from(new Set([...(cloudData?.completedMissions || []), ...(baseData.completedMissions || [])])),
       trophies: Array.from(new Set([...(cloudData?.trophies || []), ...(baseData.trophies || [])])),
+      unlockedTeleports: Array.from(new Set([...(cloudData?.unlockedTeleports || []), ...(baseData.unlockedTeleports || [])])),
+      purchasedTeleports: Array.from(new Set([...(cloudData?.purchasedTeleports || []), ...(baseData.purchasedTeleports || [])])),
       updatedAt: Date.now(),
       pendingSync: true,
     }
@@ -1122,6 +1130,48 @@ class UserDatabaseManager {
 
     list.sort((a, b) => (category === 'xp' ? b.dailyXp - a.dailyXp : b.dailyCash - a.dailyCash))
     return list
+  }
+
+  unlockTeleport(missionId: string): boolean {
+    if (!this.currentUser.unlockedTeleports.includes(missionId)) {
+      this.currentUser.unlockedTeleports.push(missionId)
+      this.currentUser.updatedAt = Date.now()
+      if (!this.currentUser.isGuest) {
+        this.currentUser.pendingSync = true
+        this.saveLocalProfile(this.currentUser)
+        void this.syncPendingChanges()
+      } else {
+        this.saveLocalProfile(this.currentUser)
+      }
+      return true
+    }
+    return false
+  }
+
+  buyTeleport(missionId: string, price = 250): { success: boolean; message: string } {
+    if (!this.currentUser.unlockedTeleports.includes(missionId)) {
+      return { success: false, message: 'Você precisa visitar o marcador desta missão no mapa/mundo primeiro para desbloqueá-la!' }
+    }
+    if (this.currentUser.purchasedTeleports.includes(missionId)) {
+      return { success: true, message: 'Teletransporte já adquirido!' }
+    }
+    if (this.currentUser.cash < price) {
+      return { success: false, message: `Saldo insuficiente! Necessário: $ ${price.toLocaleString('pt-BR')}. Você tem: $ ${this.currentUser.cash.toLocaleString('pt-BR')}` }
+    }
+
+    this.currentUser.cash -= price
+    this.currentUser.purchasedTeleports.push(missionId)
+    this.currentUser.updatedAt = Date.now()
+
+    if (!this.currentUser.isGuest) {
+      this.currentUser.pendingSync = true
+      this.saveLocalProfile(this.currentUser)
+      void this.syncPendingChanges()
+    } else {
+      this.saveLocalProfile(this.currentUser)
+    }
+
+    return { success: true, message: `✈️ Teletransporte adquirido por $ ${price.toLocaleString('pt-BR')}! Pronto para viajar instantaneamente.` }
   }
 }
 

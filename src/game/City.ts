@@ -37,6 +37,21 @@ export interface LagoonInfo {
 
 export type GraphicsDesignMode = 'low' | 'medium' | 'high' | 'ultra'
 
+export interface StreetLamp {
+  group: THREE.Group
+  bulb: THREE.Mesh
+  isFlickering: boolean
+  flickerSpeed: number
+  flickerOffset: number
+}
+
+export interface WindowResident {
+  group: THREE.Group
+  head: THREE.Mesh
+  wavingArm?: THREE.Mesh
+  waveOffset: number
+}
+
 type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }
 type Coin = { mesh: THREE.Mesh; x: number; z: number; alive: boolean }
 type BuildingVisual = { matrix: THREE.Matrix4; color: THREE.Color; bounds: Bounds; faded: boolean; roofMatrix?: THREE.Matrix4; roofColor?: THREE.Color }
@@ -59,6 +74,8 @@ type CityChunk = {
   fadedHouses: THREE.InstancedMesh
   houseRoofs: THREE.InstancedMesh
   fadedHouseRoofs: THREE.InstancedMesh
+  streetLamps: StreetLamp[]
+  windowResidents: WindowResident[]
 }
 
 function randomFrom(seed: number): () => number {
@@ -92,17 +109,17 @@ export class City {
   private readonly houseDoorMaterial = new THREE.MeshStandardMaterial({ color: 0x68452f, roughness: 0.92 })
   private readonly houseColors = [0xe6c28f, 0xd78d72, 0x9cba9a, 0x8faec1, 0xe8dfbd, 0xc9a4bd]
   private readonly houseRoofColors = [0x9b5140, 0x46545a, 0x6e4938, 0x7f4639, 0x66754f]
-  private readonly asphalt = new THREE.MeshStandardMaterial({ color: 0x303638, roughness: 0.98 })
-  private readonly lanePaint = new THREE.MeshStandardMaterial({ color: 0xe6c978, roughness: 0.82 })
-  private readonly sidewalk = new THREE.MeshStandardMaterial({ color: 0xb3ad97, roughness: 1 })
+  private readonly asphalt = new THREE.MeshStandardMaterial({ color: 0x2b2f31, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.0 })
+  private readonly lanePaint = new THREE.MeshStandardMaterial({ color: 0xe6c978, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.0 })
+  private readonly sidewalk = new THREE.MeshStandardMaterial({ color: 0x5a5e60, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.0 })
   private readonly greens = [0x6d986e, 0x789b75, 0x648766, 0x83a37a]
   private readonly coinMaterial = new THREE.MeshStandardMaterial({ color: 0xf5bf48, metalness: 0.42, roughness: 0.34, emissive: 0x6c3b0a, emissiveIntensity: 0.24 })
   private readonly coinGeometry = new THREE.CylinderGeometry(0.48, 0.48, 0.13, 10)
 
-  // Plaza and Park Materials
-  private readonly parkLawnMaterial = new THREE.MeshStandardMaterial({ color: 0x478c43, roughness: 0.95 })
-  private readonly plazaPathMaterial = new THREE.MeshStandardMaterial({ color: 0xd6d0be, roughness: 0.9 })
-  private readonly plazaStoneMaterial = new THREE.MeshStandardMaterial({ color: 0xbdb7a6, roughness: 0.72, metalness: 0.12 })
+  // Plaza and Park Materials (100% fosco sem nenhum brilho no chão)
+  private readonly parkLawnMaterial = new THREE.MeshStandardMaterial({ color: 0x478c43, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.0 })
+  private readonly plazaPathMaterial = new THREE.MeshStandardMaterial({ color: 0x6e6c64, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.0 })
+  private readonly plazaStoneMaterial = new THREE.MeshStandardMaterial({ color: 0x66645c, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.0 })
   private readonly plazaWaterMaterial = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.08, metalness: 0.42, emissive: 0x0c4a6e, emissiveIntensity: 0.2 })
   private readonly benchWoodMaterial = new THREE.MeshStandardMaterial({ color: 0x784a2c, roughness: 0.88 })
   private readonly plazaIronMaterial = new THREE.MeshStandardMaterial({ color: 0x1f2425, roughness: 0.76, metalness: 0.35 })
@@ -268,6 +285,66 @@ export class City {
   private readonly fireEscapeMergedGeo: THREE.BufferGeometry
   private readonly acUnitMergedGeo: THREE.BufferGeometry
   private readonly balconyMergedGeo: THREE.BufferGeometry
+
+  // Street Lamp Materials & Geometries
+  private readonly streetLampPoleMat = new THREE.MeshStandardMaterial({ color: 0x222831, roughness: 0.65, metalness: 0.5 })
+  private readonly streetLampHoodMat = new THREE.MeshStandardMaterial({ color: 0x181c22, roughness: 0.6, metalness: 0.6 })
+  private readonly streetLampSteadyBulbMat = new THREE.MeshStandardMaterial({
+    color: 0xfff3d6,
+    emissive: 0xffaa22,
+    emissiveIntensity: 0.0,
+    roughness: 0.25,
+  })
+  private readonly streetLampFlickerBulbMats = [
+    new THREE.MeshStandardMaterial({ color: 0xffeedd, emissive: 0xff9911, emissiveIntensity: 0.0, roughness: 0.25 }),
+    new THREE.MeshStandardMaterial({ color: 0xffe8cc, emissive: 0xffa522, emissiveIntensity: 0.0, roughness: 0.25 }),
+    new THREE.MeshStandardMaterial({ color: 0xfff0db, emissive: 0xff8800, emissiveIntensity: 0.0, roughness: 0.25 }),
+    new THREE.MeshStandardMaterial({ color: 0xffdfb8, emissive: 0xffb033, emissiveIntensity: 0.0, roughness: 0.25 }),
+  ]
+  private readonly lampBaseGeo = new THREE.CylinderGeometry(0.28, 0.36, 0.35, 8)
+  private readonly lampPoleGeo = new THREE.CylinderGeometry(0.09, 0.12, 5.2, 8)
+  private readonly lampArmGeo = new THREE.BoxGeometry(0.12, 0.12, 1.45)
+  private readonly lampHoodGeo = new THREE.BoxGeometry(0.52, 0.16, 0.52)
+  private readonly lampBulbGeo = new THREE.BoxGeometry(0.36, 0.12, 0.36)
+
+  // Window Resident Materials & Geometries
+  private readonly windowFrameMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.85 })
+  private readonly windowGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xfffbe8,
+    emissive: 0xfacc15,
+    emissiveIntensity: 0.9,
+    roughness: 0.35,
+  })
+  private readonly residentSkinMats = [
+    new THREE.MeshStandardMaterial({ color: 0xfbd2b8, roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: 0xecb289, roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: 0xba8054, roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: 0x6e472a, roughness: 0.8 }),
+  ]
+  private readonly residentShirtMats = [
+    new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0x8b5cf6, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0xec4899, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.75 }),
+  ]
+  private readonly residentHairMats = [
+    new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x5c381d, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9 }),
+  ]
+  private readonly windowSillGeo = new THREE.BoxGeometry(1.6, 0.14, 0.38)
+  private readonly windowGlowPlaneGeo = new THREE.PlaneGeometry(1.3, 1.5)
+  private readonly residentTorsoGeo = new THREE.BoxGeometry(0.52, 0.56, 0.28)
+  private readonly residentHeadGeo = new THREE.BoxGeometry(0.34, 0.34, 0.34)
+  private readonly residentHairGeo = new THREE.BoxGeometry(0.36, 0.14, 0.36)
+  private readonly residentArmGeo = new THREE.BoxGeometry(0.12, 0.36, 0.12)
+
   private readonly sharedGeometries: Set<THREE.BufferGeometry>
 
   private graphicsMode: GraphicsDesignMode = 'medium'
@@ -314,6 +391,17 @@ export class City {
       this.fireEscapeMergedGeo,
       this.acUnitMergedGeo,
       this.balconyMergedGeo,
+      this.lampBaseGeo,
+      this.lampPoleGeo,
+      this.lampArmGeo,
+      this.lampHoodGeo,
+      this.lampBulbGeo,
+      this.windowSillGeo,
+      this.windowGlowPlaneGeo,
+      this.residentTorsoGeo,
+      this.residentHeadGeo,
+      this.residentHairGeo,
+      this.residentArmGeo,
     ])
 
     this.updateMaterialsForGraphicsMode()
@@ -325,17 +413,14 @@ export class City {
     const lightMap = isUltra ? this.ultraLightMap : null
     const lightIntensity = isUltra ? 1.35 : 0
 
+    // Calçada, asfalto e solo não recebem lightMap no modo Ultra para eliminar clarão e ofuscamento
     const mats: (THREE.MeshStandardMaterial | undefined)[] = [
-      this.ground.material as THREE.MeshStandardMaterial,
       this.buildingBatchMaterial,
       this.roofBatchMaterial,
       this.houseBatchMaterial,
       this.houseRoofMaterial,
-      this.asphalt,
-      this.sidewalk,
       this.sandMaterial,
       this.sandDarkMaterial,
-      this.runwayAsphalt,
       this.airportBuildingMat,
       this.garageConcreteMat,
       this.waterTowerMaterial,
@@ -351,30 +436,72 @@ export class City {
       if (!mat) continue
       mat.lightMap = lightMap
       mat.lightMapIntensity = lightIntensity
-      if (isUltra) {
-        if (mat === this.asphalt || mat === this.runwayAsphalt) {
-          mat.roughness = 0.55
-          mat.metalness = 0.22
-        } else if (mat === this.sidewalk) {
-          mat.roughness = 1.0
-          mat.metalness = 0.0
-        }
-      } else {
-        if (mat === this.asphalt) {
-          mat.roughness = 0.98
-          mat.metalness = 0
-        }
-        if (mat === this.runwayAsphalt) {
-          mat.roughness = 0.92
-          mat.metalness = 0
-        }
-        if (mat === this.sidewalk) {
-          mat.roughness = 1.0
-          mat.metalness = 0.0
-        }
-      }
       mat.needsUpdate = true
     }
+
+    // Remoção total e definitiva de qualquer tipo de brilho, reflexos e luz da calçada, asfalto e chão
+    this.sidewalk.lightMap = null
+    this.sidewalk.lightMapIntensity = 0.0
+    this.sidewalk.roughness = 1.0
+    this.sidewalk.metalness = 0.0
+    this.sidewalk.envMapIntensity = 0.0
+    this.sidewalk.color.setHex(0x5a5e60)
+    this.sidewalk.needsUpdate = true
+
+    this.asphalt.lightMap = null
+    this.asphalt.lightMapIntensity = 0.0
+    this.asphalt.roughness = 1.0
+    this.asphalt.metalness = 0.0
+    this.asphalt.envMapIntensity = 0.0
+    this.asphalt.color.setHex(0x2b2f31)
+    this.asphalt.needsUpdate = true
+
+    this.runwayAsphalt.lightMap = null
+    this.runwayAsphalt.lightMapIntensity = 0.0
+    this.runwayAsphalt.roughness = 1.0
+    this.runwayAsphalt.metalness = 0.0
+    this.runwayAsphalt.envMapIntensity = 0.0
+    this.runwayAsphalt.needsUpdate = true
+
+    this.lanePaint.lightMap = null
+    this.lanePaint.lightMapIntensity = 0.0
+    this.lanePaint.roughness = 1.0
+    this.lanePaint.metalness = 0.0
+    this.lanePaint.envMapIntensity = 0.0
+    this.lanePaint.needsUpdate = true
+
+    const groundMat = this.ground.material as THREE.MeshStandardMaterial
+    if (groundMat) {
+      groundMat.lightMap = null
+      groundMat.lightMapIntensity = 0.0
+      groundMat.roughness = 1.0
+      groundMat.metalness = 0.0
+      groundMat.envMapIntensity = 0.0
+      groundMat.needsUpdate = true
+    }
+
+    this.parkLawnMaterial.lightMap = null
+    this.parkLawnMaterial.lightMapIntensity = 0.0
+    this.parkLawnMaterial.roughness = 1.0
+    this.parkLawnMaterial.metalness = 0.0
+    this.parkLawnMaterial.envMapIntensity = 0.0
+    this.parkLawnMaterial.needsUpdate = true
+
+    this.plazaPathMaterial.lightMap = null
+    this.plazaPathMaterial.lightMapIntensity = 0.0
+    this.plazaPathMaterial.roughness = 1.0
+    this.plazaPathMaterial.metalness = 0.0
+    this.plazaPathMaterial.envMapIntensity = 0.0
+    this.plazaPathMaterial.color.setHex(0x6e6c64)
+    this.plazaPathMaterial.needsUpdate = true
+
+    this.plazaStoneMaterial.lightMap = null
+    this.plazaStoneMaterial.lightMapIntensity = 0.0
+    this.plazaStoneMaterial.roughness = 1.0
+    this.plazaStoneMaterial.metalness = 0.0
+    this.plazaStoneMaterial.envMapIntensity = 0.0
+    this.plazaStoneMaterial.color.setHex(0x66645c)
+    this.plazaStoneMaterial.needsUpdate = true
   }
 
   setGraphicsMode(mode: GraphicsDesignMode, playerZ: number = 0): void {
@@ -563,12 +690,52 @@ export class City {
     const context = canvas.getContext('2d')!
     context.fillStyle = '#7f9294'
     context.fillRect(0, 0, 128, 128)
+
+    const shirtColors = ['#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#f97316']
+    const skinColors = ['#fed7aa', '#fbcfe8', '#d97706', '#78350f']
+    const hairColors = ['#18181b', '#78350f', '#facc15', '#475569']
+
     for (let y = 7; y < 128; y += 22) {
       for (let x = 8; x < 128; x += 22) {
-        context.fillStyle = (x + y) % 3 === 0 ? '#ead5a3' : '#a6d0d0'
+        const isWarmLit = (x + y) % 3 === 0
+        const hasResident = ((x * 7 + y * 13) % 4 === 0)
+
+        // Fundo da janela (iluminação quente de apartamento ou reflexo azulado diurno)
+        context.fillStyle = isWarmLit ? '#fef08a' : '#a6d0d0'
         context.fillRect(x, y, 9, 11)
-        context.fillStyle = '#40545b'
-        context.fillRect(x + 2, y + 2, 2, 7)
+
+        if (hasResident) {
+          // Silhueta de morador pixel-art na janela
+          const shirt = shirtColors[(x + y) % shirtColors.length]
+          const skin = skinColors[(x * 3 + y) % skinColors.length]
+          const hair = hairColors[(x + y * 2) % hairColors.length]
+
+          // Tronco / camisa
+          context.fillStyle = shirt
+          context.fillRect(x + 2, y + 5, 5, 5)
+
+          // Cabeça (tom de pele)
+          context.fillStyle = skin
+          context.fillRect(x + 3, y + 2, 3, 3)
+
+          // Cabelo
+          context.fillStyle = hair
+          context.fillRect(x + 3, y + 1, 3, 2)
+
+          // Mão acenando na janela
+          if ((x * 5 + y) % 2 === 0) {
+            context.fillStyle = skin
+            context.fillRect(x + 7, y + 2, 2, 3)
+          }
+
+          // Parapeito da janela
+          context.fillStyle = '#334155'
+          context.fillRect(x, y + 10, 9, 1)
+        } else {
+          // Divisória / esquadria tradicional da janela
+          context.fillStyle = '#40545b'
+          context.fillRect(x + 2, y + 2, 2, 7)
+        }
       }
     }
     const texture = new THREE.CanvasTexture(canvas)
@@ -577,6 +744,139 @@ export class City {
     texture.wrapT = THREE.RepeatWrapping
     const tints = [0xd3c7aa, 0xb8c9c7, 0xd1ad92, 0xbacaaa, 0xa8c5d0, 0xd8bd91]
     return tints.map((color) => new THREE.MeshStandardMaterial({ map: texture, color, roughness: 0.9 }))
+  }
+
+  private createStreetLamp(
+    x: number,
+    z: number,
+    facingAngle: number,
+    isFlickering: boolean,
+    flickerIndex: number,
+    flickerOffset: number,
+  ): StreetLamp {
+    const group = new THREE.Group()
+    group.position.set(x, 0, z)
+    group.rotation.y = facingAngle
+
+    // 1. Base robusta de ferro fundido na calçada
+    const base = new THREE.Mesh(this.lampBaseGeo, this.streetLampPoleMat)
+    base.position.y = 0.175
+    base.castShadow = true
+    base.receiveShadow = true
+    group.add(base)
+
+    // 2. Poste vertical de ferro urbano
+    const pole = new THREE.Mesh(this.lampPoleGeo, this.streetLampPoleMat)
+    pole.position.y = 2.6
+    pole.castShadow = true
+    pole.receiveShadow = true
+    group.add(pole)
+
+    // 3. Braço horizontal voltado para o leito da rua (+Z no referencial local)
+    const arm = new THREE.Mesh(this.lampArmGeo, this.streetLampPoleMat)
+    arm.position.set(0, 5.1, 0.65)
+    arm.castShadow = true
+    group.add(arm)
+
+    // 4. Cúpula / luminária metálica protetora
+    const hood = new THREE.Mesh(this.lampHoodGeo, this.streetLampHoodMat)
+    hood.position.set(0, 5.05, 1.25)
+    hood.castShadow = true
+    group.add(hood)
+
+    // 5. Lâmpada emissiva (estável ou piscante/intermitente)
+    const bulbMat = isFlickering
+      ? this.streetLampFlickerBulbMats[flickerIndex % this.streetLampFlickerBulbMats.length]
+      : this.streetLampSteadyBulbMat
+    const bulb = new THREE.Mesh(this.lampBulbGeo, bulbMat)
+    bulb.position.set(0, 4.93, 1.25)
+    group.add(bulb)
+
+    return {
+      group,
+      bulb,
+      isFlickering,
+      flickerSpeed: 16 + (flickerIndex % 3) * 6,
+      flickerOffset,
+    }
+  }
+
+  private createWindowResident(
+    x: number,
+    y: number,
+    z: number,
+    facingAngle: number,
+    skinIndex: number,
+    shirtIndex: number,
+    hairIndex: number,
+    hasWavingArm: boolean,
+    waveOffset: number,
+  ): WindowResident {
+    const group = new THREE.Group()
+    group.position.set(x, y, z)
+    group.rotation.y = facingAngle
+
+    // 1. Parapeito de janela
+    const sill = new THREE.Mesh(this.windowSillGeo, this.windowFrameMat)
+    sill.position.set(0, -0.07, 0.18)
+    sill.castShadow = true
+    sill.receiveShadow = true
+    group.add(sill)
+
+    // 2. Fundo iluminado de interior residencial
+    const glow = new THREE.Mesh(this.windowGlowPlaneGeo, this.windowGlowMat)
+    glow.position.set(0, 0.72, 0.01)
+    group.add(glow)
+
+    // 3. Tronco com camiseta colorida
+    const shirtMat = this.residentShirtMats[shirtIndex % this.residentShirtMats.length]
+    const torso = new THREE.Mesh(this.residentTorsoGeo, shirtMat)
+    torso.position.set(0, 0.28, 0.12)
+    torso.castShadow = true
+    group.add(torso)
+
+    // 4. Cabeça e cabelo
+    const skinMat = this.residentSkinMats[skinIndex % this.residentSkinMats.length]
+    const head = new THREE.Mesh(this.residentHeadGeo, skinMat)
+    head.position.set(0, 0.71, 0.12)
+    head.castShadow = true
+    group.add(head)
+
+    const hairMat = this.residentHairMats[hairIndex % this.residentHairMats.length]
+    const hair = new THREE.Mesh(this.residentHairGeo, hairMat)
+    hair.position.set(0, 0.84, 0.12)
+    hair.castShadow = true
+    group.add(hair)
+
+    // 5. Braço esquerdo apoiado no parapeito
+    const armL = new THREE.Mesh(this.residentArmGeo, shirtMat)
+    armL.position.set(-0.31, 0.24, 0.2)
+    armL.castShadow = true
+    group.add(armL)
+
+    // 6. Braço direito (acenando animado ou apoiado)
+    let wavingArm: THREE.Mesh | undefined
+    if (hasWavingArm) {
+      const armGroup = new THREE.Group()
+      armGroup.position.set(0.32, 0.46, 0.14)
+      wavingArm = new THREE.Mesh(this.residentArmGeo, shirtMat)
+      wavingArm.position.set(0, 0.16, 0)
+      wavingArm.castShadow = true
+      armGroup.add(wavingArm)
+      group.add(armGroup)
+    } else {
+      const armR = new THREE.Mesh(this.residentArmGeo, shirtMat)
+      armR.position.set(0.31, 0.24, 0.2)
+      armR.castShadow = true
+      group.add(armR)
+    }
+
+    return {
+      group,
+      head,
+      wavingArm,
+      waveOffset,
+    }
   }
 
   ensureAround(z: number, playerX = 0, keepRallyChunks = true): void {
@@ -598,6 +898,8 @@ export class City {
     const bounds: Bounds[] = []
     const chunkDunes: { dx: number; dz: number; scaleX: number; scaleY: number; scaleZ: number; rotY?: number }[] = []
     const chunkCoins: Coin[] = []
+    const chunkStreetLamps: StreetLamp[] = []
+    const chunkResidents: WindowResident[] = []
     const random = randomFrom((index + 10091) * 785839)
     const zStart = index * CHUNK_DEPTH
     const zMiddle = zStart + CHUNK_DEPTH / 2
@@ -665,6 +967,11 @@ export class City {
     // 4. Sand Dunes Fields (Dunas de Areia a Leste e Oeste)
     this.buildSandDuneFields(group, zStart, zMiddle, bounds, random, chunkDunes)
 
+    // 4.5. Arena de Sobrevivência (Zumbis & Monstros) no Deserto Oeste (fora da cidade, do outro lado do deserto do Rally)
+    if (Math.abs(zMiddle) < 100) {
+      this.buildZombieArenaSite(group, group, -1100, 0, bounds, chunkCoins)
+    }
+
     const buildingCapacity = 160
     const isLow = this.graphicsMode === 'low'
     const isUltra = this.graphicsMode === 'ultra'
@@ -672,6 +979,25 @@ export class City {
 
     const buildingsGroup = new THREE.Group()
     const detailsGroup = new THREE.Group()
+
+    // Postes de iluminação pública pela cidade nas calçadas das avenidas
+    for (let road = Math.max(CITY_ROAD_MIN, -4); road <= Math.min(CITY_ROAD_MAX, 4); road += 1) {
+      const roadX = road * BLOCK
+      for (let lz = 16; lz < CHUNK_DEPTH; lz += 32) {
+        const lampZ = zStart + lz
+        if (Math.abs(lz % BLOCK) < 9) continue
+
+        for (const side of [-1, 1]) {
+          const lampX = roadX + side * (ROAD_WIDTH / 2 + 1.2)
+          const facingAngle = side === -1 ? Math.PI / 2 : -Math.PI / 2
+          const isFlickering = random() < 0.24
+          const flickerIndex = chunkStreetLamps.length
+          const lamp = this.createStreetLamp(lampX, lampZ, facingAngle, isFlickering, flickerIndex, random() * 100)
+          detailsGroup.add(lamp.group)
+          chunkStreetLamps.push(lamp)
+        }
+      }
+    }
 
     const geoToUse = isLow ? this.sharedCulledBoxGeometry : (isUltra ? this.sharedRoundedBoxGeometry : this.sharedBoxGeometry)
 
@@ -685,7 +1011,7 @@ export class City {
     const fadedHouseRoofs = new THREE.InstancedMesh(this.sharedConeGeometry, this.fadedHouseRoofMaterial, buildingCapacity)
     const houseDetails = new THREE.InstancedMesh(geoToUse, this.houseWindowMaterial, buildingCapacity * 2)
     const houseDoors = new THREE.InstancedMesh(geoToUse, this.houseDoorMaterial, buildingCapacity)
-    const sidewalks = new THREE.InstancedMesh(geoToUse, this.sidewalk, buildingCapacity)
+    const sidewalks = new THREE.InstancedMesh(this.sharedCulledBoxGeometry, this.sidewalk, buildingCapacity)
 
     // High-Poly Greeble Instanced Meshes (Geometry Merging & Instanced Mesh for 'high' mode)
     const highWaterTowers = isHigh ? new THREE.InstancedMesh(this.waterTowerMergedGeo, this.waterTowerMaterial, 40) : null
@@ -780,6 +1106,12 @@ export class City {
         // Check if this block is King Kong's Skyscraper
         if (this.isKingKongAt(blockX, centerZ)) {
           this.buildKingKongPlaza(group, buildingsGroup, centerX, centerZ, bounds, chunkCoins)
+          continue
+        }
+
+        // Check if this block is the 4-building Zombie & Monster Survival Arena
+        if (this.isZombieArenaAt(blockX, centerZ)) {
+          this.buildZombieArenaSite(group, buildingsGroup, centerX, centerZ, bounds, chunkCoins)
           continue
         }
 
@@ -916,6 +1248,32 @@ export class City {
               }
             }
           }
+
+          // Pessoas em janelas 3D nas fachadas voltadas para a rua
+          if (height >= 10 && random() < 0.7) {
+            const residentCount = random() < 0.35 ? 2 : 1
+            for (let rIdx = 0; rIdx < residentCount; rIdx++) {
+              const floorCount = Math.min(3, Math.floor(height / 4))
+              const chosenFloor = 1 + Math.floor(random() * floorCount)
+              const residentY = chosenFloor * 3.8 + 0.6
+              const residentX = x + (random() - 0.5) * (width * 0.6)
+              const residentZ = z + depth / 2 + 0.12
+              const hasWavingArm = random() < 0.45
+              const resident = this.createWindowResident(
+                residentX,
+                residentY,
+                residentZ,
+                0, // Voltado para a rua (+Z)
+                Math.floor(random() * this.residentSkinMats.length),
+                Math.floor(random() * this.residentShirtMats.length),
+                Math.floor(random() * this.residentHairMats.length),
+                hasWavingArm,
+                random() * 50,
+              )
+              detailsGroup.add(resident.group)
+              chunkResidents.push(resident)
+            }
+          }
         }
         bounds.push(buildingBounds)
       }
@@ -1009,7 +1367,7 @@ export class City {
     this.root.add(group)
     this.colliders.push(...bounds)
     this.coins.push(...chunkCoins)
-    this.chunks.set(index, { group, buildingsGroup, detailsGroup, centerZ: zMiddle, bounds, dunes: chunkDunes, coins: chunkCoins, groundMaterial: green, buildingVisuals, houseVisuals, buildings, fadedBuildings, roofInstances, fadedRoofInstances, houses, fadedHouses, houseRoofs, fadedHouseRoofs })
+    this.chunks.set(index, { group, buildingsGroup, detailsGroup, centerZ: zMiddle, bounds, dunes: chunkDunes, coins: chunkCoins, groundMaterial: green, buildingVisuals, houseVisuals, buildings, fadedBuildings, roofInstances, fadedRoofInstances, houses, fadedHouses, houseRoofs, fadedHouseRoofs, streetLamps: chunkStreetLamps, windowResidents: chunkResidents })
   }
 
   private addRoad(group: THREE.Group, geometry: THREE.PlaneGeometry, x: number, z: number): void {
@@ -1165,6 +1523,291 @@ export class City {
       }
     }
     return this.kingKongLocation
+  }
+
+  isZombieArenaAt(_blockX: number, _centerZ: number): boolean {
+    return false
+  }
+
+  getZombieArenaInfo(): {
+    x: number
+    z: number
+    width: number
+    depth: number
+    entranceX: number
+    entranceZ: number
+    northEntranceX: number
+    northEntranceZ: number
+    eastEntranceX: number
+    eastEntranceZ: number
+    westEntranceX: number
+    westEntranceZ: number
+  } {
+    const arenaX = -1100
+    const arenaZ = 0
+    return {
+      x: arenaX,
+      z: arenaZ,
+      width: 68,
+      depth: 68,
+      entranceX: arenaX,
+      entranceZ: arenaZ + 33.6, // South Gate
+      northEntranceX: arenaX,
+      northEntranceZ: arenaZ - 33.6, // North Gate
+      eastEntranceX: arenaX + 33.6, // East Gate (voltado para a ponte e acesso da cidade)
+      eastEntranceZ: arenaZ,
+      westEntranceX: arenaX - 33.6, // West Gate (voltado para o deserto aberto)
+      westEntranceZ: arenaZ,
+    }
+  }
+
+  isNearZombieArenaEntrance(x: number, z: number, radius = 7.5): boolean {
+    const info = this.getZombieArenaInfo()
+    const nearSouth = Math.hypot(x - info.entranceX, z - info.entranceZ) <= radius
+    const nearNorth = Math.hypot(x - info.northEntranceX, z - info.northEntranceZ) <= radius
+    const nearEast = Math.hypot(x - info.eastEntranceX, z - info.eastEntranceZ) <= radius
+    const nearWest = Math.hypot(x - info.westEntranceX, z - info.westEntranceZ) <= radius
+    return nearSouth || nearNorth || nearEast || nearWest
+  }
+
+  isInsideZombieArena(x: number, z: number): boolean {
+    const info = this.getZombieArenaInfo()
+    return Math.abs(x - info.x) <= info.width / 2 && Math.abs(z - info.z) <= info.depth / 2
+  }
+
+  private buildZombieArenaSite(
+    group: THREE.Group,
+    structuresGroup: THREE.Group,
+    centerX: number,
+    centerZ: number,
+    bounds: Bounds[],
+    _chunkCoins: Coin[],
+  ): void {
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9, metalness: 0.25 })
+    const warningTrimMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.5, metalness: 0.2 })
+    const hazardRedMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x991b1b, emissiveIntensity: 2.2 })
+    const toxicBeamMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x16a34a,
+      emissiveIntensity: 3.5,
+      transparent: true,
+      opacity: 0.65,
+      roughness: 0.1,
+    })
+    const arenaGroundMat = new THREE.MeshStandardMaterial({ color: 0x181c20, roughness: 0.98 })
+
+    // 1. Chão Ampliado da Arena (68m x 68m para maior espaço de movimentação e fuga)
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(68, 68), arenaGroundMat)
+    floor.rotation.x = -Math.PI / 2
+    floor.position.set(centerX, 0.02, centerZ)
+    floor.receiveShadow = true
+    group.add(floor)
+
+    // Estrada de Acesso conectando a Ponte Oeste (x = -670) até o Portão Leste da Arena de Sobrevivência
+    const bridgeWestX = -670
+    const gateEastX = centerX + 33.6
+    const roadLen = Math.abs(bridgeWestX - gateEastX)
+    const roadMidX = (bridgeWestX + gateEastX) / 2
+    const approachRoad = new THREE.Mesh(new THREE.PlaneGeometry(roadLen + 4, ROAD_WIDTH), this.asphalt)
+    approachRoad.rotation.x = -Math.PI / 2
+    approachRoad.position.set(roadMidX, 0.022, centerZ)
+    approachRoad.receiveShadow = true
+    group.add(approachRoad)
+
+    // Símbolo de Risco Biológico / Zona de Quarentena no piso central
+    const bioRing = new THREE.Mesh(new THREE.RingGeometry(4.5, 6.8, 24), warningTrimMat)
+    bioRing.rotation.x = -Math.PI / 2
+    bioRing.position.set(centerX, 0.025, centerZ)
+    structuresGroup.add(bioRing)
+
+    // 2. Muros perimetrais blindados (68m x 68m com 4 ENTRADAS: Portão Sul, Norte, Leste e Oeste)
+    const wallH = 3.6
+    const half = 33.6
+
+    // ENTRADA LESTE (Muro Leste com portão de 10m no centro: centerZ - 5 a centerZ + 5)
+    const wallEN = new THREE.Mesh(new THREE.BoxGeometry(0.9, wallH, 29), wallMat)
+    wallEN.position.set(centerX + half, wallH / 2, centerZ - 19.5)
+    wallEN.castShadow = true
+    wallEN.receiveShadow = true
+    structuresGroup.add(wallEN)
+    bounds.push({ minX: centerX + half - 0.5, maxX: centerX + half + 0.5, minZ: centerZ - half, maxZ: centerZ - 5.0, minY: 0, maxY: wallH })
+
+    const wallES = new THREE.Mesh(new THREE.BoxGeometry(0.9, wallH, 29), wallMat)
+    wallES.position.set(centerX + half, wallH / 2, centerZ + 19.5)
+    wallES.castShadow = true
+    wallES.receiveShadow = true
+    structuresGroup.add(wallES)
+    bounds.push({ minX: centerX + half - 0.5, maxX: centerX + half + 0.5, minZ: centerZ + 5.0, maxZ: centerZ + half, minY: 0, maxY: wallH })
+
+    // Pórtico do Portão Leste
+    const archEast = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 11.8), warningTrimMat)
+    archEast.position.set(centerX + half, wallH + 1.2, centerZ)
+    archEast.castShadow = true
+    structuresGroup.add(archEast)
+
+    for (const sz of [-5.0, 5.0]) {
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), hazardRedMat)
+      beacon.position.set(centerX + half, wallH + 1.8, centerZ + sz)
+      structuresGroup.add(beacon)
+    }
+
+    // Círculo de Entrada Leste
+    const entryRingEast = new THREE.Mesh(new THREE.RingGeometry(2.8, 4.0, 24), toxicBeamMat)
+    entryRingEast.rotation.x = -Math.PI / 2
+    entryRingEast.position.set(centerX + half, 0.03, centerZ)
+    structuresGroup.add(entryRingEast)
+
+    // ENTRADA OESTE (Muro Oeste com portão de 10m no centro: centerZ - 5 a centerZ + 5)
+    const wallWN = new THREE.Mesh(new THREE.BoxGeometry(0.9, wallH, 29), wallMat)
+    wallWN.position.set(centerX - half, wallH / 2, centerZ - 19.5)
+    wallWN.castShadow = true
+    wallWN.receiveShadow = true
+    structuresGroup.add(wallWN)
+    bounds.push({ minX: centerX - half - 0.5, maxX: centerX - half + 0.5, minZ: centerZ - half, maxZ: centerZ - 5.0, minY: 0, maxY: wallH })
+
+    const wallWS = new THREE.Mesh(new THREE.BoxGeometry(0.9, wallH, 29), wallMat)
+    wallWS.position.set(centerX - half, wallH / 2, centerZ + 19.5)
+    wallWS.castShadow = true
+    wallWS.receiveShadow = true
+    structuresGroup.add(wallWS)
+    bounds.push({ minX: centerX - half - 0.5, maxX: centerX - half + 0.5, minZ: centerZ + 5.0, maxZ: centerZ + half, minY: 0, maxY: wallH })
+
+    // Pórtico do Portão Oeste
+    const archWest = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 11.8), warningTrimMat)
+    archWest.position.set(centerX - half, wallH + 1.2, centerZ)
+    archWest.castShadow = true
+    structuresGroup.add(archWest)
+
+    for (const sz of [-5.0, 5.0]) {
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), hazardRedMat)
+      beacon.position.set(centerX - half, wallH + 1.8, centerZ + sz)
+      structuresGroup.add(beacon)
+    }
+
+    // Círculo de Entrada Oeste
+    const entryRingWest = new THREE.Mesh(new THREE.RingGeometry(2.8, 4.0, 24), toxicBeamMat)
+    entryRingWest.rotation.x = -Math.PI / 2
+    entryRingWest.position.set(centerX - half, 0.03, centerZ)
+    structuresGroup.add(entryRingWest)
+
+    // ENTRADA 1: Muro Sul (com portão de 10m no centro)
+    const wallSL = new THREE.Mesh(new THREE.BoxGeometry(29, wallH, 0.9), wallMat)
+    wallSL.position.set(centerX - 19.5, wallH / 2, centerZ + half)
+    wallSL.castShadow = true
+    wallSL.receiveShadow = true
+    structuresGroup.add(wallSL)
+    bounds.push({ minX: centerX - half, maxX: centerX - 5.0, minZ: centerZ + half - 0.5, maxZ: centerZ + half + 0.5, minY: 0, maxY: wallH })
+
+    const wallSR = new THREE.Mesh(new THREE.BoxGeometry(29, wallH, 0.9), wallMat)
+    wallSR.position.set(centerX + 19.5, wallH / 2, centerZ + half)
+    wallSR.castShadow = true
+    wallSR.receiveShadow = true
+    structuresGroup.add(wallSR)
+    bounds.push({ minX: centerX + 5.0, maxX: centerX + half, minZ: centerZ + half - 0.5, maxZ: centerZ + half + 0.5, minY: 0, maxY: wallH })
+
+    // Pórtico do Portão Sul
+    const archSouth = new THREE.Mesh(new THREE.BoxGeometry(11.8, 1.2, 1.2), warningTrimMat)
+    archSouth.position.set(centerX, wallH + 1.2, centerZ + half)
+    archSouth.castShadow = true
+    structuresGroup.add(archSouth)
+
+    for (const sx of [-5.0, 5.0]) {
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), hazardRedMat)
+      beacon.position.set(centerX + sx, wallH + 1.8, centerZ + half)
+      structuresGroup.add(beacon)
+    }
+
+    // Círculo de Entrada Sul
+    const entryRingSouth = new THREE.Mesh(new THREE.RingGeometry(2.8, 4.0, 24), toxicBeamMat)
+    entryRingSouth.rotation.x = -Math.PI / 2
+    entryRingSouth.position.set(centerX, 0.03, centerZ + half)
+    structuresGroup.add(entryRingSouth)
+
+    // ENTRADA 2: Muro Norte (com portão de 10m no centro)
+    const wallNL = new THREE.Mesh(new THREE.BoxGeometry(29, wallH, 0.9), wallMat)
+    wallNL.position.set(centerX - 19.5, wallH / 2, centerZ - half)
+    wallNL.castShadow = true
+    wallNL.receiveShadow = true
+    structuresGroup.add(wallNL)
+    bounds.push({ minX: centerX - half, maxX: centerX - 5.0, minZ: centerZ - half - 0.5, maxZ: centerZ - half + 0.5, minY: 0, maxY: wallH })
+
+    const wallNR = new THREE.Mesh(new THREE.BoxGeometry(29, wallH, 0.9), wallMat)
+    wallNR.position.set(centerX + 19.5, wallH / 2, centerZ - half)
+    wallNR.castShadow = true
+    wallNR.receiveShadow = true
+    structuresGroup.add(wallNR)
+    bounds.push({ minX: centerX + 5.0, maxX: centerX + half, minZ: centerZ - half - 0.5, maxZ: centerZ - half + 0.5, minY: 0, maxY: wallH })
+
+    // Pórtico do Portão Norte
+    const archNorth = new THREE.Mesh(new THREE.BoxGeometry(11.8, 1.2, 1.2), warningTrimMat)
+    archNorth.position.set(centerX, wallH + 1.2, centerZ - half)
+    archNorth.castShadow = true
+    structuresGroup.add(archNorth)
+
+    for (const sx of [-5.0, 5.0]) {
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), hazardRedMat)
+      beacon.position.set(centerX + sx, wallH + 1.8, centerZ - half)
+      structuresGroup.add(beacon)
+    }
+
+    // Círculo de Entrada Norte
+    const entryRingNorth = new THREE.Mesh(new THREE.RingGeometry(2.8, 4.0, 24), toxicBeamMat)
+    entryRingNorth.rotation.x = -Math.PI / 2
+    entryRingNorth.position.set(centerX, 0.03, centerZ - half)
+    structuresGroup.add(entryRingNorth)
+
+    // 3. Quatro Torres de Observação nos Cantos
+    for (const cx of [-31.5, 31.5]) {
+      for (const cz of [-31.5, 31.5]) {
+        const towerLegs = new THREE.Mesh(new THREE.BoxGeometry(2.6, 6.8, 2.6), wallMat)
+        towerLegs.position.set(centerX + cx, 3.4, centerZ + cz)
+        towerLegs.castShadow = true
+        structuresGroup.add(towerLegs)
+
+        const towerCabin = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.4, 3.5), warningTrimMat)
+        towerCabin.position.set(centerX + cx, 8.0, centerZ + cz)
+        towerCabin.castShadow = true
+        structuresGroup.add(towerCabin)
+
+        const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 8), hazardRedMat)
+        beacon.position.set(centerX + cx, 9.4, centerZ + cz)
+        structuresGroup.add(beacon)
+      }
+    }
+
+    // 4. Feixe de Luz Volumétrico Tóxico no Céu
+    const beamGeo = new THREE.CylinderGeometry(2.8, 2.8, 90, 16, 1, true)
+    const beamMesh = new THREE.Mesh(beamGeo, toxicBeamMat)
+    beamMesh.position.set(centerX, 45, centerZ)
+    structuresGroup.add(beamMesh)
+
+    // 5. Obstáculos de Combate bem espaçados para não travar a corrida do jogador
+    const wreck1 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 4.4), wallMat)
+    wreck1.position.set(centerX - 14, 0.55, centerZ - 10)
+    wreck1.rotation.y = 0.45
+    wreck1.castShadow = true
+    structuresGroup.add(wreck1)
+    bounds.push({ minX: centerX - 16, maxX: centerX - 12, minZ: centerZ - 13, maxZ: centerZ - 7, minY: 0, maxY: 1.5 })
+
+    const wreck2 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 4.4), wallMat)
+    wreck2.position.set(centerX + 15, 0.55, centerZ + 12)
+    wreck2.rotation.y = -0.6
+    wreck2.castShadow = true
+    structuresGroup.add(wreck2)
+    bounds.push({ minX: centerX + 13, maxX: centerX + 17, minZ: centerZ + 9, maxZ: centerZ + 15, minY: 0, maxY: 1.5 })
+
+    const drumMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5, metalness: 0.4 })
+    for (const [bx, bz] of [
+      [centerX - 10, centerZ + 16],
+      [centerX + 12, centerZ - 14],
+      [centerX - 18, centerZ - 18],
+      [centerX + 18, centerZ + 18],
+    ]) {
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.95, 10), drumMat)
+      drum.position.set(bx, 0.48, bz)
+      drum.castShadow = true
+      structuresGroup.add(drum)
+    }
   }
 
   private buildAirportRunway(
@@ -1863,6 +2506,7 @@ export class City {
     group.add(sandTransition)
   }
 
+  private desertGroundsCreated = false
   private buildSandDuneFields(
     group: THREE.Group,
     zStart: number,
@@ -1873,19 +2517,23 @@ export class City {
   ): void {
     const sandBaseMat = this.sandMaterial
 
-    // West Desert Sand Ground
-    const westSandGround = new THREE.Mesh(new THREE.PlaneGeometry(850, CHUNK_DEPTH), sandBaseMat)
-    westSandGround.rotation.x = -Math.PI / 2
-    westSandGround.position.set(-1120, -0.11, zStart + CHUNK_DEPTH / 2)
-    westSandGround.receiveShadow = true
-    group.add(westSandGround)
+    if (!this.desertGroundsCreated) {
+      // West Desert Sand Ground
+      const westSandGround = new THREE.Mesh(new THREE.PlaneGeometry(850, 10000), sandBaseMat)
+      westSandGround.rotation.x = -Math.PI / 2
+      westSandGround.position.set(-1120, -0.11, 0)
+      westSandGround.receiveShadow = true
+      this.root.add(westSandGround)
 
-    // East Desert Sand Ground
-    const eastSandGround = new THREE.Mesh(new THREE.PlaneGeometry(850, CHUNK_DEPTH), sandBaseMat)
-    eastSandGround.rotation.x = -Math.PI / 2
-    eastSandGround.position.set(1120, -0.11, zStart + CHUNK_DEPTH / 2)
-    eastSandGround.receiveShadow = true
-    group.add(eastSandGround)
+      // East Desert Sand Ground
+      const eastSandGround = new THREE.Mesh(new THREE.PlaneGeometry(850, 10000), sandBaseMat)
+      eastSandGround.rotation.x = -Math.PI / 2
+      eastSandGround.position.set(1120, -0.11, 0)
+      eastSandGround.receiveShadow = true
+      this.root.add(eastSandGround)
+      
+      this.desertGroundsCreated = true
+    }
 
     // Ocean Water Beyond Sand Dunes (x < -1540 and x > 1540)
     const oceanWest = new THREE.Mesh(new THREE.PlaneGeometry(1600, CHUNK_DEPTH), this.riverWaterMaterial)
@@ -1916,6 +2564,10 @@ export class City {
 
         // Leave East Rally Track Arena clear of dunes for oval circuit
         if (sideXCenter > 0 && Math.abs(dx - 1100) < 170 && Math.abs(dz) < 170) continue
+
+        // Leave West Desert Survival Arena and access road clear of dunes
+        if (sideXCenter < 0 && dx < -650 && dx > -1180 && Math.abs(dz) < 55) continue
+        if (sideXCenter < 0 && Math.abs(dx - (-1100)) < 70 && Math.abs(dz) < 70) continue
 
         const scaleX = 32 + random() * 26
         const scaleY = 3.2 + random() * 3.6
@@ -2643,9 +3295,43 @@ export class City {
     }
   }
 
-  update(dt: number, actorPos?: THREE.Vector3): void {
+  update(dt: number, actorPos?: THREE.Vector3, isNight = false, elapsed = 0): void {
     for (const coin of this.coins) {
       if (coin.alive) coin.mesh.rotation.z += dt * 1.8
+    }
+
+    // 1. Postes de luz pela cidade (acendem à noite, alguns com luz piscando)
+    if (isNight) {
+      this.streetLampSteadyBulbMat.emissiveIntensity = 3.2
+      // Atualização dos postes piscantes com oscilação e micro-quedas elétricas
+      for (let i = 0; i < this.streetLampFlickerBulbMats.length; i++) {
+        const mat = this.streetLampFlickerBulbMats[i]
+        const p1 = Math.sin(elapsed * (16 + i * 4) + i * 1.9)
+        const p2 = Math.cos(elapsed * (28 + i * 6) + i * 3.7)
+        const electricalNoise = (Math.sin(elapsed * 48.3 + i * 7.5) + Math.cos(elapsed * 73.1 + i * 4.2)) * 0.5
+        const isDropout = electricalNoise < -0.42 || (p1 > 0.88 && p2 < -0.38)
+        if (isDropout) {
+          mat.emissiveIntensity = Math.random() < 0.35 ? 0.25 : 0.05
+        } else {
+          mat.emissiveIntensity = 1.6 + Math.max(0, p1 * p2) * 2.5
+        }
+      }
+    } else {
+      this.streetLampSteadyBulbMat.emissiveIntensity = 0.0
+      for (const mat of this.streetLampFlickerBulbMats) {
+        mat.emissiveIntensity = 0.0
+      }
+    }
+
+    // 2. Animação das pessoas nas janelas (braços acenando e cabeças virando sutilmente)
+    for (const chunk of this.chunks.values()) {
+      if (!chunk.detailsGroup.visible) continue
+      for (const resident of chunk.windowResidents) {
+        if (resident.wavingArm) {
+          resident.wavingArm.rotation.z = Math.sin(elapsed * 4.6 + resident.waveOffset) * 0.45 + 0.2
+        }
+        resident.head.rotation.y = Math.sin(elapsed * 1.25 + resident.waveOffset) * 0.22
+      }
     }
 
     // Atualizar temporizador global do semáforo
@@ -2764,6 +3450,17 @@ export class City {
     this.fireEscapeMaterial.dispose()
     this.acUnitMaterial.dispose()
     this.balconyMaterial.dispose()
+
+    this.streetLampPoleMat.dispose()
+    this.streetLampHoodMat.dispose()
+    this.streetLampSteadyBulbMat.dispose()
+    for (const mat of this.streetLampFlickerBulbMats) mat.dispose()
+    this.windowFrameMat.dispose()
+    this.windowGlowMat.dispose()
+    for (const mat of this.residentSkinMats) mat.dispose()
+    for (const mat of this.residentShirtMats) mat.dispose()
+    for (const mat of this.residentHairMats) mat.dispose()
+
     for (const geo of this.sharedGeometries) {
       geo.dispose()
     }
