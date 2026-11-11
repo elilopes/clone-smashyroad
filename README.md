@@ -1,183 +1,335 @@
-# MOST WANTED CAR
+# Most Wanted Car: District 01 🚗💨
 
-[English](#english) | [Português](#português)
+[🇧🇷 Português](#-versão-em-português) | [🇺🇸 English](#-english-version)
 
 ---
 
-## <a name="português"></a>Português
+## 🇧🇷 Versão em Português
 
-Jogo MOST WANTED CAR, um protótipo completo e jogável em 3D de perseguição veicular em HTML5, TypeScript e Three.js. A cidade é gerada de forma procedural ao redor do carro e se estende indefinidamente enquanto a corrida continua.
+**Most Wanted Car: District 01** é um jogo 3D de mundo aberto e perseguição veicular em ritmo frenético, desenvolvido com **React**, **Three.js** e **Vite**, com suporte completo a exportação nativa para **Android via Capacitor**. 
 
-Copia da tela
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/dd6cd006-9e5c-4545-99d1-acf96b7aefe8" />
+Pilote supercarros, monster trucks, ônibus, caminhões cegonha, aviões bimotores e robôs transformáveis através de uma metrópole procedural repleta de tráfego dinâmico, cerco policial implacável e missões cheias de adrenalina!
 
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/152a502b-8c3a-4631-96d0-196b146ca37c" />
+---
 
-### 🎮 Como Executar
+### 🌐 Idiomas Suportados (Game Language)
+O jogo possui tradução integral e dinâmica para 4 idiomas, selecionáveis a qualquer momento no menu de **Ajustes // Settings**:
+- 🇧🇷 **Português** (Padrão)
+- 🇺🇸 **English**
+- 🇷🇺 **Русский**
+- 🇨🇳 **中文**
+
+Todos os menus, contratos, telemetria, painel de procurado, banners de vitória e o **Modal do Perfil do Piloto** são adaptados instantaneamente ao idioma selecionado.
+
+---
+
+### 🎯 Missões e Contratos do Jogo
+
+O jogo inclui um rico catálogo de contratos urbanos e missões especiais de grande escala:
+
+1. **🏁 Corrida Contra o Tempo (Time Trial)**:
+   - *Objetivo:* Um arco inicial luminoso aguarda o jogador em uma via da cidade. Ao cruzar o arco com o veículo, inicia-se um cronômetro regressivo e surge uma linha guia holográfica projetada no asfalto. O piloto deve acelerar no trânsito normal e passar por 3 arcos luminosos sequenciais antes do tempo zerar!
+   - *Recompensa:* +$7.500 | +XP de Piloto.
+
+2. **🧟 Arena de Sobrevivência (Zombie Arena - Survival Mode)**:
+   - *Objetivo:* Localizada no deserto a oeste da cidade. Sobreviva a ondas brutais de zumbis, monstros mutantes e chefões titânicos em modo Fácil (4 ondas) ou Difícil (10 ondas com zumbis cuspidores de fogo e meteoros), coletando power-ups, armas (Shotgun, SMG, Plasma) e kits médicos.
+   - *Recompensa:* +$8.000 a +$20.000 | Conquista de Arena.
+
+3. **🏁 Rally das Dunas (Dune Rally - Circuito Elétrico)**:
+   - *Objetivo:* Localizado no deserto a leste da cidade. Um circuito oval off-road radical com saltos gigantes e um **looping 360°**. Dispute contra competidores velozes e termine em 1º ou 2º lugar!
+   - *Recompensa:* +$6.000 | Conquista de Rally.
+
+4. **🚕 Táxi Maluco (Crazy Taxi)**:
+   - *Objetivo:* Embarque 3 passageiros ansiosos pela cidade e execute manobras radicais e saltos antes de entregá-los aos seus destinos.
+   - *Recompensa:* +$3.500.
+
+5. **💣 Velocidade Máxima / Carro-Bomba (Speed Bomb)**:
+   - *Objetivo:* Assuma a direção de um carro equipado com explosivos sensíveis à velocidade. Mantenha a velocidade acima de 75 km/h por 45 segundos ininterruptos para desarmar o detonador!
+   - *Recompensa:* +$5.000.
+
+6. **💥 Modo Fúria Policial (Rampage Police)**:
+   - *Objetivo:* Destrua 15 viaturas policiais interceptoras em menos de 60 segundos usando colisões calculadas e a robustez do veículo.
+   - *Recompensa:* +$4.000.
+
+7. **🚛 Caminhão Cegonha & Saltos Acrobáticos (Car Hauler)**:
+   - *Objetivo 1:* Use a rampa inclinada do caminhão cegonha em movimento para catapultar seu carro e realizar 3 saltos acrobáticos.
+   - *Objetivo 2:* Dirija a cegonha e recolha 5 carros enguiçados espalhados pela cidade.
+   - *Recompensa:* +$1.200 a +$4.000.
+
+8. **🦍 Chefão King Kong (King Kong Boss Battle)**:
+   - *Objetivo:* O lendário gorila gigante invadiu o arranha-céu da praça central! Ataque o chefão do solo ou use o avião bimotor para derrubá-lo da torre.
+   - *Recompensa:* +$5.000.
+
+9. **🚜 Monster Truck Esmagador (Monster Crush)**:
+   - *Objetivo:* Suba na suspensão elevada do Monster Truck e esmague 10 carros civis ou policiais pelas avenidas.
+   - *Recompensa:* +$3.500.
+
+10. **⛽ Caminhão Tanque de Combustível (Fuel Tanker Delivery)**:
+    - *Objetivo:* Transporte com máxima cautela uma carga pesada e volátil de combustível inflamável até o posto da cidade, desviando do trânsito intenso.
+    - *Recompensa:* +$2.500.
+
+11. **🚌 Ônibus Urbano (City Bus Commuters)**:
+    - *Objetivo:* Estacione nos pontos de ônibus designados pela cidade e realize o embarque de 10 passageiros.
+    - *Recompensa:* +$3.000.
+
+12. **✈️ Ás dos Ares (Aerial Ace)**:
+    - *Objetivo:* Decole com o avião bimotor e atravesse em sequência 7 anéis dourados flutuantes sobre os prédios da cidade.
+    - *Recompensa:* +$1.000.
+
+13. **🎯 Contratos Clássicos de Trânsito & Fuga**:
+    - Distância percorrida (350m e 900m).
+    - Fichas de dinheiro coletadas no asfalto (4x e 9x).
+    - Sobrevivência à perseguição policial (45s e 100s).
+    - Elevação do nível de procurado (Nível 3 e Nível 6).
+    - Raspões em alta velocidade com viaturas (Close Calls).
+
+---
+
+### 👤 Perfil do Piloto & Salvamento em Nuvem (Auth Modal)
+O jogo possui arquitetura resiliente com banco local (`src/db/users.ts`) e sincronização transparente com o **Firebase Firestore**:
+- **Modo Anônimo / Visitante:** Jogue instantaneamente sem login com persistência local e telemetria offline.
+- **Login com Google & Google Play Games:** Salva e sincroniza níveis de piloto, pontos de experiência (XP), saldo em dinheiro, recorde de distância e histórico de contratos concluídos entre diferentes dispositivos.
+- **Sincronização Offline-First:** Se a internet oscilar ou o dispositivo estiver offline, todas as alterações ficam protegidas no banco local e são sincronizadas automaticamente com o Firestore assim que a conexão retornar.
+
+---
+
+### 🎮 Controles
+
+#### Computador (Teclado e Mouse)
+- `W` / `S` ou `Setas Cima / Baixo`: Acelerar / Marcha ré e freio
+- `A` / `D` ou `Setas Esquerda / Direita`: Virar à esquerda / direita
+- `Espaço`: Freio de mão
+- `E`: Entrar / Sair do veículo ou avião
+- `C`: Alternar modo de câmera (Perseguição / Próxima / Topo)
+- `M`: Abrir / Fechar mapa tático da cidade
+- `P` ou `ESC`: Pausar jogo
+
+#### Dispositivos Móveis (Android / Touchscreen)
+- **Modo Joystick Redondo:** Controle analógico virtual com indicador direcional e 4 setas.
+- **Modo Sensor de Inclinação (Giroscópio):** Incline o celular para os lados para esterçar o veículo realisticamente.
+- **Modo Toque Esquerda / Direita:** Zonas de toque nas laterais da tela para curvas imediatas.
+- **Botão Turbo / Nitro:** Impulso de velocidade momentâneo.
+- **Botão Auto-Aceleração:** Permite acelerar automaticamente sem precisar segurar o pedal.
+
+---
+
+### ⚙️ Opções Gráficas
+Ajustável para rodar em dispositivos móveis básicos até PCs gamer com GPU dedicada:
+- **Baixa (Low):** Low Poly ultra leve, sem sombras projetadas e sem névoa.
+- **Média (Medium):** Greeble clássico com voxels detalhados e sombras básicas.
+- **Alta (High):** Greeble High Poly com Geometry Merging, Instanced Mesh e Oclusão Ambiental (SSAO).
+- **Ultra ⚡:** Iluminação PBR HD, Neon Bloom, Oclusão SSAO nos cantos dos blocos e Path Tracing em tempo real.
+
+---
+
+### 🛠️ Comandos de Desenvolvimento (Web)
 
 ```bash
+# 1. Instalar dependências
 npm install
+
+# 2. Executar servidor de desenvolvimento (Porta 3000)
 npm run dev
+
+# 3. Compilar versão de produção
+npm run build
 ```
 
-### ⌨️ Controles
+---
 
-- **W / ↑**: Acelerar
-- **S / ↓**: Dar ré / Frear
-- **A / ←**: Virar à esquerda
-- **D / →**: Virar à direita
-- **Espaço**: Freio de mão
-- **C**: Alternar câmera (entre traseira 3D e três quartos 2.5D)
-- **E**: Entrar / Sair do veículo (perto de um carro ou avião no solo)
-- *Para dispositivos móveis, utilize os controles virtuais na tela.*
+### 📱 Compilação do APK Android via PowerShell (Sem Android Studio)
+
+Para gerar o arquivo `.apk` diretamente pelo terminal PowerShell do Windows:
+
+1. **Compilar os arquivos Web do projeto:**
+   ```powershell
+   npm run build
+   ```
+
+2. **Sincronizar os recursos compilados com a pasta nativa do Android:**
+   ```powershell
+   npx cap sync
+   ```
+
+3. **Gerar o APK de Instalação via Gradle:**
+   - **Opção 1: APK de Release (Otimizado e Assinado para Instalação Direta):**
+     ```powershell
+     cd android
+     .\gradlew assembleRelease
+     ```
+     Arquivo gerado em: `android\app\build\outputs\apk\release\MWC-v1.0-release.apk`
+   
+   - **Opção 2: APK de Debug (Desenvolvimento):**
+     ```powershell
+     cd android
+     .\gradlew assembleDebug
+     ```
+     Arquivo gerado em: `android\app\build\outputs\apk\debug\MWC-v1.0-debug.apk`
+
+> **Nota sobre o erro "Pacote parece inválido / Falha ao ler metadados":** 
+> O Android exige que todos os APKs de release possuam assinatura digital (v1/v2/v3). O arquivo `android/app/build.gradle` já vem configurado com `signingConfig signingConfigs.debug` no bloco de release para permitir a instalação imediata em qualquer aparelho sem necessidade de criar keystores manuais para testes. Caso já tenha uma versão anterior instalada no smartphone, desinstale-a antes de instalar a nova.
+
+---
+---
+
+## 🇺🇸 English Version
+
+**Most Wanted Car: District 01** is a fast-paced 3D open-world vehicle pursuit game developed with **React**, **Three.js**, and **Vite**, featuring native **Android export support via Capacitor**.
+
+Drive supercars, monster trucks, city buses, car haulers, twin-engine planes, and transforming robots across a procedural voxel city packed with dynamic traffic, relentless police pursuits, and high-stakes missions!
 
 ---
 
-### 🚀 Funcionalidades adicionadas
+### 🌐 Supported Languages (Game Language)
+The game provides full in-game translations across 4 languages, selectable anytime in **Settings**:
+- 🇧🇷 **Português** (Portuguese)
+- 🇺🇸 **English**
+- 🇷🇺 **Русский** (Russian)
+- 🇨🇳 **中文** (Chinese)
 
-O protótipo foi  expandido com sistemas urbanos interativos de física e IA de trânsito:
-
-#### 1. 🚦 Semáforos de Trânsito Inteligentes e Postes 3D
-- **Sinalização em Esquinas Reais**: Adicionados semáforos físicos realistas em 3D em quatro esquinas centrais movimentadas da cidade (`X = -48` ou `X = 48` cruzando com `Z = 0` ou `Z = 48`).
-- **Alternância Automática (Ciclo de 12s)**: Os semáforos alternam de cor automaticamente a cada 6 segundos para cada via (incluindo transição com luz Amarela brilhante e emissiva).
-- **IA de Parada de Tráfego**: Os veículos civis do trânsito detectam o sinal fechado (Vermelho/Amarelo) a até 18 metros e desaceleram suavemente até parar. Graças ao sistema de car-following, os carros de trás formam filas organizadas. Quando o sinal abre, eles retomam a velocidade.
-- **HUD Limpo**: Respeitando as regras visuais, não são exibidos cronômetros, contadores ou barras de tempo na tela para o jogador.
-
-#### 2. 🌊 Lagoas Urbanas e Física de Flutuação
-- **Água Azul-Royal Brilhante (#2563eb)**: As lagoas urbanas foram pintadas com um azul-royal opaco e vibrante, imune à mistura de cor com a grama do fundo.
-- **Física de Flutuação e Travamento**: Ao entrar na água com qualquer carro ou veículo, os controles de aceleração e direção são travados e o carro flutua balançando estaticamente.
-- **Ejeção Automática no Rio/Lagoa**: Quando um veículo cai na água, o jogador palito é automaticamente arremessado para fora do veículo pela lateral (esquerda ou direita) para que possa nadar livremente até a terra firme.
-- **Sistema de Fôlego (30s)**: Nadar na água ativa um cronômetro visual de fôlego com contagem regressiva de 30 a 0 segundos. Se o jogador não alcançar terra firme antes do tempo esgotar, ocorre o fim de jogo por afogamento.
-
-#### 3. 🚚 Missão do Caminhão-Tanque e Ejeção Automática
-- **Design do Caminhão-Tanque**: Carroceria cilíndrica metálica com faixas de sinalização laranja e verde (altamente inflamável) e placas de diamante de risco.
-- **Ejeção na Garagem (Missão 2)**: Ao concluir com sucesso a entrega da carga inflamável na garagem industrial, o personagem palito do jogador é retirado de dentro do caminhão de forma automática e segura, sendo posicionado ao lado do caminhão na calçada com velocidade zerada.
-
-#### 4. 🦍 Prédio do King Kong & Missão Aérea com o Avião Bimotor
-- **Spawn Aleatório a Cada Partida**: Todas as vezes que um novo jogo é iniciado, o computador seleciona aleatoriamente um quarteirão diferente da cidade para erguer o imponente arranha-céu Art-Deco estilo Empire State (mais de 110 metros de altura, com patamares escalonados, pilastras ornamentadas, janelas e um farol sinalizador de aviação pulsante no mastro de amarração).
-- **O Gorila Gigante no Arranha-Céu**: Pendurado nas vigas e parapeito do topo do edifício está o lendário King Kong, com animações de respiração, membros móveis e ataque aéreo caso uma aeronave se aproxime.
-- **Ativação da Missão por Proximidade Aérea**: Ao pilotar o **Avião Bimotor** e alcançar as redondezas do prédio (raio de 95 metros), as sirenes tocam e a missão de combate aéreo é iniciada com painel dedicado no HUD.
-- **Função de Atirar do Avião Bimotor**: Ao iniciar a missão, o avião bimotor é armado com metralhadoras duplas sincronizadas nas pontas das asas. O jogador pode disparar rajadas contínuas de alta velocidade pressionando **Espaço**, **F**, **Enter** ou tocando no botão virtual de mira/tiro na tela.
-- **Resistência de 50 Colisões (Boss Fight Épica)**: O King Kong possui resistência blindada de 50 impactos de disparos. A cada tiro certeiro, o modelo 3D do gorila pisca intensamente em vermelho/branco, sofre tremores mecânicos realistas e emite faíscas. A barra de resistência no HUD exibe a vida restante em tempo real (`X / 50`).
-- **Queda Cinematográfica e Grande Recompensa**: Ao atingir a 50ª colisão, o King Kong se solta do parapeito e despenca com aceleração gravitacional e rotação do topo até o chão, concluindo a missão com explosões, som triunfante e premiação de **+$5.000 em dinheiro** e **+15.000 pontos**.
-- **Radar & Minimapa GPS**: O arranha-céu e o gorila são sinalizados no radar e minimapa expandível com ícone dedicado `🦍 KING KONG`.
-
-#### 6. 🛠️ Otimizações, Novas Físicas & Melhorias de Interface (UI)
-- **Modo Gráfico Baixo (Culled Meshing)**: Implementado sistema de *Culled Meshing* combinado com *Instanced Mesh*. O jogo remove as faces ocultas inferiores de todos os edifícios e blocos instanciados no modo Baixo para otimização pesada e fluidez ultra-rápida.
-- **Modo Gráfico Alto (Rounded & Hatchback)**: O modo de qualidade gráfica Alta agora renderiza os veículos com cantos e bordas perfeitamente arredondadas via *RoundedBoxGeometry*. Além disso, todos os veículos não-picapes possuem uma traseira esportiva na diagonal estilo *hatchback* em vez de blocos quadrados de 90 graus.
-- **Física de Voo Tridimensional (Avião)**: O avião bimotor agora possui resolução de colisão sólida em 3D. Ele desliza e colide corretamente contra as paredes laterais dos prédios ao invés de passar por dentro, mas pode voar livremente por cima deles se estiver acima de seu topo.
-- **Física do Personagem Palito contra Policiais**: Quando o jogador estiver a pé, as viaturas policiais colidem e o empurram fisicamente sem passar por dentro do seu modelo 3D, batendo sem infligir dano direto.
-- **Perfil Simplificado**: Jogadores não conectados exibem o status limpo de `ANÔNIMO` no menu superior.
-
-#### 7. 🏎️ Circuito Oval de Rally nas Dunas (6 Carros, Grade Divisória, Arcos e Turbos)
-- **Mega Pista Oval no Deserto Leste**: Construído um circuito oval de rally com mais de 580 metros de perímetro em meio às dunas de areia (`X = 1100, Z = 0`). A área das dunas foi nivelada com solo compacto de terra batida, zebras de corrida vermelhas e brancas nas curvas e torres de refletores LED.
-- **Grade de Segurança Central entre as Pistas**: Conforme solicitado, a pista possui uma sólida grade metálica divisória central (`X = 1100`) com postes de aço e telas de arame reforçado entre os dois sentidos de tráfego, impedindo fisicamente que os carros mudem de sentido, cortem caminho ou invadam a pista contrária.
-- **Corrida Realista entre 6 Carros de Rally WRC**: 6 competidores com pinturas e números esportivos exclusivos (#1 Red Apex, #7 Blue Thunder, #23 Green Viper, #44 Orange Blaze, #88 Desert Gold, #99 Cyber Violet) disputam a liderança em tempo real. Os carros contam com IA de ultrapassagem dinâmica, aceleração e drift realista com fumaça e faíscas nas curvas.
-- **Arcos Brilhantes de Pontuação**: 4 arcos luminosos neon (`+500 PTS`) instalados ao longo da pista conferem premiação instantânea em dinheiro e pontuação, acompanhados de som triunfante e chuva de faíscas douradas ao cruzar por baixo deles.
-- **Ícones 3D de Turbo Boost**: Pickups flutuantes de Turbo giratórios posicionados no traçado da pista proporcionam impulsos violentos de nitro para o jogador e competidores de IA, liberando chamas de foguete no escapamento.
-- **Carro de Rally no Paddock & Disputa do Jogador**: Um 7º carro de rally elétrico está estacionado nos boxes para o jogador pilotar pressionando **E**, ou o jogador pode disputar a corrida com qualquer outro veículo. O HUD tático exibe a posição em tempo real (`Xº / 7`) e contagem de voltas, premiando com **+$5.000** e **+10.000 PTS** a vitória do campeonato em 3 voltas.
-- **Radar & Minimapa do Circuito**: O traçado oval, a grade central, os 6 competidores em movimento, os arcos e os turbos são renderizados com ícones no minimapa e radar GPS.
+All HUD panels, contracts, telemetry, wanted level meters, victory banners, and the **Pilot Profile Modal** adapt seamlessly to the active language.
 
 ---
 
-### 📂 Estrutura de Sistemas do Jogo
+### 🎯 Missions & Urban Contracts
 
-- `src/game/Car.ts`: Modelos 3D, física, aceleração, direção, colisões, condutor de bicicleta e novo modelo de Rally WRC.
-- `src/game/RallyRace.ts`: Circuito oval nas dunas, 6 carros de rally competindo, grade divisória central, arcos de pontuação e pickups de turbo.
-- `src/game/City.ts`: Geração de ruas, quarteirões, calçadas, edifícios, moedas coletáveis, lagoas e semáforos físicos 3D.
-- `src/game/Traffic.ts`: IA de trânsito civil, car-following, evasão de perigos e IA de parada em semáforos vermelhos.
-- `src/game/Pedestrians.ts`: Pedestres ativos que se movem, esquivam de carros e interagem com o mundo.
-- `src/game/Minimap.ts`: Radar e mapa expandível que indica rios, ruas, praças, lagoas, objetivos e circuito de rally nas dunas.
-- `src/game/Game.ts`: Core da engine, loop de update, câmera inteligente, HUD, perseguições e sistema de missões.
+1. **🏁 Time Trial**:
+   - *Objective:* A neon arch awaits on a city street. Driving through the starting arch triggers a countdown timer and a holographic route guideline on the asphalt. Speed through normal city traffic and cross all 3 sequential neon arches before time runs out!
+   - *Reward:* +$7,500 | +Pilot XP.
+
+2. **🧟 Survival Arena (Zombie Arena)**:
+   - *Objective:* Located in the western desert wasteland. Survive waves of zombies, mutant fiends, and titan bosses in Easy Mode (4 waves) or Hard Mode (10 waves with fire-breathing zombies and meteor showers), picking up weapons (Shotgun, SMG, Plasma) and medkits.
+   - *Reward:* +$8,000 to +$20,000 | Arena Victory.
+
+3. **🏁 Dune Rally (Electric Circuit)**:
+   - *Objective:* Located in the eastern desert. A high-speed off-road oval circuit with extreme jumps and a **360° stunt loop**. Race against skilled AI drivers and finish in 1st or 2nd place!
+   - *Reward:* +$6,000 | Rally Victory.
+
+4. **🚕 Crazy Taxi**:
+   - *Objective:* Pick up 3 radical passengers around the city and perform stunt jumps to safely deliver them to their destinations.
+   - *Reward:* +$3,500.
+
+5. **💣 Speed Bomb**:
+   - *Objective:* Take the wheel of a bomb-rigged vehicle. Maintain your speed strictly above 75 km/h for 45 continuous seconds to prevent detonation!
+   - *Reward:* +$5,000.
+
+6. **💥 Rampage Mode**:
+   - *Objective:* Smash and destroy 15 police pursuit cars within 60 seconds using calculated high-impact rams.
+   - *Reward:* +$4,000.
+
+7. **🚛 Car Hauler Stunts & Vehicle Recovery**:
+   - *Objective 1:* Hit the rear ramp of the moving car hauler truck to launch your car in 3 radical aerial jumps.
+   - *Objective 2:* Drive the car hauler to collect 5 stranded cars around town.
+   - *Reward:* +$1,200 to +$4,000.
+
+8. **🦍 King Kong Boss Battle**:
+   - *Objective:* The colossal ape has scaled the skyscraper in the central plaza! Attack from the ground or dogfight in the twin-engine plane to knock the boss down.
+   - *Reward:* +$5,000.
+
+9. **🚜 Monster Truck Crush**:
+   - *Objective:* Pilot the massive lifted Monster Truck and crush 10 civilian and police cars beneath your giant tires.
+   - *Reward:* +$3,500.
+
+10. **⛽ Flammable Fuel Tanker Delivery**:
+    - *Objective:* Safely haul a heavy, volatile fuel tank trailer through dense city traffic to the fuel depot without catastrophic impacts.
+    - *Reward:* +$2,500.
+
+11. **🚌 City Bus Commuters**:
+    - *Objective:* Stop at designated bus stations and board 10 commuters along the route.
+    - *Reward:* +$3,000.
+
+12. **✈️ Aerial Ace (Flying Rings)**:
+    - *Objective:* Take flight with the twin-engine plane and navigate through 7 golden rings floating in the skyline.
+    - *Reward:* +$1,000.
+
+13. **🎯 Classic Pursuit Contracts**:
+    - Distance goals (350m & 900m).
+    - Coin pickup challenges (4x & 9x).
+    - Police evasion survival (45s & 100s).
+    - Wanted level milestones (Heat 3 & Heat 6).
+    - High-speed close calls with patrol cruisers.
 
 ---
 
+### 👤 Pilot Profile & Cloud Persistence
+Features an offline-first architecture powered by `src/db/users.ts` with transparent **Firebase Firestore** sync:
+- **Guest / Anonymous Mode:** Instant jump-in without credentials, tracking offline stats and progression locally.
+- **Google & Play Games Authentication:** Saves and synchronizes pilot level, XP, cash, high scores, and contracts across devices.
+- **Offline-First Resilience:** If connectivity is lost, progress is safely cached and automatically dispatched to Firestore once reconnected.
+
 ---
 
-## <a name="english"></a>English
+### 🎮 Controls
 
-# MOST WANTED CAR
+#### Desktop (Keyboard & Mouse)
+- `W` / `S` or `Up / Down Arrows`: Accelerate / Reverse & Brake
+- `A` / `D` or `Left / Right Arrows`: Steer Left / Right
+- `Space`: Handbrake
+- `E`: Enter / Exit vehicle or airplane
+- `C`: Cycle camera perspective (Chase / Near / Overhead)
+- `M`: Open / Close tactical city map
+- `P` or `ESC`: Pause game
 
-Game MOST WANTED CAR, a complete prototype and playable 3D vehicle pursuit built using HTML5, TypeScript, and Three.js. The city is generated procedurally around the player's vehicle, extending infinitely as the race progresses.
+#### Mobile / Touchscreen
+- **Round Joystick Mode:** Virtual 4-arrow analog control pad.
+- **Tilt Sensor Mode (Gyroscope):** Tilt phone to steer naturally.
+- **Touch Left / Right Mode:** Tap left/right edges for instant turns.
+- **Auto-Acceleration Toggle:** Enables hands-free throttling.
+- **Nitro / Boost Button:** Instant speed burst.
 
-Print screen
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/dd6cd006-9e5c-4545-99d1-acf96b7aefe8" />
+---
 
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/152a502b-8c3a-4631-96d0-196b146ca37c" />
+### ⚙️ Graphics Modes
+- **Low:** Optimized Low Poly without shadows or fog for maximum battery life.
+- **Medium:** Classic Greeble voxels with standard lighting.
+- **High:** High Poly Greeble with Geometry Merging, Instanced Mesh, and SSAO.
+- **Ultra ⚡:** HD PBR lighting, Neon Bloom, SSAO corner occlusion, and real-time Path Tracing.
 
-### 🎮 Getting Started
+---
+
+### 🛠️ Build & Development Commands
 
 ```bash
+# 1. Install dependencies
 npm install
+
+# 2. Start local dev server (Port 3000)
 npm run dev
+
+# 3. Compile web bundle for production
+npm run build
 ```
 
-### ⌨️ Controls
-
-- **W / ↑**: Accelerate
-- **S / ↓**: Reverse / Brake
-- **A / ←**: Turn Left
-- **D / →**: Turn Right
-- **Space**: Handbrake
-- **C**: Toggle camera (between 3D Chase and 2.5D top-down)
-- **E**: Enter / Exit vehicle (when close to a car or grounded plane)
-- *For touchscreens, use the virtual controls at the bottom of the screen.*
-
 ---
 
-### 🚀 Features Added
+### 📱 Android APK Build via PowerShell (Without Android Studio)
 
-This prototype has been deeply enhanced with interactive city physics and Traffic Light AI:
+To build the debug `.apk` directly from PowerShell:
 
-#### 1. 🚦 Intelligent Traffic Lights and 3D Poles
-- **Real-Corner Light Signaling**: Real 3D traffic light poles were added at four major central intersections (`X = -48` or `X = 48` intersecting with `Z = 0` or `Z = 48`).
-- **Automatic State Cycles (12s)**: Signal colors automatically cycle every 6s per lane (including beautiful emissive Yellow warning transition lights).
-- **Traffic Stopping AI**: Civilian vehicles detect closed signals (Red/Yellow) up to 18m away and smoothly slow down to a halt. The car-following algorithm queues subsequent vehicles in neat rows. Once the light turns green, they automatically resume cruising.
-- **Clean UI**: In compliance with the visual guidelines, there are no timers, progress bars, or countdowns displayed on the screen for the player.
+1. **Build web assets:**
+   ```powershell
+   npm run build
+   ```
 
-#### 2. 🌊 Urban Lagoons and Water Buoyancy
-- **Vibrant Royal Blue Water (#2563eb)**: Urban lagoons feature a solid, beautiful royal blue color, fully opaque to prevent the underlying grass from spoiling its color.
-- **Buoyancy and Movement Freeze**: Driving any vehicle into a water body blocks accelerator/steering controls. The car floats with a gentle, static bobbing animation.
-- **Auto-Ejection in Water**: Falling into rivers or lagoons automatically throws the stick-figure player out of the vehicle through the side (left or right), allowing them to swim back to dry land.
-- **Breath/Drowning System (30s)**: Swimming triggers a visual oxygen progress bar counting down from 30s to 0s. If the player fails to reach dry land in time, the game ends due to drowning.
+2. **Sync assets into native Android container:**
+   ```powershell
+   npx cap sync
+   ```
 
-#### 3. 🚚 Inflammable Fuel Tanker Mission & Auto-Ejection
-- **Tanker Truck Design**: Features a highly detailed cylindrical steel fuel tank, hazard sign diamonds, and hazard stripes.
-- **Garage Auto-Ejection (Mission 2)**: Upon successfully delivering the fuel tanker to the industrial garage, the player is automatically and safely ejected from the cabin to the sidewalk alongside the truck with velocity set to zero, concluding the pursuit natively.
+3. **Assemble the Installation APK with Gradle:**
+   - **Option 1: Release APK (Optimized and Signed for Direct Installation):**
+     ```powershell
+     cd android
+     .\gradlew assembleRelease
+     ```
+     Generated at: `android\app\build\outputs\apk\release\MWC-v1.0-release.apk`
 
-#### 4. 🦍 King Kong Skyscraper & Twin-Engine Plane Aerial Mission
-- **Random Location on Every Match**: Every time a new run begins, the computer randomly selects a different city block to construct the massive Art-Deco Empire State skyscraper (over 110 meters tall, featuring setbacks, pillars, warm illuminated windows, and a blinking aircraft beacon atop its mooring mast).
-- **The Giant Gorilla on the Tower**: Clinging to the observation deck and upper tier of the skyscraper is the colossal King Kong, featuring breathing cycles, mobile limbs, and swatting attacks when aircraft fly close.
-- **Proximity-Triggered Aerial Mission**: Piloting the **Twin-Engine Plane** into the vicinity of the skyscraper (within 95 meters) sounds the alarm and triggers the King Kong aerial boss fight, displaying a dedicated boss HUD.
-- **Twin-Engine Plane Shooting Mode**: Once the mission activates, the plane is armed with dual wing-mounted machine gun cannons. Players can fire rapid-fire streams of armor-piercing bullets by pressing **Space**, **F**, **Enter**, or tapping the on-screen target/shoot button.
-- **50-Hit Resistance Boss Health**: King Kong boasts a durable 50-hit collision resistance. Each direct bullet impact triggers an intense red/white hit-flash on his 3D mesh, mechanical flinch tremors, and spark discharges. The boss health bar dynamically tracks remaining endurance (`X / 50`).
-- **Cinematic Fall & Grand Reward**: Once 50 hits are registered, King Kong releases his grip and plummets in full gravity-driven freefall to the city streets below. Defeating him rewards the player with a celebratory explosion sequence, victory chimes, **+$5,000 cash**, and **+15,000 points**.
-- **GPS Minimap & Radar Tracking**: The skyscraper and the gorilla are tracked in real-time on both the mini-radar and expanded map with a custom `🦍 KING KONG` waypoint.
+   - **Option 2: Debug APK (Development):**
+     ```powershell
+     cd android
+     .\gradlew assembleDebug
+     ```
+     Generated at: `android\app\build\outputs\apk\debug\MWC-v1.0-debug.apk`
 
-#### 6. 🛠️ Optimizations, New Physics & UI Enhancements
-- **Low Graphics Mode (Culled Meshing)**: Combines *Culled Meshing* with *Instanced Mesh* rendering. This optimization removes hidden bottom faces of all procedural building blocks to achieve maximum frame rates and ultra-fluid gameplay.
-- **High Graphics Mode (Rounded & Hatchback)**: The High quality mode renders vehicles with smooth rounded corners using *RoundedBoxGeometry*. Additionally, all non-pickup vehicles feature a sporty slanted hatchback rear profile rather than flat vertical 90-degree boxes.
-- **3D Flight Collision Resolution (Plane)**: The twin-engine plane now features robust 3D collision sliding resolution. The aircraft slides and bounces correctly against skyscraper walls instead of clipping through them, while still allowing the player to fly freely above the building rooftops.
-- **Foot Physics against Cop Units**: When playing on foot as the stick figure, patrol cars physically collide and push the character away without clipping through, bumping the player with sparks and without applying direct damage.
-- **Simplified Profile**: Guest players now see a clean `ANONYMOUS` tag in the header bar.
-
-#### 7. 🏎️ Desert Dunes Oval Rally Circuit (6 Cars, Divider Grille, Arches & Turbos)
-- **Massive Desert Oval Racetrack**: Built a high-octane 580m oval rally circuit in the East sand dunes (`X = 1100, Z = 0`). The arena is leveled with compact dirt/gravel ground, red-and-white racing curbs along curves, and 4 high-powered LED floodlight towers.
-- **Central Security Divider Grille**: Features a solid central metallic security fence (`X = 1100`) with steel posts and heavy-duty wire mesh between opposing lanes, physically preventing cars from cutting corners or turning into oncoming traffic.
-- **Dynamic 6-Car Rally Race**: 6 AI competitors with unique custom liveries and numbers (#1 Red Apex, #7 Blue Thunder, #23 Green Viper, #44 Orange Blaze, #88 Desert Gold, #99 Cyber Violet) compete for 1st place in real-time with dynamic overtaking, slipstreaming, and drifting with dust trails.
-- **Glowing Score Arches**: 4 illuminated neon overhead arches (`+500 PTS`) grant instant score points and cash rewards with celebratory chimes and golden spark showers when driven through.
-- **3D Floating Turbo Boost Pickups**: Hovering, spinning turbo canisters with dual thruster nozzles and lightning emblems positioned on the track grant instant nitro surges and rocket flame exhaust trails to both the player and AI rally cars.
-- **Paddock Car & Player Race Participation**: An electric blue 7th WRC rally car is parked in the paddock pit lane for the player to commandeer with **E**, or the player can race with their current vehicle. A tactical HUD tracks real-time race standing (`X / 7`) and lap counts, awarding **+$5,000** and **+10,000 PTS** for winning a 3-lap championship.
-- **GPS Minimap & Radar Tracking**: The oval circuit, central divider, all 6 active competitors, score arches, and turbo pickups are clearly rendered on the mini-radar and expanded map.
-
----
-
-### 📂 Game Systems Architecture
-
-- `src/game/Car.ts`: 3D meshes, vehicle physics, collisions, bicycle rider animation, and WRC Rally car model.
-- `src/game/RallyRace.ts`: Dune oval circuit, 6 AI rally competitors, central security grille, score arches, and turbo boost pickups.
-- `src/game/City.ts`: Procedural generation of avenues, blocks, sidewalks, buildings, coins, lagoons, and 3D traffic lights.
-- `src/game/Traffic.ts`: Civilian traffic AI, car-following, emergency evasion, and traffic light stopping logic.
-- `src/game/Pedestrians.ts`: Active wandering pedestrians that can dodge oncoming vehicles.
-- `src/game/Minimap.ts`: Radar HUD showing rivers, roads, parks, lagoons, active mission waypoints, and the desert dunes rally circuit.
-- `src/game/Game.ts`: Game loop coordinator, camera states, HUD overlays, active pursuits, and mission handlers.
+> **Note on "Invalid Package / Failed to read metadata from base.apk" Error:**
+> Android strictly requires all release APK packages to be digitally signed with v1/v2/v3 signing schemes. The project's `android/app/build.gradle` is pre-configured with `signingConfig signingConfigs.debug` on the release block to enable immediate installation on any physical device for testing without needing manual keystores. If an older version of the app is already installed on the phone, uninstall it first to avoid signature collision errors.

@@ -22,7 +22,6 @@ export class TimeTrial {
   private readonly scene: THREE.Scene
   private readonly sound: Sound
   private readonly sparks: Sparks
-  private readonly city: City
 
   readonly root = new THREE.Group()
 
@@ -43,7 +42,6 @@ export class TimeTrial {
 
   private lastBeepSecond = -1
   private archCooldownTimer = 0
-  private graphicsMode: GraphicsDesignMode = 'medium'
 
   // Linha de navegação no chão das ruas
   private readonly guideLineGroup = new THREE.Group()
@@ -59,11 +57,10 @@ export class TimeTrial {
   onGameOver?: (reason: string) => void
   onToast?: (msg: string) => void
 
-  constructor(scene: THREE.Scene, sound: Sound, sparks: Sparks, city: City) {
+  constructor(scene: THREE.Scene, sound: Sound, sparks: Sparks, _city: City) {
     this.scene = scene
     this.sound = sound
     this.sparks = sparks
-    this.city = city
 
     this.scene.add(this.root)
     this.root.add(this.guideLineGroup)
@@ -74,7 +71,6 @@ export class TimeTrial {
   }
 
   setGraphicsMode(mode: GraphicsDesignMode): void {
-    this.graphicsMode = mode
     const isUltra = mode === 'ultra'
     const isHigh = mode === 'high'
     const boost = isUltra ? 3.0 : isHigh ? 2.2 : 1.2
@@ -507,7 +503,7 @@ export class TimeTrial {
   }
 
   // Loop de atualização no frame
-  update(dt: number, playerPos: THREE.Vector3, inVehicle: boolean, playerSpeed: number): void {
+  update(dt: number, playerPos: THREE.Vector3, inVehicle: boolean, _playerSpeed: number): void {
     if (this.archCooldownTimer > 0) {
       this.archCooldownTimer -= dt
     }

@@ -183,6 +183,7 @@ import { Sparks } from './Sparks'
 import { Sound } from './Sound'
 import { StickPerson } from './StickPerson'
 import { Tank } from './Tank'
+import { TimeTrial } from './TimeTrial'
 import { Traffic } from './Traffic'
 import { WantedSystem } from './WantedSystem'
 import { ZombieArena, type UpgradeCard } from './ZombieArena'
@@ -418,6 +419,17 @@ export class Game {
   private readonly zombieReplayHardBtn = document.querySelector<HTMLButtonElement>('#zombie-replay-hard-btn')
   private readonly zombieResultExitBtn = document.querySelector<HTMLButtonElement>('#zombie-result-exit-btn')
 
+  // 3.8. Corrida Contra o Tempo (3 etapas pelas ruas com arcos e cronômetro)
+  private readonly timeTrial: TimeTrial
+  private readonly timeTrialPanel = document.querySelector<HTMLElement>('#time-trial-panel')
+  private readonly timeTrialStageLabel = document.querySelector<HTMLElement>('#time-trial-stage-label')
+  private readonly timeTrialTimerVal = document.querySelector<HTMLElement>('#time-trial-timer-val')
+  private readonly timeTrialFill = document.querySelector<HTMLElement>('#time-trial-fill')
+  private readonly timeTrialResultBanner = document.querySelector<HTMLElement>('#time-trial-result-banner')
+  private readonly timeTrialResultTitle = document.querySelector<HTMLElement>('#time-trial-result-title')
+  private readonly timeTrialResultSubtitle = document.querySelector<HTMLElement>('#time-trial-result-subtitle')
+  private readonly timeTrialCloseBannerBtn = document.querySelector<HTMLButtonElement>('#time-trial-close-banner-btn')
+
   // 4. Auth & Progression (Google & Play Games via users.ts)
   private readonly authButton = document.querySelector<HTMLButtonElement>('#auth-button')
   private readonly authModal = document.querySelector<HTMLElement>('#auth-modal')
@@ -466,7 +478,7 @@ export class Game {
   private readonly accelOptionsContainer = document.querySelector<HTMLElement>('#accel-options-container')
   private readonly controlOptionsContainer = document.querySelector<HTMLElement>('#control-options-container')
   private readonly langOptionsContainer = document.querySelector<HTMLElement>('#lang-options-container')
-  private currentGameLang = 'pt'
+  private currentGameLang: 'pt' | 'en' | 'ru' | 'zh' = 'pt'
   private readonly mobileControlsEl = document.querySelector<HTMLElement>('.mobile-controls')
   private readonly touchZoneLeft = document.querySelector<HTMLElement>('#touch-zone-left')
   private readonly touchZoneRight = document.querySelector<HTMLElement>('#touch-zone-right')
@@ -723,6 +735,11 @@ export class Game {
     this.zombieArena.setGraphicsMode(this.graphicsMode)
     this.initZombieArena()
 
+    // Inicialização da Corrida Contra o Tempo
+    this.timeTrial = new TimeTrial(this.scene, this.sound, this.sparks, this.city)
+    this.timeTrial.setGraphicsMode(this.graphicsMode)
+    this.initTimeTrial()
+
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
     this.city.ensureAround(this.player.root.position.z, this.player.root.position.x, true)
     this.pedestrians.ensureAround(this.player.root.position.z)
@@ -770,7 +787,12 @@ export class Game {
     this.applyGraphicsMode(this.graphicsMode)
 
     // Load and apply game language preference
-    this.currentGameLang = localStorage.getItem('smash_lang') || 'pt'
+    const savedLang = localStorage.getItem('smash_lang')
+    if (savedLang === 'pt' || savedLang === 'en' || savedLang === 'ru' || savedLang === 'zh') {
+      this.currentGameLang = savedLang
+    } else {
+      this.currentGameLang = 'pt'
+    }
     this.applyLanguage()
 
     // Collapse contracts panel on mobile by default on start
@@ -1053,6 +1075,7 @@ export class Game {
     for (const heli of this.helicopters) heli.setGraphicsMode(mode)
     if (this.plane) this.plane.setGraphicsMode(mode)
     if (this.zombieArena) this.zombieArena.setGraphicsMode(mode)
+    if (this.timeTrial) this.timeTrial.setGraphicsMode(mode)
   }
 
   private createHud(): void {
@@ -1306,16 +1329,35 @@ export class Game {
         })
       }
 
-      const isPt = this.currentGameLang === 'pt'
       let modeDesc = ''
       if (graphicsVal === 'low') {
-        modeDesc = isPt ? 'BAIXA: Low Poly sem iluminação, sombras, detalhes nem névoa' : 'LOW: Low Poly without lighting, shadows, details or fog'
+        modeDesc = this.getLangText(
+          'BAIXA: Low Poly sem iluminação, sombras, detalhes nem névoa',
+          'LOW: Low Poly without lighting, shadows, details or fog',
+          'НИЗКАЯ: Low Poly без освещения, теней, деталей и тумана',
+          '低画质: 无光照、阴影、细节与雾效的低多边形优化模式'
+        )
       } else if (graphicsVal === 'medium') {
-        modeDesc = isPt ? 'MÉDIA: Voxels com Greeble clássico' : 'MEDIUM: Classic Greeble Voxels'
+        modeDesc = this.getLangText(
+          'MÉDIA: Voxels com Greeble clássico',
+          'MEDIUM: Classic Greeble Voxels',
+          'СРЕДНЯЯ: Классический Greeble воксели',
+          '中画质: 经典Greeble体素风格'
+        )
       } else if (graphicsVal === 'high') {
-        modeDesc = isPt ? 'ALTA: Greeble High Poly + Merged Geo + SSAO' : 'HIGH: High Poly Greeble + Merged Geo + SSAO'
+        modeDesc = this.getLangText(
+          'ALTA: Greeble High Poly + Merged Geo + SSAO',
+          'HIGH: High Poly Greeble + Merged Geo + SSAO',
+          'ВЫСОКАЯ: High Poly Greeble + Merged Geo + SSAO',
+          '高画质: 高面Greeble体素 + 几何合并 + 环境光遮蔽'
+        )
       } else {
-        modeDesc = isPt ? 'ULTRA ⚡: Bloom neon, Lightmaps HD, Reflexos PBR e Voxels Arredondados' : 'ULTRA ⚡: Neon Bloom, HD Lightmaps, PBR Reflections & Rounded Voxels'
+        modeDesc = this.getLangText(
+          'ULTRA ⚡: Bloom neon, Lightmaps HD, Reflexos PBR e Voxels Arredondados',
+          'ULTRA ⚡: Neon Bloom, HD Lightmaps, PBR Reflections & Rounded Voxels',
+          'УЛЬТРА ⚡: Неоновый Bloom, HD карты света, PBR отражения и сглаженные воксели',
+          'ULTRA ⚡: 霓虹辉光、HD光照贴图、PBR物理反射与圆角体素'
+        )
       }
       this.showToast(`🎨 ${modeDesc}`)
     }
@@ -1357,7 +1399,7 @@ export class Game {
       this.langOptionsContainer?.querySelectorAll('.settings-option-btn').forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
       const langVal = btn.getAttribute('data-lang')
-      if (langVal === 'pt' || langVal === 'en') {
+      if (langVal === 'pt' || langVal === 'en' || langVal === 'ru' || langVal === 'zh') {
         this.currentGameLang = langVal
         localStorage.setItem('smash_lang', langVal)
         this.applyLanguage()
@@ -1543,6 +1585,9 @@ export class Game {
     this.rallyRacePanel?.classList.add('hidden')
     this.pursuit.setRallyMissionActive(false)
     this.stopZombieArenaMission()
+    this.timeTrial.setIdleState()
+    this.timeTrialPanel?.classList.add('hidden')
+    this.timeTrialResultBanner?.classList.add('hidden')
     this.updateVehicleButton()
     this.startOverlay.classList.add('hidden')
     this.endOverlay.classList.add('hidden')
@@ -2778,6 +2823,19 @@ export class Game {
     this.updateRampageMission(dt)
     // 4. Corrida de Rally nas Dunas (6 Carros)
     this.updateRallyRace(dt)
+
+    // 4.5. Corrida Contra o Tempo (3 etapas pelas ruas com arcos e cronômetro)
+    if (this.timeTrial.active) {
+      this.timeTrialPanel?.classList.remove('hidden')
+    } else {
+      this.timeTrialPanel?.classList.add('hidden')
+    }
+    this.timeTrial.update(
+      dt,
+      this.inVehicle ? this.player.root.position : this.character.root.position,
+      this.inVehicle,
+      this.inVehicle ? this.player.speed : this.character.speed
+    )
 
     // 5. Arena de Sobrevivência contra Zumbis e Monstros
     const nearZombieArena = this.city.isNearZombieArenaEntrance(actorPosition.x, actorPosition.z)
@@ -4219,15 +4277,26 @@ export class Game {
     this.cash = user.cash
 
     if (this.authButton) {
-      const isPt = this.currentGameLang === 'pt'
       if (user.isGuest) {
-        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${isPt ? 'ANÔNIMO' : 'ANONYMOUS'}</span>`
+        const guestText = this.getLangText('ANÔNIMO', 'ANONYMOUS', 'АНОНИМ', '访客')
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${guestText}</span>`
         this.authButton.classList.remove('connected')
-        this.authButton.title = 'Modo Anônimo (Sem salvamento). Clique para entrar com Google ou Play Games.'
+        this.authButton.title = this.getLangText(
+          'Modo Anônimo (Sem salvamento). Clique para entrar com Google ou Play Games.',
+          'Guest Mode (No cloud save). Click to sign in with Google or Play Games.',
+          'Анонимный режим (Без сохранения). Нажмите для входа через Google или Play Games.',
+          '访客模式（未云端保存）。点击通过 Google 或 Play Games 登录。'
+        )
       } else {
-        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${user.displayName.substring(0, 14)} [${isPt ? 'NV' : 'LV'} ${user.level}]</span>`
+        const lvPrefix = this.getLangText('NV', 'LV', 'УР', '等级')
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${user.displayName.substring(0, 14)} [${lvPrefix} ${user.level}]</span>`
         this.authButton.classList.add('connected')
-        this.authButton.title = `Conectado como ${user.displayName} (${user.provider}). Clique para ver perfil e sincronização.`
+        this.authButton.title = this.getLangText(
+          `Conectado como ${user.displayName} (${user.provider}). Clique para ver perfil e sincronização.`,
+          `Connected as ${user.displayName} (${user.provider}). Click to view profile and synchronization.`,
+          `Подключено как ${user.displayName} (${user.provider}). Нажмите для просмотра профиля и синхронизации.`,
+          `已登录为 ${user.displayName} (${user.provider})。点击查看档案与同步。`
+        )
       }
     }
 
@@ -4394,9 +4463,14 @@ export class Game {
     }
   }
 
-  private updateMissionCards(): void {
-    const isPt = this.currentGameLang === 'pt'
+  public getLangText(pt: string, en: string, ru: string, zh: string): string {
+    if (this.currentGameLang === 'en') return en
+    if (this.currentGameLang === 'ru') return ru
+    if (this.currentGameLang === 'zh') return zh
+    return pt
+  }
 
+  private updateMissionCards(): void {
     if (this.activeContractsCountEl) {
       this.activeContractsCountEl.textContent = this.missions.active.length.toString()
     }
@@ -4411,7 +4485,12 @@ export class Game {
       if (activeMissions.length === 0) {
         const empty = document.createElement('div')
         empty.className = 'mission-empty'
-        empty.textContent = isPt ? 'TODAS AS MISSÕES FORAM CONCLUÍDAS! PARABÉNS!' : 'ALL CONTRACTS HAVE BEEN COMPLETED! CONGRATULATIONS!'
+        empty.textContent = this.getLangText(
+          'TODAS AS MISSÕES FORAM CONCLUÍDAS! PARABÉNS!',
+          'ALL CONTRACTS HAVE BEEN COMPLETED! CONGRATULATIONS!',
+          'ВСЕ КОНТРАКТЫ ВЫПОЛНЕНЫ! ПОЗДРАВЛЯЕМ!',
+          '所有任务已全部完成！恭喜！'
+        )
         this.missionList.appendChild(empty)
         return
       }
@@ -4437,7 +4516,12 @@ export class Game {
       if (completedMissions.length === 0) {
         const empty = document.createElement('div')
         empty.className = 'mission-empty'
-        empty.textContent = isPt ? 'NENHUMA MISSÃO CONCLUÍDA AINDA.\nCUMPRA OS CONTRATOS ATIVOS PELA CIDADE!' : 'NO COMPLETED CONTRACTS YET.\nFULFILL ACTIVE CONTRACTS AROUND THE CITY!'
+        empty.textContent = this.getLangText(
+          'NENHUMA MISSÃO CONCLUÍDA AINDA.\nCUMPRA OS CONTRATOS ATIVOS PELA CIDADE!',
+          'NO COMPLETED CONTRACTS YET.\nFULFILL ACTIVE CONTRACTS AROUND THE CITY!',
+          'ПОКА НЕТ ВЫПОЛНЕННЫХ КОНТРАКТОВ.\nВЫПОЛНЯЙТЕ АКТИВНЫЕ ЗАДАНИЯ В ГОРОДЕ!',
+          '暂无已完成的任务。\n快去城市中执行进行中的任务吧！'
+        )
         this.missionList.appendChild(empty)
         return
       }
@@ -4446,12 +4530,13 @@ export class Game {
         const card = document.createElement('div')
         card.className = 'mission completed'
         const title = this.getTranslatedTitle(mission.id, mission.title)
+        const completedLabel = this.getLangText('CONCLUÍDO', 'COMPLETED', 'ВЫПОЛНЕНО', '已完成')
         card.innerHTML = `
           <div class="mission-title"><span style="color:#4ade80;font-weight:bold;margin-right:5px;">✓</span>${title}</div>
           <div class="mission-reward" style="color:#4ade80;">+$${mission.reward}</div>
           <div class="mission-progress">
             <div class="mission-track"><div class="mission-fill" style="width:100%;background:#4ade80;"></div></div>
-            <span class="mission-count" style="color:#4ade80;font-weight:bold;">${isPt ? 'CONCLUÍDO' : 'COMPLETED'}</span>
+            <span class="mission-count" style="color:#4ade80;font-weight:bold;">${completedLabel}</span>
           </div>
         `
         this.missionList.appendChild(card)
@@ -4460,10 +4545,10 @@ export class Game {
   }
 
   private getTranslatedTitle(id: string, defaultTitle: string): string {
-    const isEn = this.currentGameLang === 'en'
-    if (!isEn) return defaultTitle
+    if (this.currentGameLang === 'pt') return defaultTitle
 
     const enTitles: Record<string, string> = {
+      'time-trial-run': 'Time Trial: Complete all 3 stages through city streets',
       'taxi-fares': 'Crazy Taxi: Take 3 passengers with radical stunts',
       'speed-bomb': 'Speed Bomb: Stay above 75 km/h for 45s in the Bomb Car',
       'rampage-police': 'Rampage Mode: Destroy 15 police cars in 60s',
@@ -4487,82 +4572,149 @@ export class Game {
       'marathon': 'Survive for 100 seconds in the city',
     }
 
-    return enTitles[id] || defaultTitle
+    const ruTitles: Record<string, string> = {
+      'time-trial-run': 'Гонка со временем: Пройдите все 3 этапа по улицам города',
+      'taxi-fares': 'Безумное такси: Развезите 3 пассажиров с трюками',
+      'speed-bomb': 'Скоростная бомба: Держите скорость выше 75 км/ч 45 сек',
+      'rampage-police': 'Режим ярости: Уничтожьте 15 полицейских машин за 60 сек',
+      'ramp-jumps': 'Совершите 3 трюковых прыжка с рампы автовоза',
+      'car-haul': 'Соберите 5 автомобилей с помощью автовоза',
+      'aerial-ace': 'Пролетите через 7 парящих колец (самолёт)',
+      'king-kong': 'Победите босса Кинг-Конга на крыше башни',
+      'monster-crush': 'Раздавите 10 машин на Монстр-траке',
+      'tanker-fuel': 'Доставьте горючее топливо на заправочную станцию',
+      'bus-commuters': 'Подберите 10 пассажиров на автобусе',
+      'rally-dunes': 'Ралли по дюнам: Займите 1-е или 2-е место на трассе',
+      'zombie-arena': 'Арена выживания: Переживите все 4 волны зомби и монстров',
+      'stretch-1': 'Проедьте 350 метров по городу',
+      'cash-1': 'Соберите 4 разбросанных жетона',
+      'survivor-1': 'Продержитесь 45 секунд во время побега от полиции',
+      'heat-1': 'Достигните 3-го уровня розыска',
+      'close-pass': 'Уйдите от столкновения с 3 полицейскими машинами',
+      'stretch-2': 'Проедьте 900 метров во время погони',
+      'heat-2': 'Достигните 6-го уровня розыска',
+      'big-haul': 'Соберите 9 жетонов в городе',
+      'marathon': 'Продержитесь 100 секунд в городе',
+    }
+
+    const zhTitles: Record<string, string> = {
+      'time-trial-run': '限时竞速：穿越城市街道完成全部3个赛段',
+      'taxi-fares': '疯狂出租车：用特技动作接送3名乘客',
+      'speed-bomb': '极速炸弹：在炸弹车中保持75公里/小时以上达45秒',
+      'rampage-police': '狂暴模式：在60秒内摧毁15辆警车',
+      'ramp-jumps': '从轿运车坡道完成3次特技飞跃',
+      'car-haul': '使用轿运车收集5辆汽车',
+      'aerial-ace': '驾驶飞机穿过7个空中光环',
+      'king-kong': '击败摩天大楼顶端的金刚Boss',
+      'monster-crush': '开怪兽卡车碾碎10辆汽车',
+      'tanker-fuel': '将易燃燃料运送到加油站',
+      'bus-commuters': '驾驶公交车载运10名乘客',
+      'rally-dunes': '沙丘拉力赛：在电竞赛道取得前两名',
+      'zombie-arena': '生存竞技场：在4波丧尸与怪物袭击中幸存',
+      'stretch-1': '在城市中行驶350米',
+      'cash-1': '收集4枚散落的金币',
+      'survivor-1': '摆脱警方追捕生存45秒',
+      'heat-1': '通缉等级达到3星',
+      'close-pass': '惊险避开3辆警车',
+      'stretch-2': '在追逐中行驶900米',
+      'heat-2': '通缉等级达到6星',
+      'big-haul': '在城市中收集9枚金币',
+      'marathon': '在城市中存活100秒',
+    }
+
+    if (this.currentGameLang === 'en') return enTitles[id] || defaultTitle
+    if (this.currentGameLang === 'ru') return ruTitles[id] || defaultTitle
+    if (this.currentGameLang === 'zh') return zhTitles[id] || defaultTitle
+    return defaultTitle
   }
 
   private applyLanguage(): void {
-    const isPt = this.currentGameLang === 'pt'
     const user = usersDB.getCurrentUser()
 
     // Topbar buttons
     const statusBtn = document.querySelector<HTMLButtonElement>('#status-button')
-    if (statusBtn) statusBtn.innerHTML = `<span class="btn-icon">📊</span><span class="btn-text"> ${isPt ? 'STATUS' : 'STATUS'}</span>`
-    if (this.garageBtn) this.garageBtn.innerHTML = `<span class="btn-icon">🚗</span><span class="btn-text"> ${isPt ? 'GARAGEM' : 'GARAGE'}</span>`
-    if (this.shopBtn) this.shopBtn.innerHTML = `<span class="btn-icon">🏪</span><span class="btn-text"> ${isPt ? 'LOJA' : 'SHOP'}</span>`
-    if (this.leaderboardBtn) this.leaderboardBtn.innerHTML = `<span class="btn-icon">🏆</span><span class="btn-text"> ${isPt ? 'RANKING' : 'LEADERBOARD'}</span>`
-    if (this.settingsButton) this.settingsButton.innerHTML = `<span class="btn-icon">⚙️</span><span class="btn-text"> ${isPt ? 'AJUSTES' : 'SETTINGS'}</span>`
-    if (this.pauseSettingsBtn) this.pauseSettingsBtn.textContent = isPt ? '⚙️ CONFIGURAÇÕES' : '⚙️ SETTINGS'
+    if (statusBtn) statusBtn.innerHTML = `<span class="btn-icon">📊</span><span class="btn-text"> ${this.getLangText('STATUS', 'STATUS', 'СТАТУС', '状态')}</span>`
+    if (this.garageBtn) this.garageBtn.innerHTML = `<span class="btn-icon">🚗</span><span class="btn-text"> ${this.getLangText('GARAGEM', 'GARAGE', 'ГАРАЖ', '车库')}</span>`
+    if (this.shopBtn) this.shopBtn.innerHTML = `<span class="btn-icon">🏪</span><span class="btn-text"> ${this.getLangText('LOJA', 'SHOP', 'МАГАЗИН', '商店')}</span>`
+    if (this.leaderboardBtn) this.leaderboardBtn.innerHTML = `<span class="btn-icon">🏆</span><span class="btn-text"> ${this.getLangText('RANKING', 'LEADERBOARD', 'РЕЙТИНГ', '排行榜')}</span>`
+    if (this.settingsButton) this.settingsButton.innerHTML = `<span class="btn-icon">⚙️</span><span class="btn-text"> ${this.getLangText('AJUSTES', 'SETTINGS', 'НАСТРОЙКИ', '设置')}</span>`
+    if (this.pauseSettingsBtn) this.pauseSettingsBtn.textContent = this.getLangText('⚙️ CONFIGURAÇÕES', '⚙️ SETTINGS', '⚙️ НАСТРОЙКИ', '⚙️ 设置')
+
     if (this.authButton) {
       if (user && user.isGuest) {
-        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${isPt ? 'ANÔNIMO' : 'ANONYMOUS'}</span>`
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${this.getLangText('ANÔNIMO', 'ANONYMOUS', 'АНОНИМ', '访客')}</span>`
       } else if (user && user.displayName) {
-        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${user.displayName.substring(0, 14)} [${isPt ? 'NV' : 'LV'} ${user.level}]</span>`
+        const lvPrefix = this.getLangText('NV', 'LV', 'УР', '等级')
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${user.displayName.substring(0, 14)} [${lvPrefix} ${user.level}]</span>`
       } else {
-        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${isPt ? 'CONECTAR' : 'CONNECT'}</span>`
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${this.getLangText('CONECTAR', 'CONNECT', 'ВОЙТИ', '登录')}</span>`
       }
     }
 
     // Run Stats labels
     const levelLabelEl = document.querySelector('.level-stat .stat-label')
-    if (levelLabelEl) levelLabelEl.textContent = isPt ? 'NÍVEL' : 'LEVEL'
+    if (levelLabelEl) levelLabelEl.textContent = this.getLangText('NÍVEL', 'LEVEL', 'УРОВЕНЬ', '等级')
     
     if (this.levelValue && user) {
-      this.levelValue.textContent = `${isPt ? 'NV' : 'LV'} ${user.level}`
+      const lvPrefix = this.getLangText('NV', 'LV', 'УР', '等级')
+      this.levelValue.textContent = `${lvPrefix} ${user.level}`
     }
 
     const distanceLabelEl = document.querySelector('.run-stats .stat:nth-child(3) .stat-label')
-    if (distanceLabelEl) distanceLabelEl.textContent = isPt ? 'DISTÂNCIA' : 'DISTANCE'
+    if (distanceLabelEl) distanceLabelEl.textContent = this.getLangText('DISTÂNCIA', 'DISTANCE', 'ДИСТАНЦИЯ', '距离')
 
     const timeLabelEl = document.querySelector('.run-stats .stat:nth-child(4) .stat-label')
-    if (timeLabelEl) timeLabelEl.textContent = isPt ? 'TEMPO' : 'TIME'
+    if (timeLabelEl) timeLabelEl.textContent = this.getLangText('TEMPO', 'TIME', 'ВРЕМЯ', '时间')
 
     const cashLabelEl = document.querySelector('.cash-stat .stat-label')
-    if (cashLabelEl) cashLabelEl.textContent = isPt ? 'DINHEIRO' : 'CASH'
+    if (cashLabelEl) cashLabelEl.textContent = this.getLangText('DINHEIRO', 'CASH', 'ДЕНЬГИ', '现金')
 
     // Wanted panel
     const wantedHeadingSpan = document.querySelector('.wanted-panel .wanted-heading span:nth-child(2)')
-    if (wantedHeadingSpan) wantedHeadingSpan.textContent = isPt ? 'PROCURADO' : 'WANTED'
+    if (wantedHeadingSpan) wantedHeadingSpan.textContent = this.getLangText('PROCURADO', 'WANTED', 'РОЗЫСК', '通缉')
 
     const detentionHeadingSpan = document.querySelector('.capture-heading span:nth-child(1)')
-    if (detentionHeadingSpan) detentionHeadingSpan.textContent = isPt ? 'RISCO DE DETENÇÃO' : 'DETENTION RISK'
+    if (detentionHeadingSpan) detentionHeadingSpan.textContent = this.getLangText('RISCO DE DETENÇÃO', 'DETENTION RISK', 'РИСК АРЕСТА', '被捕风险')
 
     // Contracts panel
     const contractsHeadingSpan = document.querySelector('.panel-heading .heading-left span:nth-child(2)')
-    if (contractsHeadingSpan) contractsHeadingSpan.textContent = isPt ? 'CONTRATOS' : 'CONTRACTS'
+    if (contractsHeadingSpan) contractsHeadingSpan.textContent = this.getLangText('CONTRATOS', 'CONTRACTS', 'КОНТРАКТЫ', '任务')
 
     const tabActiveBtn = document.querySelector('#contracts-tab-active')
     if (tabActiveBtn) {
       const count = document.querySelector('#active-contracts-count')?.textContent || '0'
-      tabActiveBtn.innerHTML = isPt ? `ATIVAS (<span id="active-contracts-count">${count}</span>)` : `ACTIVE (<span id="active-contracts-count">${count}</span>)`
+      const label = this.getLangText('ATIVAS', 'ACTIVE', 'АКТИВНЫЕ', '进行中')
+      tabActiveBtn.innerHTML = `${label} (<span id="active-contracts-count">${count}</span>)`
     }
     const tabCompletedBtn = document.querySelector('#contracts-tab-completed')
     if (tabCompletedBtn) {
       const count = document.querySelector('#completed-contracts-count')?.textContent || '0'
-      tabCompletedBtn.innerHTML = isPt ? `CONCLUÍDAS (<span id="completed-contracts-count">${count}</span>)` : `COMPLETED (<span id="completed-contracts-count">${count}</span>)`
+      const label = this.getLangText('CONCLUÍDAS', 'COMPLETED', 'ВЫПОЛНЕННЫЕ', '已完成')
+      tabCompletedBtn.innerHTML = `${label} (<span id="completed-contracts-count">${count}</span>)`
     }
 
     // Start screen overlay
     const startKicker = document.querySelector('#start-overlay .title-kicker')
-    if (startKicker) startKicker.innerHTML = isPt ? '<span></span> UMA CIDADE. DEZ NÍVEIS DE CAOS.' : '<span></span> ONE CITY. TEN LEVELS OF CHAOS.'
+    if (startKicker) {
+      startKicker.innerHTML = this.getLangText(
+        '<span></span> UMA CIDADE. DEZ NÍVEIS DE CAOS.',
+        '<span></span> ONE CITY. TEN LEVELS OF CHAOS.',
+        '<span></span> ОДИН ГОРОД. ДЕСЯТЬ УРОВНЕЙ ХАОСА.',
+        '<span></span> 一座城市。十重混乱。'
+      )
+    }
 
     const startTitle = document.querySelector('#start-overlay h1')
-    if (startTitle) startTitle.innerHTML = isPt ? 'MOST<br><em>WANTED CAR.</em>' : 'MOST<br><em>WANTED CAR.</em>'
+    if (startTitle) startTitle.innerHTML = 'MOST<br><em>WANTED CAR.</em>'
 
     const startIntro = document.querySelector('#start-overlay .intro-copy')
     if (startIntro) {
-      startIntro.innerHTML = isPt
-        ? 'Pegue a estrada com carro ou decole com o avião bimotor ou com o transformer, despiste a polícia e sobreviva!'
-        : 'Hit the road with a car or take off with the twin-engine plane or transformer, outrun the police and survive!'
+      startIntro.innerHTML = this.getLangText(
+        'Pegue a estrada com carro ou decole com o avião bimotor ou com o transformer, despiste a polícia e sobreviva!',
+        'Hit the road with a car or take off with the twin-engine plane or transformer, outrun the police and survive!',
+        'Гоняйте на машине или взлетайте на двухмоторном самолёте и трансформере, уходите от полиции и выживайте!',
+        '驾驶赛车飞驰或操控双发飞机与变形机甲升空，甩开警方追捕并生存下去！'
+      )
     }
 
     const startDetails = document.querySelector('#start-overlay .start-details')
@@ -4571,118 +4723,239 @@ export class Game {
     }
 
     const startButton = document.querySelector('#start-button')
-    if (startButton) startButton.innerHTML = isPt ? 'INICIAR PERSEGUIÇÃO <span>↗</span>' : 'START PURSUIT <span>↗</span>'
+    if (startButton) {
+      startButton.innerHTML = this.getLangText(
+        'INICIAR PERSEGUIÇÃO <span>↗</span>',
+        'START PURSUIT <span>↗</span>',
+        'НАЧАТЬ ПОГОНЮ <span>↗</span>',
+        '开始追逐 <span>↗</span>'
+      )
+    }
 
     const controlHint = document.querySelector('#start-overlay .control-hint')
     if (controlHint) {
-      controlHint.innerHTML = isPt
-        ? 'WASD / SETAS DIRIGIR / PILOTAR <i>·</i> E ENTRAR NO CARRO OU AVIÃO <i>·</i> C CÂMERA <i>·</i> M MAPA <i>·</i> P PAUSA'
-        : 'WASD / ARROWS TO DRIVE / PILOT <i>·</i> E TO ENTER CAR OR PLANE <i>·</i> C CAMERA <i>·</i> M MAP <i>·</i> P PAUSE'
+      controlHint.innerHTML = this.getLangText(
+        'WASD / SETAS DIRIGIR / PILOTAR <i>·</i> E ENTRAR NO CARRO OU AVIÃO <i>·</i> C CÂMERA <i>·</i> M MAPA <i>·</i> P PAUSA',
+        'WASD / ARROWS TO DRIVE / PILOT <i>·</i> E TO ENTER CAR OR PLANE <i>·</i> C CAMERA <i>·</i> M MAP <i>·</i> P PAUSE',
+        'WASD / СТРЕЛКИ УПРАВЛЕНИЕ <i>·</i> E СЕСТЬ В МАШИНУ / САМОЛЁТ <i>·</i> C КАМЕРА <i>·</i> M КАРТА <i>·</i> P ПАУЗА',
+        'WASD / 方向键 驾驶/飞行 <i>·</i> E 进入载具 <i>·</i> C 视角 <i>·</i> M 地图 <i>·</i> P 暂停'
+      )
     }
 
     // Paused screen overlay
     const pauseKicker = document.querySelector('#pause-overlay .title-kicker')
-    if (pauseKicker) pauseKicker.innerHTML = isPt ? '<span></span> PAUSA' : '<span></span> PAUSE'
+    if (pauseKicker) {
+      pauseKicker.innerHTML = this.getLangText(
+        '<span></span> PAUSA',
+        '<span></span> PAUSE',
+        '<span></span> ПАУЗА',
+        '<span></span> 暂停'
+      )
+    }
 
     const pauseTitle = document.querySelector('#pause-overlay h2')
-    if (pauseTitle) pauseTitle.innerHTML = isPt ? 'JOGO<br><em>PAUSADO.</em>' : 'GAME<br><em>PAUSED.</em>'
+    if (pauseTitle) {
+      pauseTitle.innerHTML = this.getLangText(
+        'JOGO<br><em>PAUSADO.</em>',
+        'GAME<br><em>PAUSED.</em>',
+        'ИГРА<br><em>НА ПАУЗЕ.</em>',
+        '游戏<br><em>已暂停。</em>'
+      )
+    }
 
     const pauseIntro = document.querySelector('#pause-overlay .intro-copy')
     if (pauseIntro) {
-      pauseIntro.innerHTML = isPt
-        ? 'A perseguição está congelada. Ajuste sua estratégia ou respire fundo antes de retomar a fuga.'
-        : 'The pursuit is frozen. Adjust your strategy or take a deep breath before resuming your escape.'
+      pauseIntro.innerHTML = this.getLangText(
+        'A perseguição está congelada. Ajuste sua estratégia ou respire fundo antes de retomar a fuga.',
+        'The pursuit is frozen. Adjust your strategy or take a deep breath before resuming your escape.',
+        'Погоня приостановлена. Продумайте стратегию перед продолжением побега.',
+        '追捕已暂停。在继续逃亡前调整你的策略或稍作休整。'
+      )
     }
 
     const pauseResumeBtn = document.querySelector('#resume-button')
-    if (pauseResumeBtn) pauseResumeBtn.innerHTML = isPt ? 'CONTINUAR <span>▶</span>' : 'RESUME <span>▶</span>'
+    if (pauseResumeBtn) {
+      pauseResumeBtn.innerHTML = this.getLangText(
+        'CONTINUAR <span>▶</span>',
+        'RESUME <span>▶</span>',
+        'ПРОДОЛЖИТЬ <span>▶</span>',
+        '继续游戏 <span>▶</span>'
+      )
+    }
 
     const pauseRestartBtn = document.querySelector('#restart-button')
-    if (pauseRestartBtn) pauseRestartBtn.innerHTML = isPt ? 'REINICIAR CORRIDA <span>↻</span>' : 'RESTART RUN <span>↻</span>'
+    if (pauseRestartBtn) {
+      pauseRestartBtn.innerHTML = this.getLangText(
+        'REINICIAR CORRIDA <span>↻</span>',
+        'RESTART RUN <span>↻</span>',
+        'НАЧАТЬ ЗАНОВО <span>↻</span>',
+        '重新开始 <span>↻</span>'
+      )
+    }
 
     const pauseControlHint = document.querySelector('#pause-overlay .control-hint')
-    if (pauseControlHint) pauseControlHint.textContent = isPt ? 'PRESSIONE P OU ESC PARA CONTINUAR' : 'PRESS P OR ESC TO CONTINUE'
+    if (pauseControlHint) {
+      pauseControlHint.textContent = this.getLangText(
+        'PRESSIONE P OU ESC PARA CONTINUAR',
+        'PRESS P OR ESC TO CONTINUE',
+        'НАЖМИТЕ P ИЛИ ESC ДЛЯ ПРОДОЛЖЕНИЯ',
+        '按 P 或 ESC 继续'
+      )
+    }
 
     // End screen overlay
     const endKicker = document.querySelector('#end-overlay .title-kicker')
-    if (endKicker) endKicker.innerHTML = isPt ? '<span></span> FIM DE CORRIDA' : '<span></span> GAME OVER'
+    if (endKicker) {
+      endKicker.innerHTML = this.getLangText(
+        '<span></span> FIM DE CORRIDA',
+        '<span></span> GAME OVER',
+        '<span></span> КОНЕЦ ИГРЫ',
+        '<span></span> 追捕结束'
+      )
+    }
 
     const endTitle = document.querySelector('#end-title')
-    if (endTitle) endTitle.innerHTML = isPt ? 'VOCÊ FOI<br><em>ALCANÇADO.</em>' : 'YOU WERE<br><em>CAUGHT.</em>'
+    if (endTitle) {
+      endTitle.innerHTML = this.getLangText(
+        'VOCÊ FOI<br><em>ALCANÇADO.</em>',
+        'YOU WERE<br><em>CAUGHT.</em>',
+        'ВЫ БЫЛИ<br><em>ПОЙМАНЫ.</em>',
+        '你被<br><em>抓获了。</em>'
+      )
+    }
 
     const endSummary = document.querySelector('#end-summary')
-    if (endSummary) endSummary.textContent = isPt ? 'A cidade vai lembrar dessa.' : 'The city will remember this run.'
+    if (endSummary) {
+      endSummary.textContent = this.getLangText(
+        'A cidade vai lembrar dessa.',
+        'The city will remember this run.',
+        'Город запомнит этот заезд.',
+        '这座城市会记住这场追逐。'
+      )
+    }
 
     const retryButton = document.querySelector('#retry-button')
-    if (retryButton) retryButton.innerHTML = isPt ? 'TENTAR DE NOVO <span>↗</span>' : 'TRY AGAIN <span>↗</span>'
+    if (retryButton) {
+      retryButton.innerHTML = this.getLangText(
+        'TENTAR DE NOVO <span>↗</span>',
+        'TRY AGAIN <span>↗</span>',
+        'ПОПРОБОВАТЬ СНОВА <span>↗</span>',
+        '再试一次 <span>↗</span>'
+      )
+    }
 
     // Controls Hint bar (bottom)
     const bottomControlsHint = document.querySelector('.controls-hint')
     if (bottomControlsHint) {
-      bottomControlsHint.innerHTML = isPt
-        ? '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVER / DIRIGIR</span><span class="keycap space-key">SPACE</span><span>FREIO</span><span class="keycap camera-key">C</span><span>CÂMERA</span><span class="keycap action-key">E</span><span>ENTRAR / SAIR</span><span class="keycap map-key">M</span><span>MAPA</span><span class="keycap pause-key">P</span><span>PAUSAR</span>'
-        : '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVE / DRIVE</span><span class="keycap space-key">SPACE</span><span>BRAKE</span><span class="keycap camera-key">C</span><span>CAMERA</span><span class="keycap action-key">E</span><span>ENTER / EXIT</span><span class="keycap map-key">M</span><span>MAP</span><span class="keycap pause-key">P</span><span>PAUSE</span>'
+      bottomControlsHint.innerHTML = this.getLangText(
+        '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVER / DIRIGIR</span><span class="keycap space-key">SPACE</span><span>FREIO</span><span class="keycap camera-key">C</span><span>CÂMERA</span><span class="keycap action-key">E</span><span>ENTRAR / SAIR</span><span class="keycap map-key">M</span><span>MAPA</span><span class="keycap pause-key">P</span><span>PAUSAR</span>',
+        '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>MOVE / DRIVE</span><span class="keycap space-key">SPACE</span><span>BRAKE</span><span class="keycap camera-key">C</span><span>CAMERA</span><span class="keycap action-key">E</span><span>ENTER / EXIT</span><span class="keycap map-key">M</span><span>MAP</span><span class="keycap pause-key">P</span><span>PAUSE</span>',
+        '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>ДВИЖЕНИЕ / ЕЗДА</span><span class="keycap space-key">SPACE</span><span>ТОРМОЗ</span><span class="keycap camera-key">C</span><span>КАМЕРА</span><span class="keycap action-key">E</span><span>ВОЙТИ / ВЫЙТИ</span><span class="keycap map-key">M</span><span>КАРТА</span><span class="keycap pause-key">P</span><span>ПАУЗА</span>',
+        '<span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span>移动 / 驾驶</span><span class="keycap space-key">SPACE</span><span>刹车</span><span class="keycap camera-key">C</span><span>视角</span><span class="keycap action-key">E</span><span>进入 / 离开</span><span class="keycap map-key">M</span><span>地图</span><span class="keycap pause-key">P</span><span>暂停</span>'
+      )
     }
 
     // Settings Modal
     const settingsKicker = document.querySelector('#settings-modal .title-kicker')
-    if (settingsKicker) settingsKicker.innerHTML = isPt ? '<span></span> PERFORMANCE & VÍDEO' : '<span></span> PERFORMANCE & VIDEO'
+    if (settingsKicker) {
+      settingsKicker.innerHTML = this.getLangText(
+        '<span></span> PERFORMANCE & VÍDEO',
+        '<span></span> PERFORMANCE & VIDEO',
+        '<span></span> ПРОИЗВОДИТЕЛЬНОСТЬ И ВИДЕО',
+        '<span></span> 性能与图像'
+      )
+    }
 
     const settingsTitle = document.querySelector('#settings-modal h2')
-    if (settingsTitle) settingsTitle.textContent = isPt ? '⚙️ AJUSTES' : '⚙️ SETTINGS'
+    if (settingsTitle) settingsTitle.textContent = this.getLangText('⚙️ AJUSTES', '⚙️ SETTINGS', '⚙️ НАСТРОЙКИ', '⚙️ 设置')
 
     const settingsLabels = document.querySelectorAll('#settings-modal .settings-label')
     const settingsHelps = document.querySelectorAll('#settings-modal .settings-help')
     const settingsOptions = document.querySelectorAll('#settings-modal .settings-option-btn')
 
     if (settingsLabels.length >= 6) {
-      settingsLabels[0].textContent = isPt ? 'LIMITAR TAXA DE QUADROS (FPS)' : 'LIMIT FRAME RATE (FPS)'
-      settingsLabels[1].textContent = isPt ? 'SOMBRAS PROJETADAS' : 'SHADOWS CAST'
-      settingsLabels[2].textContent = isPt ? 'ACELERAÇÃO AUTOMÁTICA' : 'AUTO ACCELERATION'
-      settingsLabels[3].textContent = isPt ? 'MODO DE DIREÇÃO NO CELULAR' : 'MOBILE STEERING MODE'
-      settingsLabels[4].textContent = isPt ? 'MODO DE DESIGN GRÁFICO' : 'GRAPHICS DESIGN MODE'
-      settingsLabels[5].textContent = isPt ? 'IDIOMA DO JOGO // GAME LANGUAGE' : 'GAME LANGUAGE'
+      settingsLabels[0].textContent = this.getLangText('LIMITAR TAXA DE QUADROS (FPS)', 'LIMIT FRAME RATE (FPS)', 'ОГРАНИЧЕНИЕ ЧАСТОТЫ КАДРОВ (FPS)', '帧率限制 (FPS)')
+      settingsLabels[1].textContent = this.getLangText('SOMBRAS PROJETADAS', 'SHADOWS CAST', 'ОТБРАСЫВАНИЕ ТЕНЕЙ', '实时阴影')
+      settingsLabels[2].textContent = this.getLangText('ACELERAÇÃO AUTOMÁTICA', 'AUTO ACCELERATION', 'АВТОМАТИЧЕСКИЙ РАЗГОН', '自动油门')
+      settingsLabels[3].textContent = this.getLangText('MODO DE DIREÇÃO NO CELULAR', 'MOBILE STEERING MODE', 'РЕЖИМ УПРАВЛЕНИЯ НА ТЕЛЕФОНЕ', '移动端转向模式')
+      settingsLabels[4].textContent = this.getLangText('MODO DE DESIGN GRÁFICO', 'GRAPHICS DESIGN MODE', 'РЕЖИМ ГРАФИКИ', '图形画质模式')
+      settingsLabels[5].textContent = this.getLangText('IDIOMA DO JOGO // GAME LANGUAGE', 'GAME LANGUAGE', 'ЯЗЫК ИГРЫ // GAME LANGUAGE', '游戏语言 // GAME LANGUAGE')
     }
 
     if (settingsHelps.length >= 6) {
-      settingsHelps[0].textContent = isPt ? 'Nota: O jogo sempre inicia no menor FPS (30) para economizar bateria/energia.' : 'Note: The game always starts at the lowest FPS (30) to save battery/power.'
-      settingsHelps[1].textContent = isPt ? 'Desative as sombras projetadas se o jogo apresentar travamento.' : 'Disable shadows if the game is lagging.'
-      settingsHelps[2].textContent = isPt ? 'Acelera de forma automática quando você não estiver freando ou dando ré.' : 'Automatically accelerates when you are not braking or reversing.'
-      settingsHelps[3].textContent = isPt ? 'Escolha entre o joystick redondo com as 4 setas, sensor de inclinação do aparelho (giroscópio) ou toques nas laterais esquerda e direita da tela.' : 'Choose between the round joystick with 4 arrows, device tilt sensor (gyroscope), or touches on the left and right sides of the screen.'
-      settingsHelps[4].textContent = isPt ? 'Baixa: Voxels Low Poly sem Greeble. Média: Voxels com Greeble clássico. Alta: Greeble Voxels High Poly com Geometry Merging & Instanced Mesh.' : 'Low: Low Poly Voxels without Greeble. Medium: Classic Greeble Voxels. High: High Poly Greeble Voxels with Geometry Merging & Instanced Mesh.'
-      settingsHelps[5].textContent = isPt ? 'Escolha o idioma dos textos do jogo / Choose the game language.' : 'Choose the game language.'
+      settingsHelps[0].textContent = this.getLangText(
+        'Nota: O jogo sempre inicia no menor FPS (30) para economizar bateria/energia.',
+        'Note: The game always starts at the lowest FPS (30) to save battery/power.',
+        'Примечание: игра запускается с 30 FPS для экономии батареи.',
+        '注意：游戏始终以最低帧率 (30 FPS) 启动以节省电池电量。'
+      )
+      settingsHelps[1].textContent = this.getLangText(
+        'Desative as sombras projetadas se o jogo apresentar travamento.',
+        'Disable shadows if the game is lagging.',
+        'Отключите тени, если игра подтормаживает.',
+        '若游戏卡顿，请关闭实时阴影。'
+      )
+      settingsHelps[2].textContent = this.getLangText(
+        'Acelera de forma automática quando você não estiver freando ou dando ré.',
+        'Automatically accelerates when you are not braking or reversing.',
+        'Автоматический разгон, когда вы не тормозите и не сдаёте назад.',
+        '在未踩刹车或倒车时自动保持油门加速。'
+      )
+      settingsHelps[3].textContent = this.getLangText(
+        'Escolha entre o joystick redondo com as 4 setas, sensor de inclinação do aparelho (giroscópio) ou toques nas laterais esquerda e direita da tela.',
+        'Choose between the round joystick with 4 arrows, device tilt sensor (gyroscope), or touches on the left and right sides of the screen.',
+        'Выберите круглый джойстик, гироскоп (наклон устройства) или нажатия по краям экрана.',
+        '可选择圆形虚拟摇杆、手机陀螺仪倾斜感应或屏幕左右点击转向。'
+      )
+      settingsHelps[4].textContent = this.getLangText(
+        'Baixa: Low Poly sem iluminação. Média: Greeble clássico. Alta: High Poly + SSAO. Ultra ⚡: Iluminação PBR HD, Oclusão SSAO e Path Tracing.',
+        'Low: Low Poly without lighting. Medium: Classic Greeble. High: High Poly + SSAO. Ultra ⚡: HD PBR Lighting, SSAO & Path Tracing.',
+        'Низкая: Low Poly без освещения. Средняя: Классический Greeble. Высокая: High Poly + SSAO. Ultra ⚡: PBR освещение, SSAO и трассировка путей.',
+        '低画质: 无光照Low Poly。中画质: 经典Greeble。高画质: High Poly + SSAO。Ultra ⚡: HD PBR光照、SSAO与光追。'
+      )
+      settingsHelps[5].textContent = this.getLangText(
+        'Escolha o idioma dos textos do jogo / Choose the game language.',
+        'Choose the game language.',
+        'Выберите язык интерфейса игры.',
+        '选择游戏显示语言。'
+      )
     }
 
     // Shadow choices texts
     settingsOptions.forEach(btn => {
       const shadowAttr = btn.getAttribute('data-shadow')
-      if (shadowAttr === 'true') btn.textContent = isPt ? 'COM SOMBRAS' : 'WITH SHADOWS'
-      if (shadowAttr === 'false') btn.textContent = isPt ? 'SEM SOMBRAS' : 'NO SHADOWS'
+      if (shadowAttr === 'true') btn.textContent = this.getLangText('COM SOMBRAS', 'WITH SHADOWS', 'С ТЕНЯМИ', '开启阴影')
+      if (shadowAttr === 'false') btn.textContent = this.getLangText('SEM SOMBRAS', 'NO SHADOWS', 'БЕЗ ТЕНЕЙ', '关闭阴影')
 
       const accelAttr = btn.getAttribute('data-accel')
-      if (accelAttr === 'true') btn.textContent = isPt ? 'LIGADA' : 'ON'
-      if (accelAttr === 'false') btn.textContent = isPt ? 'DESLIGADA' : 'OFF'
+      if (accelAttr === 'true') btn.textContent = this.getLangText('LIGADA', 'ON', 'ВКЛ', '开启')
+      if (accelAttr === 'false') btn.textContent = this.getLangText('DESLIGADA', 'OFF', 'ВЫКЛ', '关闭')
 
       const graphicsAttr = btn.getAttribute('data-graphics')
-      if (graphicsAttr === 'low') btn.textContent = isPt ? 'BAIXA' : 'LOW'
-      if (graphicsAttr === 'medium') btn.textContent = isPt ? 'MÉDIA' : 'MEDIUM'
-      if (graphicsAttr === 'high') btn.textContent = isPt ? 'ALTA' : 'HIGH'
+      if (graphicsAttr === 'low') btn.textContent = this.getLangText('BAIXA', 'LOW', 'НИЗКАЯ', '低画质')
+      if (graphicsAttr === 'medium') btn.textContent = this.getLangText('MÉDIA', 'MEDIUM', 'СРЕДНЯЯ', '中画质')
+      if (graphicsAttr === 'high') btn.textContent = this.getLangText('ALTA', 'HIGH', 'ВЫСОКАЯ', '高画质')
 
       const modeAttr = btn.getAttribute('data-controls-mode')
-      if (modeAttr === 'joystick') btn.textContent = isPt ? '🕹️ JOYSTICK REDONDO' : '🕹️ ROUND JOYSTICK'
-      if (modeAttr === 'tilt') btn.textContent = isPt ? '📱 INCLINAÇÃO (SENSOR)' : '📱 TILT (SENSOR)'
-      if (modeAttr === 'touch') btn.textContent = isPt ? '👆 TOQUE ESQ / DIR' : '👆 TOUCH LEFT / RIGHT'
+      if (modeAttr === 'joystick') btn.textContent = this.getLangText('🕹️ JOYSTICK REDONDO', '🕹️ ROUND JOYSTICK', '🕹️ КРУГЛЫЙ ДЖОЙСТИК', '🕹️ 摇杆控制器')
+      if (modeAttr === 'tilt') btn.textContent = this.getLangText('📱 INCLINAÇÃO (SENSOR)', '📱 TILT (SENSOR)', '📱 ГИРОСКОП (НАКЛОН)', '📱 陀螺仪倾斜')
+      if (modeAttr === 'touch') btn.textContent = this.getLangText('👆 TOQUE ESQ / DIR', '👆 TOUCH LEFT / RIGHT', '👆 КАСАНИЕ ЛЕВ / ПРАВ', '👆 左右点击')
 
       const langAttr = btn.getAttribute('data-lang')
-      if (langAttr === 'pt') btn.textContent = isPt ? '🇧🇷 PORTUGUÊS' : '🇧🇷 PORTUGUESE'
-      if (langAttr === 'en') btn.textContent = isPt ? '🇺🇸 ENGLISH' : '🇺🇸 ENGLISH'
+      if (langAttr === 'pt') btn.textContent = '🇧🇷 PORTUGUÊS'
+      if (langAttr === 'en') btn.textContent = '🇺🇸 ENGLISH'
+      if (langAttr === 'ru') btn.textContent = '🇷🇺 РУССКИЙ'
+      if (langAttr === 'zh') btn.textContent = '🇨🇳 中文'
     })
 
-    if (this.closeSettingsBtn) this.closeSettingsBtn.textContent = isPt ? 'CONFIRMAR E SALVAR' : 'CONFIRM AND SAVE'
+    if (this.closeSettingsBtn) {
+      this.closeSettingsBtn.textContent = this.getLangText('CONFIRMAR E SALVAR', 'CONFIRM AND SAVE', 'ПОДТВЕРДИТЬ И СОХРАНИТЬ', '确认并保存')
+    }
 
     // Update auto-acceleration text on HUD if any
     this.updateAutoAccelUI()
     this.updateMissionCards()
+    this.updateProfileModalUI()
   }
 
   private initStrandedCars(): void {
@@ -5403,6 +5676,60 @@ export class Game {
     this.showToast('MISSÃO ZUMBI ENCERRADA')
   }
 
+  // ==========================================
+  // 3.8. CORRIDA CONTRA O TEMPO (3 ETAPAS PELAS RUAS)
+  // ==========================================
+  private initTimeTrial(): void {
+    this.timeTrial.onStageChanged = (stage, total, _time) => {
+      if (this.timeTrialStageLabel) this.timeTrialStageLabel.textContent = `ETAPA ${stage}/${total}`
+    }
+    this.timeTrial.onTimeTick = (remaining, max) => {
+      if (this.timeTrialTimerVal) {
+        this.timeTrialTimerVal.textContent = `${remaining.toFixed(1)}s`
+        this.timeTrialTimerVal.classList.toggle('critical', remaining <= 10)
+      }
+      if (this.timeTrialFill) {
+        const pct = Math.max(0, Math.min(100, (remaining / max) * 100))
+        this.timeTrialFill.style.width = `${pct}%`
+      }
+    }
+    this.timeTrial.onCheckpointPassed = (stage) => {
+      this.showToast(`⚡ ETAPA ${stage} CONCLUÍDA! CRONÔMETRO REINICIADO!`)
+    }
+    this.timeTrial.onVictory = (cash, points, xp, finalTime) => {
+      this.cash += cash
+      this.distance += points
+      localStorage.setItem(CASH_KEY, String(this.cash))
+      this.rewardXp(xp)
+      this.missions.recordTimeTrialVictory()
+      this.updateHud()
+      this.updateMissionCards()
+      if (this.timeTrialResultBanner && this.timeTrialResultTitle && this.timeTrialResultSubtitle) {
+        this.timeTrialResultBanner.classList.remove('hidden')
+        this.timeTrialResultTitle.textContent = '🏆 VITÓRIA! CORRIDA CONTRA O TEMPO CONCLUÍDA!'
+        this.timeTrialResultSubtitle.textContent = `Você completou as 3 etapas em ${finalTime.toFixed(1)}s! +$${cash.toLocaleString('pt-BR')} +${points.toLocaleString('pt-BR')} PTS (+${xp} XP)`
+      }
+      this.timeTrialPanel?.classList.add('hidden')
+    }
+    this.timeTrial.onGameOver = (_reason) => {
+      if (this.timeTrialResultBanner && this.timeTrialResultTitle && this.timeTrialResultSubtitle) {
+        this.timeTrialResultBanner.classList.remove('hidden')
+        this.timeTrialResultTitle.textContent = '💀 TEMPO ESGOTADO! MISSÃO FRACASSADA!'
+        this.timeTrialResultSubtitle.textContent = 'O cronômetro chegou a zero antes de você cruzar o arco final!'
+      }
+      this.timeTrialPanel?.classList.add('hidden')
+    }
+    this.timeTrial.onToast = (msg) => {
+      this.showToast(msg)
+    }
+
+    this.timeTrialCloseBannerBtn?.addEventListener('click', () => {
+      this.timeTrialResultBanner?.classList.add('hidden')
+      this.timeTrial.setIdleState()
+      this.timeTrialPanel?.classList.add('hidden')
+    })
+  }
+
   private rewardXp(amount: number): void {
     const res = usersDB.addXp(amount)
     if (res.leveledUp) {
@@ -5423,61 +5750,190 @@ export class Game {
 
   private updateProfileModalUI(): void {
     const user = usersDB.getCurrentUser()
-    if (this.profileUserName) {
-      this.profileUserName.textContent = user.displayName
+
+    // Title kicker & modal title
+    const authModalKicker = document.querySelector<HTMLElement>('#auth-modal-kicker')
+    if (authModalKicker) {
+      authModalKicker.innerHTML = this.getLangText(
+        '<span></span> CONEXÃO DE JOGADOR & NUVEM',
+        '<span></span> PLAYER CONNECTION & CLOUD',
+        '<span></span> ПОДКЛЮЧЕНИЕ И ОБЛАКО',
+        '<span></span> 玩家连接与云端'
+      )
     }
+
+    const authModalTitle = document.querySelector<HTMLElement>('#auth-modal-title')
+    if (authModalTitle) {
+      authModalTitle.textContent = this.getLangText('PERFIL DO PILOTO', 'PILOT PROFILE', 'ПРОФИЛЬ ПИЛОТА', '车手档案')
+    }
+
+    // Stat labels
+    const statLevelLabel = document.querySelector<HTMLElement>('#profile-stat-level-label')
+    if (statLevelLabel) statLevelLabel.textContent = this.getLangText('NÍVEL ATUAL', 'CURRENT LEVEL', 'ТЕКУЩИЙ УРОВЕНЬ', '当前等级')
+
+    const statXpLabel = document.querySelector<HTMLElement>('#profile-stat-xp-label')
+    if (statXpLabel) statXpLabel.textContent = this.getLangText('XP TOTAL', 'TOTAL XP', 'ВСЕГО ОПЫТА', '总经验值')
+
+    const statCashLabel = document.querySelector<HTMLElement>('#profile-stat-cash-label')
+    if (statCashLabel) statCashLabel.textContent = this.getLangText('SALDO EM NUVEM', 'CLOUD BALANCE', 'ОБЛАЧНЫЙ БАЛАНС', '云端余额')
+
+    const statRecordLabel = document.querySelector<HTMLElement>('#profile-stat-record-label')
+    if (statRecordLabel) statRecordLabel.textContent = this.getLangText('RECORDE DISTÂNCIA', 'DISTANCE RECORD', 'РЕКОРД ДИСТАНЦИИ', '最高距离记录')
+
+    if (this.profileUserName) {
+      this.profileUserName.textContent = user.isGuest
+        ? this.getLangText('ANÔNIMO', 'ANONYMOUS', 'АНОНИМ', '访客')
+        : user.displayName
+    }
+
     if (this.profileSyncBadge) {
       if (user.isGuest) {
         this.profileSyncBadge.className = 'sync-badge sync-badge-guest'
-        this.profileSyncBadge.textContent = '⚪ Anônimo (Sem Nuvem)'
+        this.profileSyncBadge.textContent = this.getLangText(
+          '⚪ Anônimo (Sem Nuvem)',
+          '⚪ Anonymous (No Cloud)',
+          '⚪ Аноним (Без облака)',
+          '⚪ 匿名访客 (未同步)'
+        )
       } else if (user.pendingSync) {
         this.profileSyncBadge.className = 'sync-badge sync-badge-offline'
-        this.profileSyncBadge.textContent = '🟡 Salvo Offline (users.ts)'
+        this.profileSyncBadge.textContent = this.getLangText(
+          '🟡 Salvo Offline (users.ts)',
+          '🟡 Saved Offline (users.ts)',
+          '🟡 Сохранено локально (users.ts)',
+          '🟡 离线保存 (users.ts)'
+        )
       } else {
         this.profileSyncBadge.className = 'sync-badge sync-badge-online'
-        this.profileSyncBadge.textContent = '🟢 Nuvem Sincronizada (Firestore)'
+        this.profileSyncBadge.textContent = this.getLangText(
+          '🟢 Nuvem Sincronizada (Firestore)',
+          '🟢 Cloud Synced (Firestore)',
+          '🟢 Синхронизировано (Firestore)',
+          '🟢 云端已同步 (Firestore)'
+        )
       }
     }
+
     if (this.profileLevelVal) {
-      this.profileLevelVal.textContent = `Nível ${user.level}`
+      this.profileLevelVal.textContent = this.getLangText(
+        `Nível ${user.level}`,
+        `Level ${user.level}`,
+        `Уровень ${user.level}`,
+        `等级 ${user.level}`
+      )
     }
+
     if (this.profileXpVal) {
       const req = getXpRequiredForLevel(user.level)
-      this.profileXpVal.textContent = `${user.xp} / ${req} XP (Total: ${user.totalXp.toLocaleString('pt-BR')})`
+      const totalLabel = this.getLangText('Total', 'Total', 'Всего', '总计')
+      this.profileXpVal.textContent = `${user.xp} / ${req} XP (${totalLabel}: ${user.totalXp.toLocaleString()})`
     }
+
     if (this.profileCashVal) {
-      this.profileCashVal.textContent = `$ ${user.cash.toLocaleString('pt-BR')}`
+      this.profileCashVal.textContent = `$ ${user.cash.toLocaleString()}`
     }
+
     if (this.profileHighscoreVal) {
-      this.profileHighscoreVal.textContent = `${user.highScore.toLocaleString('pt-BR')} m`
+      this.profileHighscoreVal.textContent = `${user.highScore.toLocaleString()} m`
     }
 
     if (this.guestWarningBanner) {
       this.guestWarningBanner.classList.toggle('hidden', !user.isGuest)
+      this.guestWarningBanner.innerHTML = this.getLangText(
+        '⚠️ <b>Modo Anônimo:</b> Seus níveis, XP, dinheiro e missões só são salvos na nuvem quando você se autenticar com o <b>Google</b> ou <b>Play Games</b>. Conecte-se abaixo para salvar e sincronizar seu progresso entre dispositivos!',
+        '⚠️ <b>Guest Mode:</b> Your levels, XP, cash, and missions are only saved to the cloud when you authenticate with <b>Google</b> or <b>Play Games</b>. Sign in below to save and sync your progress across devices!',
+        '⚠️ <b>Анонимный режим:</b> Ваши уровни, опыт, деньги и миссии сохраняются в облаке только при входе через <b>Google</b> или <b>Play Games</b>. Войдите ниже, чтобы сохранить и синхронизировать прогресс между устройствами!',
+        '⚠️ <b>访客模式：</b> 只有通过 <b>Google</b> 或 <b>Play Games</b> 登录后，您的等级、经验、金币和任务才会保存到云端。请在下方登录以跨设备同步您的进度！'
+      )
     }
+
+    const googleBtnLabel = document.querySelector<HTMLElement>('#google-sign-in-label')
+    if (googleBtnLabel) {
+      googleBtnLabel.textContent = this.getLangText(
+        'Entrar com Google',
+        'Sign in with Google',
+        'Войти через Google',
+        '使用 Google 登录'
+      )
+    }
+
+    const playGamesBtnLabel = document.querySelector<HTMLElement>('#playgames-sign-in-label')
+    if (playGamesBtnLabel) {
+      playGamesBtnLabel.textContent = this.getLangText(
+        'Login com Google Play Games',
+        'Sign in with Google Play Games',
+        'Войти через Google Play Games',
+        '使用 Google Play Games 登录'
+      )
+    }
+
     if (this.authButtonsList) {
       this.authButtonsList.classList.toggle('hidden', !user.isGuest)
     }
+
     if (this.signOutBtn) {
       this.signOutBtn.classList.toggle('hidden', user.isGuest)
+      this.signOutBtn.textContent = this.getLangText(
+        '🚪 DESCONECTAR DA CONTA',
+        '🚪 SIGN OUT OF ACCOUNT',
+        '🚪 ВЫЙТИ ИЗ АККАУНТА',
+        '🚪 退出登录'
+      )
     }
+
     if (this.syncNowBtn) {
       this.syncNowBtn.classList.toggle('hidden', user.isGuest)
+      this.syncNowBtn.textContent = this.getLangText(
+        '🔄 SINCRONIZAR COM FIRESTORE AGORA',
+        '🔄 SYNC WITH FIRESTORE NOW',
+        '🔄 СИНХРОНИЗИРОВАТЬ С FIRESTORE',
+        '🔄 立即与 FIRESTORE 同步'
+      )
     }
+
+    if (this.closeAuthModalBtn) {
+      this.closeAuthModalBtn.textContent = this.getLangText(
+        'FECHAR PAINEL',
+        'CLOSE PANEL',
+        'ЗАКРЫТЬ ПАНЕЛЬ',
+        '关闭面板'
+      )
+    }
+
     if (this.authStatusMsg) {
       if (user.isGuest) {
-        this.authStatusMsg.textContent = 'Modo Anônimo ativo: dados locais não sincronizados entre dispositivos.'
+        this.authStatusMsg.textContent = this.getLangText(
+          'Modo Anônimo ativo: dados locais não sincronizados entre dispositivos.',
+          'Guest Mode active: local data is not synced across devices.',
+          'Анонимный режим: локальные данные не синхронизируются между устройствами.',
+          '访客模式激活中：本地数据不会在不同设备间同步。'
+        )
       } else if (user.pendingSync) {
-        this.authStatusMsg.textContent = 'Alterações salvas no banco local users.ts. Sincronização automática com Firestore assim que a internet estiver disponível.'
+        this.authStatusMsg.textContent = this.getLangText(
+          'Alterações salvas no banco local users.ts. Sincronização automática com Firestore assim que a internet estiver disponível.',
+          'Changes saved in local database users.ts. Automatic sync with Firestore as soon as internet is available.',
+          'Изменения сохранены в локальной БД users.ts. Автоматическая синхронизация с Firestore при подключении к сети.',
+          '更改已保存在本地数据库 users.ts 中。连接网络后将自动同步至 Firestore。'
+        )
       } else {
-        this.authStatusMsg.textContent = `Conectado como ${user.displayName} via ${user.provider.toUpperCase()}. Firestore ativo.`
+        this.authStatusMsg.textContent = this.getLangText(
+          `Conectado como ${user.displayName} via ${user.provider.toUpperCase()}. Firestore ativo.`,
+          `Connected as ${user.displayName} via ${user.provider.toUpperCase()}. Firestore active.`,
+          `Подключено как ${user.displayName} через ${user.provider.toUpperCase()}. Firestore активен.`,
+          `已通过 ${user.provider.toUpperCase()} 登录为 ${user.displayName}。Firestore 正常运行。`
+        )
       }
     }
   }
 
   private async handleSignIn(provider: 'Google' | 'Google Play Games'): Promise<void> {
     if (this.authStatusMsg) {
-      this.authStatusMsg.textContent = `Autenticando com ${provider}...`
+      this.authStatusMsg.textContent = this.getLangText(
+        `Autenticando com ${provider}...`,
+        `Authenticating with ${provider}...`,
+        `Аутентификация через ${provider}...`,
+        `正在通过 ${provider} 验证...`
+      )
     }
     try {
       if (provider === 'Google') {
@@ -5486,7 +5942,12 @@ export class Game {
         await usersDB.signInWithPlayGames()
       }
       this.sound.effect('upgrade')
-      this.showToast(`CONECTADO VIA ${provider.toUpperCase()} // DADOS SINCRONIZADOS NO FIRESTORE!`)
+      this.showToast(this.getLangText(
+        `CONECTADO VIA ${provider.toUpperCase()} // DADOS SINCRONIZADOS NO FIRESTORE!`,
+        `CONNECTED VIA ${provider.toUpperCase()} // DATA SYNCED TO FIRESTORE!`,
+        `ПОДКЛЮЧЕНО ЧЕРЕЗ ${provider.toUpperCase()} // ДАННЫЕ СИНХРОНИЗИРОВАНЫ В FIRESTORE!`,
+        `已通过 ${provider.toUpperCase()} 登录 // 数据已同步至 FIRESTORE！`
+      ))
       this.updateProfileModalUI()
       this.updateHud()
       setTimeout(() => {
@@ -5494,28 +5955,53 @@ export class Game {
       }, 1000)
     } catch (err) {
       console.error('Sign in error:', err)
-      this.showToast(`ERRO AO CONECTAR COM ${provider.toUpperCase()}`)
+      this.showToast(this.getLangText(
+        `ERRO AO CONECTAR COM ${provider.toUpperCase()}`,
+        `ERROR CONNECTING WITH ${provider.toUpperCase()}`,
+        `ОШИБКА ПОДКЛЮЧЕНИЯ ЧЕРЕЗ ${provider.toUpperCase()}`,
+        `连接 ${provider.toUpperCase()} 失败`
+      ))
     }
   }
 
   private async handleSignOut(): Promise<void> {
     await usersDB.signOut()
     this.sound.effect('wanted')
-    this.showToast('DESCONECTADO // JOGANDO COMO ANÔNIMO')
+    this.showToast(this.getLangText(
+      'DESCONECTADO // JOGANDO COMO ANÔNIMO',
+      'DISCONNECTED // PLAYING AS GUEST',
+      'ОТКЛЮЧЕНО // ИГРА В АНОНИМНОМ РЕЖИМЕ',
+      '已退出登录 // 当前为访客模式'
+    ))
     this.updateProfileModalUI()
     this.updateHud()
   }
 
   private async handleManualSync(): Promise<void> {
     if (this.authStatusMsg) {
-      this.authStatusMsg.textContent = 'Sincronizando com Firebase Firestore...'
+      this.authStatusMsg.textContent = this.getLangText(
+        'Sincronizando com Firebase Firestore...',
+        'Syncing with Firebase Firestore...',
+        'Синхронизация с Firebase Firestore...',
+        '正在与 Firebase Firestore 同步...'
+      )
     }
     const success = await usersDB.syncPendingChanges()
     if (success) {
       this.sound.effect('upgrade')
-      this.showToast('✅ DADOS SINCRONIZADOS COM SUCESSO NO FIRESTORE!')
+      this.showToast(this.getLangText(
+        '✅ DADOS SINCRONIZADOS COM SUCESSO NO FIRESTORE!',
+        '✅ DATA SUCCESSFULLY SYNCED TO FIRESTORE!',
+        '✅ ДАННЫЕ УСПЕШНО СИНХРОНИЗИРОВАНЫ В FIRESTORE!',
+        '✅ 数据已成功同步至 FIRESTORE！'
+      ))
     } else {
-      this.showToast('⚠️ OFFLINE: DADOS PROTEGIDOS NO BANCO USERS.TS')
+      this.showToast(this.getLangText(
+        '⚠️ OFFLINE: DADOS PROTEGIDOS NO BANCO USERS.TS',
+        '⚠️ OFFLINE: DATA PROTECTED IN LOCAL USERS.TS',
+        '⚠️ ОФЛАЙН: ДАННЫЕ СОХРАНЕНЫ В ЛОКАЛЬНОЙ БД USERS.TS',
+        '⚠️ 离线状态：数据已在本地 USERS.TS 中受保护'
+      ))
     }
     this.updateProfileModalUI()
   }
@@ -5599,7 +6085,8 @@ export class Game {
     const completedCount = this.missions.completed.length
     const totalCount = all.length
     if (this.statusMissionsCounter) {
-      this.statusMissionsCounter.textContent = `${completedCount} / ${totalCount} CONCLUÍDAS`
+      const completedWord = this.getLangText('CONCLUÍDAS', 'COMPLETED', 'ВЫПОЛНЕНО', '已完成')
+      this.statusMissionsCounter.textContent = `${completedCount} / ${totalCount} ${completedWord}`
     }
 
     const sorted = [...all].sort((a, b) => {
@@ -5607,6 +6094,9 @@ export class Game {
       if (!a.completed && b.completed) return 1
       return 0
     })
+
+    const doneBadge = this.getLangText('CONCLUÍDA', 'COMPLETED', 'ВЫПОЛНЕНО', '已完成')
+    const inProgressBadge = this.getLangText('EM ANDAMENTO', 'IN PROGRESS', 'В ПРОЦЕССЕ', '进行中')
 
     this.statusMissionsList.innerHTML = sorted.map((m) => {
       const isDone = m.completed
@@ -5626,7 +6116,7 @@ export class Game {
                   ? 'background: rgba(74, 222, 128, 0.2); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.4);'
                   : 'background: rgba(250, 204, 21, 0.15); color: #facc15; border: 1px solid rgba(250, 204, 21, 0.4);'
               }">
-                ${isDone ? 'CONCLUÍDA' : 'EM ANDAMENTO'}
+                ${isDone ? doneBadge : inProgressBadge}
               </span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -6335,10 +6825,9 @@ export class Game {
     this.input.setAutoAccel(this.autoAccelEnabled)
     localStorage.setItem('smash_auto_accel', String(this.autoAccelEnabled))
     this.updateAutoAccelUI()
-    const isPt = this.currentGameLang === 'pt'
     this.showToast(this.autoAccelEnabled 
-      ? (isPt ? '⚡ ACELERAÇÃO AUTOMÁTICA ATIVADA' : '⚡ AUTO ACCELERATION ACTIVATED') 
-      : (isPt ? '⚡ ACELERAÇÃO AUTOMÁTICA DESATIVADA' : '⚡ AUTO ACCELERATION DEACTIVATED')
+      ? this.getLangText('⚡ ACELERAÇÃO AUTOMÁTICA ATIVADA', '⚡ AUTO ACCELERATION ACTIVATED', '⚡ АВТОУСКОРЕНИЕ ВКЛЮЧЕНО', '⚡ 自动油门已启用')
+      : this.getLangText('⚡ ACELERAÇÃO AUTOMÁTICA DESATIVADA', '⚡ AUTO ACCELERATION DEACTIVATED', '⚡ АВТОУСКОРЕНИЕ ВЫКЛЮЧЕНО', '⚡ 自动油门已停用')
     )
   }
 

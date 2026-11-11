@@ -23,7 +23,7 @@ const config: CapacitorConfig = {
       overlaysWebView: true,
       style: 'DARK',
       backgroundColor: '#111412'
-    }
+    },
     CapacitorCookies: {
       enabled: true
     }

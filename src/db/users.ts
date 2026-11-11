@@ -383,7 +383,7 @@ class UserDatabaseManager {
     try {
       this.app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
       this.db = firebaseConfig.firestoreDatabaseId
-        ? getFirestore(this.app, firebaseConfig.firestoreDatabaseId)
+        ? (getFirestore as any)(this.app, firebaseConfig.firestoreDatabaseId)
         : getFirestore(this.app)
       this.auth = getAuth(this.app)
 

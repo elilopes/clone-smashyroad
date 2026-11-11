@@ -426,7 +426,7 @@ app.innerHTML = `
     <!-- AUTH MODAL (LOGIN COM GOOGLE & PLAY GAMES & BANCO USERS.TS) -->
     <div id="auth-modal" class="auth-modal overlay hidden" role="dialog" aria-modal="true" aria-label="Login de Jogador">
       <div class="auth-card">
-        <div class="title-kicker"><span></span> CONEXÃO DE JOGADOR & NUVEM</div>
+        <div class="title-kicker" id="auth-modal-kicker"><span></span> CONEXÃO DE JOGADOR & NUVEM</div>
         <h2 id="auth-modal-title">PERFIL DO PILOTO</h2>
         
         <div id="profile-card-section" class="profile-card-section">
@@ -435,10 +435,10 @@ app.innerHTML = `
             <span class="sync-badge sync-badge-guest" id="profile-sync-badge">⚪ Anônimo</span>
           </div>
           <div class="profile-stats-grid">
-            <div class="profile-stat-box"><span>NÍVEL ATUAL</span><strong id="profile-level-val">Nível 1</strong></div>
-            <div class="profile-stat-box"><span>XP TOTAL</span><strong id="profile-xp-val">0 XP</strong></div>
-            <div class="profile-stat-box"><span>SALDO EM NUVEM</span><strong id="profile-cash-val">$ 0</strong></div>
-            <div class="profile-stat-box"><span>RECORDE DISTÂNCIA</span><strong id="profile-highscore-val">0 m</strong></div>
+            <div class="profile-stat-box"><span id="profile-stat-level-label">NÍVEL ATUAL</span><strong id="profile-level-val">Nível 1</strong></div>
+            <div class="profile-stat-box"><span id="profile-stat-xp-label">XP TOTAL</span><strong id="profile-xp-val">0 XP</strong></div>
+            <div class="profile-stat-box"><span id="profile-stat-cash-label">SALDO EM NUVEM</span><strong id="profile-cash-val">$ 0</strong></div>
+            <div class="profile-stat-box"><span id="profile-stat-record-label">RECORDE DISTÂNCIA</span><strong id="profile-highscore-val">0 m</strong></div>
           </div>
         </div>
 
@@ -449,12 +449,12 @@ app.innerHTML = `
         <div class="auth-buttons-list" id="auth-buttons-list">
           <button id="google-sign-in-btn" class="auth-provider-btn google-btn" type="button">
             <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.15z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.15 0 9.92 0 12s.45 3.85 1.24 5.42l4.04-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
-            Entrar com Google
+            <span id="google-sign-in-label">Entrar com Google</span>
           </button>
           
           <button id="playgames-sign-in-btn" class="auth-provider-btn playgames-btn" type="button">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="#00C853"><path d="M21.58 16.09l-1.09-7.66C20.25 6.64 18.72 5 16.89 5H7.11C5.28 5 3.75 6.64 3.51 8.43l-1.09 7.66C2.18 17.84 3.57 19 5.1 19c.77 0 1.51-.31 2.05-.85L9.4 16h5.2l2.25 2.15c.54.54 1.28.85 2.05.85 1.53 0 2.92-1.16 2.68-2.91zM9 13H8v1c0 .55-.45 1-1 1s-1-.45-1-1v-1H5c-.55 0-1-.45-1-1s.45-1 1-1h1V9c0-.55.45-1 1-1s1 .45 1 1v1h1c.55 0 1 .45 1 1s-.45 1-1 1zm6-1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm2.5 3c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-            Login com Google Play Games
+            <span id="playgames-sign-in-label">Login com Google Play Games</span>
           </button>
         </div>
 
@@ -592,11 +592,13 @@ app.innerHTML = `
 
         <div class="settings-group" style="margin-top: 20px; text-align: left;">
           <label class="settings-label" style="display: block; font: 700 9px var(--mono); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px;">IDIOMA DO JOGO // GAME LANGUAGE</label>
-          <div class="settings-options" id="lang-options-container" style="display: flex; gap: 8px; margin-bottom: 6px;">
+          <div class="settings-options" id="lang-options-container" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
             <button class="settings-option-btn" data-lang="pt" type="button">🇧🇷 PORTUGUÊS</button>
             <button class="settings-option-btn" data-lang="en" type="button">🇺🇸 ENGLISH</button>
+            <button class="settings-option-btn" data-lang="ru" type="button">🇷🇺 РУССКИЙ</button>
+            <button class="settings-option-btn" data-lang="zh" type="button">🇨🇳 中文</button>
           </div>
-          <span class="settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Escolha o idioma dos textos do jogo / Choose the game language.</span>
+          <span class="settings-help" id="lang-settings-help" style="display: block; font-size: 10px; color: #64748b; margin-top: 4px;">Escolha o idioma dos textos do jogo / Choose the game language.</span>
         </div>
 
         <button id="close-settings-btn" class="primary-button" type="button" style="margin-top: 24px; width: 100%;">CONFIRMAR E SALVAR</button>
