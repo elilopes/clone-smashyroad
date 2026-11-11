@@ -16,6 +16,7 @@ export type MissionType =
   | 'rampage_police'
   | 'rally_race'
   | 'zombie_arena'
+  | 'time_trial'
 
 export type MissionEvent = {
   distance: number
@@ -35,6 +36,7 @@ export type MissionEvent = {
   rampagePolice?: number
   rallyRaceWin?: number
   zombieArenaWin?: number
+  timeTrialWin?: number
 }
 
 type MissionDefinition = {
@@ -66,6 +68,7 @@ export const ALL_CONTRACTS: MissionDefinition[] = [
   { id: 'bus-commuters', type: 'bus_passengers', title: 'Embarque 10 passageiros no ônibus', target: 10, reward: 3000, unit: 'x' },
   { id: 'rally-dunes', type: 'rally_race', title: 'Rally das Dunas: Termine em 1º ou 2º lugar no circuito elétrico', target: 1, reward: 6000, unit: '🏁' },
   { id: 'zombie-arena', type: 'zombie_arena', title: 'Arena de Sobrevivência: Sobreviva às 4 ondas de zumbis e monstros', target: 4, reward: 7500, unit: '🏁' },
+  { id: 'time-trial-run', type: 'time_trial', title: 'Corrida Contra o Tempo: Complete as 3 etapas pelas ruas da cidade', target: 1, reward: 7500, unit: '🏁' },
 
   // 2. Exploração, Velocidade & Sobrevivência
   { id: 'stretch-1', type: 'distance', title: 'Percorra 350 metros pela cidade', target: 350, reward: 180, unit: 'm' },
@@ -132,6 +135,7 @@ export class Missions {
       if (mission.type === 'rampage_police' && event.rampagePolice !== undefined) mission.progress = Math.max(mission.progress, event.rampagePolice)
       if (mission.type === 'rally_race' && event.rallyRaceWin !== undefined) mission.progress = Math.max(mission.progress, event.rallyRaceWin)
       if (mission.type === 'zombie_arena' && event.zombieArenaWin !== undefined) mission.progress = Math.max(mission.progress, event.zombieArenaWin)
+      if (mission.type === 'time_trial' && event.timeTrialWin !== undefined) mission.progress = Math.max(mission.progress, event.timeTrialWin)
 
       if (mission.progress >= mission.target) {
         mission.progress = mission.target
@@ -142,6 +146,10 @@ export class Missions {
     }
 
     return justCompleted
+  }
+
+  recordTimeTrialVictory(): MissionState[] {
+    return this.update(0, { distance: 0, coins: 0, time: 0, wanted: 0, closeCalls: 0, timeTrialWin: 1 })
   }
 
   recordZombieArenaVictory(): MissionState[] {

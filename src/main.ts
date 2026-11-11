@@ -23,6 +23,7 @@ app.innerHTML = `
         <div class="stat time-stat"><span class="stat-label">TEMPO</span><strong id="header-time-value">00:00</strong></div>
       </div>
       <div class="topbar-actions">
+        <div id="mobile-level-badge" class="mobile-level-badge"><span class="ml-label">NV</span><strong id="mobile-header-level-value">1</strong></div>
         <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas e Missões do Piloto"><span class="btn-icon">📊</span><span class="btn-text"> STATUS</span></button>
         <button id="garage-btn" class="mode-button garage-btn" type="button" title="Abrir Garagem e Concessionária de Veículos"><span class="btn-icon">🚗</span><span class="btn-text"> GARAGEM</span></button>
         <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Upgrades, Pinturas e Peças"><span class="btn-icon">🏪</span><span class="btn-text"> LOJA</span></button>
@@ -393,6 +394,33 @@ app.innerHTML = `
         <button id="zombie-start-hard-btn" class="primary-button zombie-start-btn" type="button" style="background: #ef4444; border-color: #f87171;">🔥 DIFÍCIL (10 ONDAS)</button>
         <button id="zombie-start-btn" class="primary-button zombie-start-btn hidden" type="button">INICIAR [E]</button>
       </div>
+    </div>
+
+    <!-- CORRIDA CONTRA O TEMPO (3 ETAPAS PELAS RUAS COM ARCOS E CRONÔMETRO) -->
+    <div id="time-trial-panel" class="time-trial-panel hidden" aria-label="Corrida Contra o Tempo">
+      <div class="time-trial-header">
+        <div class="time-trial-header-left">
+          <span class="time-trial-badge">⏱️ CORRIDA CONTRA O TEMPO</span>
+          <span id="time-trial-stage-label" class="time-trial-stage-label">ETAPA 1/3</span>
+        </div>
+      </div>
+      <div class="time-trial-body">
+        <div class="time-trial-timer-row">
+          <span class="time-trial-timer-label">CRONÔMETRO REGRESSIVO:</span>
+          <strong id="time-trial-timer-val" class="time-trial-timer-val">35.0s</strong>
+        </div>
+        <div class="time-trial-track">
+          <div id="time-trial-fill" class="time-trial-fill" style="width: 100%"></div>
+        </div>
+        <div class="time-trial-hint" id="time-trial-hint">SIGA A LINHA NO CHÃO DAS RUAS ATÉ O PRÓXIMO ARCO!</div>
+      </div>
+    </div>
+
+    <!-- BANNER DE RESULTADO DA CORRIDA CONTRA O TEMPO -->
+    <div id="time-trial-result-banner" class="time-trial-result-banner hidden" role="alert">
+      <div id="time-trial-result-title" class="time-trial-result-title">🏆 VITÓRIA! CORRIDA CONCLUÍDA!</div>
+      <div id="time-trial-result-subtitle" class="time-trial-result-subtitle">Você completou as 3 etapas contra o relógio no trânsito!</div>
+      <button id="time-trial-close-banner-btn" type="button" class="time-trial-banner-btn">FECHAR</button>
     </div>
 
     <!-- AUTH MODAL (LOGIN COM GOOGLE & PLAY GAMES & BANCO USERS.TS) -->

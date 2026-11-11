@@ -4237,9 +4237,11 @@ export class Game {
     this.timeValue.textContent = this.formatTime(this.elapsed)
     this.cashValue.textContent = `$ ${this.cash.toLocaleString('pt-BR')}`
 
-    // Desktop Header Run Stats
+    // Desktop & Mobile Header Run Stats
     const headerLevel = document.querySelector<HTMLElement>('#header-level-value')
     if (headerLevel) headerLevel.textContent = `NV ${user.level}`
+    const mobileHeaderLevel = document.querySelector<HTMLElement>('#mobile-header-level-value')
+    if (mobileHeaderLevel) mobileHeaderLevel.textContent = String(user.level)
     const headerXp = document.querySelector<HTMLElement>('#header-xp-value')
     const headerXpFill = document.querySelector<HTMLElement>('#header-xp-bar-fill')
     const reqXp = getXpRequiredForLevel(user.level)
