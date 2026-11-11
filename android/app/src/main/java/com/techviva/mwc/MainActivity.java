@@ -1,4 +1,4 @@
-package com.smashcity.wanteddistrict;
+package com.techviva.mwc;
 
 import com.getcapacitor.BridgeActivity;
 
