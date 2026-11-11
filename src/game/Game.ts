@@ -406,6 +406,8 @@ export class Game {
   private readonly zombieExitBtn = document.querySelector<HTMLButtonElement>('#zombie-exit-btn')
   private readonly zombieArenaPrompt = document.querySelector<HTMLElement>('#zombie-arena-prompt')
   private readonly zombieStartBtn = document.querySelector<HTMLButtonElement>('#zombie-start-btn')
+  private readonly zombieStartEasyBtn = document.querySelector<HTMLButtonElement>('#zombie-start-easy-btn')
+  private readonly zombieStartHardBtn = document.querySelector<HTMLButtonElement>('#zombie-start-hard-btn')
   private readonly zombieCardsModal = document.querySelector<HTMLElement>('#zombie-cards-modal')
   private readonly zombieCardLevelNum = document.querySelector<HTMLElement>('#zombie-card-level-num')
   private readonly zombieCardsRow = document.querySelector<HTMLElement>('#zombie-cards-row')
@@ -413,6 +415,7 @@ export class Game {
   private readonly zombieResultTitle = document.querySelector<HTMLElement>('#zombie-result-title')
   private readonly zombieResultSubtitle = document.querySelector<HTMLElement>('#zombie-result-subtitle')
   private readonly zombieReplayBtn = document.querySelector<HTMLButtonElement>('#zombie-replay-btn')
+  private readonly zombieReplayHardBtn = document.querySelector<HTMLButtonElement>('#zombie-replay-hard-btn')
   private readonly zombieResultExitBtn = document.querySelector<HTMLButtonElement>('#zombie-result-exit-btn')
 
   // 4. Auth & Progression (Google & Play Games via users.ts)
@@ -717,6 +720,7 @@ export class Game {
 
     // Inicialização da Arena Zumbi
     this.zombieArena = new ZombieArena(this.scene, this.sound, this.sparks)
+    this.zombieArena.setGraphicsMode(this.graphicsMode)
     this.initZombieArena()
 
     this.minimap = new Minimap(document.querySelector<HTMLElement>('#minimap-shell')!)
@@ -1014,7 +1018,14 @@ export class Game {
       this.scene.environment = null
       this.scene.environmentIntensity = 1.0
 
-      if (this.bloomPass) this.bloomPass.enabled = false
+      if (this.bloomPass) {
+        this.bloomPass.enabled = isHigh
+        if (isHigh) {
+          this.bloomPass.threshold = 1.15
+          this.bloomPass.strength = 0.28
+          this.bloomPass.radius = 0.22
+        }
+      }
       if (this.colorCorrectionPass) this.colorCorrectionPass.enabled = false
       if (this.ssaoPass) {
         this.ssaoPass.enabled = isHigh
@@ -1024,7 +1035,7 @@ export class Game {
       this.pathTracingMode = false
     }
 
-    // 3. Atualiza iluminação, reflexos PBR e geometria de todos os veículos
+    // 3. Atualiza iluminação, reflexos PBR e geometria de todos os veículos e da arena
     this.updateAllVehiclesGraphicsMode(mode)
   }
 
@@ -1041,6 +1052,7 @@ export class Game {
     for (const tank of this.tanks) tank.setGraphicsMode(mode)
     for (const heli of this.helicopters) heli.setGraphicsMode(mode)
     if (this.plane) this.plane.setGraphicsMode(mode)
+    if (this.zombieArena) this.zombieArena.setGraphicsMode(mode)
   }
 
   private createHud(): void {
@@ -4207,12 +4219,13 @@ export class Game {
     this.cash = user.cash
 
     if (this.authButton) {
+      const isPt = this.currentGameLang === 'pt'
       if (user.isGuest) {
-        this.authButton.textContent = '👤 ANÔNIMO'
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${isPt ? 'ANÔNIMO' : 'ANONYMOUS'}</span>`
         this.authButton.classList.remove('connected')
         this.authButton.title = 'Modo Anônimo (Sem salvamento). Clique para entrar com Google ou Play Games.'
       } else {
-        this.authButton.textContent = `👤 ${user.displayName.substring(0, 14)} [NV ${user.level}]`
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${user.displayName.substring(0, 14)} [${isPt ? 'NV' : 'LV'} ${user.level}]</span>`
         this.authButton.classList.add('connected')
         this.authButton.title = `Conectado como ${user.displayName} (${user.provider}). Clique para ver perfil e sincronização.`
       }
@@ -4480,18 +4493,20 @@ export class Game {
     const user = usersDB.getCurrentUser()
 
     // Topbar buttons
-    if (this.garageBtn) this.garageBtn.textContent = isPt ? '🚗 GARAGEM' : '🚗 GARAGE'
-    if (this.shopBtn) this.shopBtn.textContent = isPt ? '🏪 LOJA' : '🏪 SHOP'
-    if (this.leaderboardBtn) this.leaderboardBtn.textContent = isPt ? '🏆 RANKING' : '🏆 LEADERBOARD'
-    if (this.settingsButton) this.settingsButton.textContent = isPt ? '⚙️ AJUSTES' : '⚙️ SETTINGS'
+    const statusBtn = document.querySelector<HTMLButtonElement>('#status-button')
+    if (statusBtn) statusBtn.innerHTML = `<span class="btn-icon">📊</span><span class="btn-text"> ${isPt ? 'STATUS' : 'STATUS'}</span>`
+    if (this.garageBtn) this.garageBtn.innerHTML = `<span class="btn-icon">🚗</span><span class="btn-text"> ${isPt ? 'GARAGEM' : 'GARAGE'}</span>`
+    if (this.shopBtn) this.shopBtn.innerHTML = `<span class="btn-icon">🏪</span><span class="btn-text"> ${isPt ? 'LOJA' : 'SHOP'}</span>`
+    if (this.leaderboardBtn) this.leaderboardBtn.innerHTML = `<span class="btn-icon">🏆</span><span class="btn-text"> ${isPt ? 'RANKING' : 'LEADERBOARD'}</span>`
+    if (this.settingsButton) this.settingsButton.innerHTML = `<span class="btn-icon">⚙️</span><span class="btn-text"> ${isPt ? 'AJUSTES' : 'SETTINGS'}</span>`
     if (this.pauseSettingsBtn) this.pauseSettingsBtn.textContent = isPt ? '⚙️ CONFIGURAÇÕES' : '⚙️ SETTINGS'
     if (this.authButton) {
       if (user && user.isGuest) {
-        this.authButton.textContent = isPt ? '👤 ANÔNIMO' : '👤 ANONYMOUS'
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${isPt ? 'ANÔNIMO' : 'ANONYMOUS'}</span>`
       } else if (user && user.displayName) {
-        this.authButton.textContent = `👤 ${user.displayName.substring(0, 14)} [${isPt ? 'NV' : 'LV'} ${user.level}]`
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${user.displayName.substring(0, 14)} [${isPt ? 'NV' : 'LV'} ${user.level}]</span>`
       } else {
-        this.authButton.textContent = isPt ? '👤 CONECTAR' : '👤 CONNECT'
+        this.authButton.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> ${isPt ? 'CONECTAR' : 'CONNECT'}</span>`
       }
     }
 
@@ -5219,7 +5234,7 @@ export class Game {
     }
 
     this.zombieArena.onWaveChanged = (wave: number, totalWaves?: number) => {
-      const tot = totalWaves ?? 4
+      const tot = totalWaves ?? 5
       if (this.zombieWaveLabel) this.zombieWaveLabel.textContent = `ONDA ${wave}/${tot}`
     }
 
@@ -5278,12 +5293,14 @@ export class Game {
       this.pursuit.setRallyMissionActive(false)
       this.zombieMissionPanel?.classList.add('hidden')
       this.zombieCardsModal?.classList.add('hidden')
-      const rewardCash = 8000
-      const rewardPoints = 15000
+      const isHard = waves >= 10
+      const rewardCash = isHard ? 20000 : 8000
+      const rewardPoints = isHard ? 40000 : 15000
+      const rewardXp = isHard ? 600 : 250
       this.cash += rewardCash
       this.distance += rewardPoints
       localStorage.setItem(CASH_KEY, String(this.cash))
-      this.rewardXp(250)
+      this.rewardXp(rewardXp)
       this.missions.recordZombieArenaVictory()
       this.updateHud()
       this.updateMissionCards()
@@ -5292,12 +5309,16 @@ export class Game {
       if (this.zombieResultBanner && this.zombieResultTitle && this.zombieResultSubtitle) {
         this.zombieResultBanner.classList.remove('hidden')
         this.zombieResultBanner.style.borderColor = '#22c55e'
-        this.zombieResultTitle.textContent = '🏆 VITÓRIA! MISSÃO CONCLUÍDA!'
+        this.zombieResultTitle.textContent = isHard
+          ? '🔥 VITÓRIA LENDÁRIA! MODO DIFÍCIL CONCLUÍDO!'
+          : '🏆 VITÓRIA! MODO FÁCIL CONCLUÍDO!'
         this.zombieResultTitle.style.color = '#22c55e'
-        this.zombieResultSubtitle.textContent = `Você completou todas as ${waves} ondas e derrotou os monstros gigantes! +$8.000 +15.000 PTS (+250 XP)`
+        this.zombieResultSubtitle.textContent = isHard
+          ? `Incrível! Você sobreviveu a todas as 10 ondas, zumbis cuspidores de fogo e chuva de meteoros! +$20.000 +40.000 PTS (+600 XP)`
+          : `Você completou todas as ${waves} ondas e derrotou os monstros gigantes! +$8.000 +15.000 PTS (+250 XP)`
       }
 
-      this.showToast(`🏆 VITÓRIA ÉPICA! ARENA DE SOBREVIVÊNCIA CONCLUÍDA! +$8.000 +15.000 PTS`)
+      this.showToast(isHard ? '🔥 VITÓRIA ÉPICA NO MODO DIFÍCIL (10 ONDAS)! +$20.000!' : '🏆 ARENA CONCLUÍDA! +$8.000!')
     }
 
     this.zombieArena.onToast = (msg: string) => {
@@ -5305,7 +5326,13 @@ export class Game {
     }
 
     this.zombieStartBtn?.addEventListener('click', () => {
-      this.startZombieArenaMission()
+      this.startZombieArenaMission('easy')
+    })
+    this.zombieStartEasyBtn?.addEventListener('click', () => {
+      this.startZombieArenaMission('easy')
+    })
+    this.zombieStartHardBtn?.addEventListener('click', () => {
+      this.startZombieArenaMission('hard')
     })
 
     this.zombieExitBtn?.addEventListener('click', () => {
@@ -5314,7 +5341,11 @@ export class Game {
 
     this.zombieReplayBtn?.addEventListener('click', () => {
       this.zombieResultBanner?.classList.add('hidden')
-      this.startZombieArenaMission()
+      this.startZombieArenaMission('easy')
+    })
+    this.zombieReplayHardBtn?.addEventListener('click', () => {
+      this.zombieResultBanner?.classList.add('hidden')
+      this.startZombieArenaMission('hard')
     })
 
     this.zombieResultExitBtn?.addEventListener('click', () => {
@@ -5323,7 +5354,7 @@ export class Game {
     })
   }
 
-  private startZombieArenaMission(): void {
+  private startZombieArenaMission(difficulty: 'easy' | 'hard' = 'easy'): void {
     if (this.zombieArena.active) return
     const arenaInfo = this.city.getZombieArenaInfo()
 
@@ -5350,11 +5381,13 @@ export class Game {
     this.pursuit.setRallyMissionActive(true)
     this.wanted.setLevel(1)
     this.zombieResultBanner?.classList.add('hidden')
-    this.zombieArena.startMission(arenaInfo.x, arenaInfo.z, this.character)
+    this.zombieArena.setGraphicsMode(this.graphicsMode)
+    this.zombieArena.startMission(arenaInfo.x, arenaInfo.z, this.character, difficulty)
     this.zombieMissionPanel?.classList.remove('hidden')
     this.zombieArenaPrompt?.classList.add('hidden')
     this.sound.effect('mission')
-    this.showToast('☣️ ARENA ZUMBI INICIADA! DERROTE AS 4 ONDAS E ESCOLHA SEUS UPGRADES!')
+    const diffLabel = difficulty === 'hard' ? '🔥 MODO DIFÍCIL (10 ONDAS)!' : '🟢 MODO FÁCIL (5 ONDAS)!'
+    this.showToast(`☣️ ARENA DE SOBREVIVÊNCIA INICIADA: ${diffLabel}`)
   }
 
   private stopZombieArenaMission(): void {

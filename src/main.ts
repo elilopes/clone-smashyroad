@@ -23,12 +23,12 @@ app.innerHTML = `
         <div class="stat time-stat"><span class="stat-label">TEMPO</span><strong id="header-time-value">00:00</strong></div>
       </div>
       <div class="topbar-actions">
-        <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas e Missões do Piloto">📊 STATUS</button>
-        <button id="garage-btn" class="mode-button garage-btn" type="button" title="Abrir Garagem e Concessionária de Veículos">🚗 GARAGEM</button>
-        <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Upgrades, Pinturas e Peças">🏪 LOJA</button>
+        <button id="status-button" class="mode-button status-btn" type="button" title="Ver Estatísticas e Missões do Piloto"><span class="btn-icon">📊</span><span class="btn-text"> STATUS</span></button>
+        <button id="garage-btn" class="mode-button garage-btn" type="button" title="Abrir Garagem e Concessionária de Veículos"><span class="btn-icon">🚗</span><span class="btn-text"> GARAGEM</span></button>
+        <button id="shop-btn" class="mode-button shop-btn" type="button" title="Abrir Loja de Upgrades, Pinturas e Peças"><span class="btn-icon">🏪</span><span class="btn-text"> LOJA</span></button>
         <button id="leaderboard-btn" class="mode-button leaderboard-btn" type="button" title="Ver Ranking Diário de XP e Dinheiro"><span class="btn-icon">🏆</span><span class="btn-text"> RANKING</span></button>
         <button id="settings-button" class="mode-button settings-btn" type="button" title="Configurações de FPS, Som e Gráficos"><span class="btn-icon">⚙️</span><span class="btn-text"> AJUSTES</span></button>
-        <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games">👤 CONECTAR</button>
+        <button id="auth-button" class="mode-button auth-btn" type="button" title="Login com Google / Play Games"><span class="btn-icon">👤</span><span class="btn-text"> CONECTAR</span></button>
         <button id="camera-button" class="mode-button" type="button" aria-pressed="false" aria-label="Câmera 3D traseira ativada; alternar para visão três quartos" title="Alternar câmera (C)">3D</button>
         <button id="pause-button" class="icon-button pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo (P / ESC)">❚❚</button>
       </div>
@@ -374,8 +374,9 @@ app.innerHTML = `
     <div id="zombie-result-banner" class="zombie-result-banner hidden" role="alert" style="position: absolute; top: 22%; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); border: 2px solid #ef4444; border-radius: 8px; padding: 18px 26px; text-align: center; color: #fff; z-index: 120; box-shadow: 0 0 30px rgba(0,0,0,0.85); min-width: 300px; pointer-events: auto;">
       <div id="zombie-result-title" style="font-size: 16px; font-weight: 900; color: #22c55e; margin-bottom: 6px;">🏆 VITÓRIA! SOBREVIVENTE DA ARENA!</div>
       <div id="zombie-result-subtitle" style="font-size: 11px; opacity: 0.9; margin-bottom: 14px;">Você completou as 4 ondas de ataque!</div>
-      <div style="display: flex; gap: 8px; justify-content: center;">
-        <button id="zombie-replay-btn" type="button" style="background: #22c55e; color: #000; border: none; padding: 8px 16px; font-weight: 800; border-radius: 4px; cursor: pointer; font-size: 11px;">🔄 JOGAR NOVAMENTE</button>
+      <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+        <button id="zombie-replay-btn" type="button" style="background: #22c55e; color: #000; border: none; padding: 8px 14px; font-weight: 800; border-radius: 4px; cursor: pointer; font-size: 11px;">🔄 JOGAR NOVAMENTE</button>
+        <button id="zombie-replay-hard-btn" type="button" style="background: #ef4444; color: #fff; border: none; padding: 8px 14px; font-weight: 800; border-radius: 4px; cursor: pointer; font-size: 11px;">🔥 MODO DIFÍCIL (10 ONDAS)</button>
         <button id="zombie-result-exit-btn" type="button" style="background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4); padding: 8px 14px; font-weight: 700; border-radius: 4px; cursor: pointer; font-size: 11px;">SAIR DA ARENA</button>
       </div>
     </div>
@@ -385,9 +386,13 @@ app.innerHTML = `
       <div class="zombie-prompt-icon">☣️</div>
       <div class="zombie-prompt-text">
         <strong>ARENA DE SOBREVIVÊNCIA ZUMBI (4 PRÉDIOS)</strong>
-        <span>ENTRE A PÉ COM O PERSONAGEM PALITO PARA INICIAR</span>
+        <span>ESCOLHA O NÍVEL DE DIFICULDADE:</span>
       </div>
-      <button id="zombie-start-btn" class="primary-button zombie-start-btn" type="button">INICIAR MISSÃO [E]</button>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button id="zombie-start-easy-btn" class="primary-button zombie-start-btn" type="button" style="background: #22c55e; border-color: #4ade80;">🟢 FÁCIL (5 ONDAS)</button>
+        <button id="zombie-start-hard-btn" class="primary-button zombie-start-btn" type="button" style="background: #ef4444; border-color: #f87171;">🔥 DIFÍCIL (10 ONDAS)</button>
+        <button id="zombie-start-btn" class="primary-button zombie-start-btn hidden" type="button">INICIAR [E]</button>
+      </div>
     </div>
 
     <!-- AUTH MODAL (LOGIN COM GOOGLE & PLAY GAMES & BANCO USERS.TS) -->

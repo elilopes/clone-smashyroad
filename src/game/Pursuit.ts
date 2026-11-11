@@ -90,9 +90,9 @@ export class Pursuit {
     const wantedCars = Math.min(10, Math.max(1, Math.floor(level * 1.2) + 1))
     this.spawnTimer -= dt
     if (this.units.length < wantedCars && this.spawnTimer <= 0) {
-      // Se a missão de rally estiver ativa ou o jogador estiver no circuito, a polícia não spawna
-      const inRallyArea = playerPosition.x > 700 || player.kind === 'rally_car'
-      if (!this.rallyMissionActive && !inRallyArea) {
+      // Se a missão de rally ou a arena do deserto estiverem ativas, a polícia não spawna nas áreas fora da cidade
+      const inExcludedDesert = playerPosition.x > 700 || playerPosition.x < -670 || player.kind === 'rally_car'
+      if (!this.rallyMissionActive && !inExcludedDesert) {
         this.spawnPolice(playerPosition, level)
         this.spawnTimer = Math.max(0.65, 3.3 - level * 0.25)
       }
@@ -112,8 +112,8 @@ export class Pursuit {
       const dz = playerPosition.z - car.root.position.z
       const distance = Math.hypot(dx, dz)
 
-      // Se a missão de rally estiver ativa, viaturas desaparecem se entrarem perto do circuito (X > 700)
-      if (this.rallyMissionActive && (car.root.position.x > 700 || playerPosition.x > 700)) {
+      // Se estiver nas áreas isoladas do deserto (Rally ou Arena Oeste), viaturas distantes desaparecem
+      if (car.root.position.x > 720 || car.root.position.x < -720 || (this.rallyMissionActive && playerPosition.x > 700)) {
         car.dispose()
         this.units.splice(index, 1)
         continue

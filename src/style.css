@@ -43,8 +43,10 @@ button { font: inherit; }
 .status-btn:hover { background: #38bdf8; color: #111412; }
 .icon-button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; color: var(--paper); background: rgba(15,18,16,.3); font-size: 18px; cursor: pointer; }
 .icon-button:hover { border-color: var(--paper); }
-.mode-button { min-width: 52px; height: 34px; margin-right: 0; padding: 0 9px; border: 1px solid rgba(255,93,49,.66); color: var(--paper); background: rgba(17,20,18,.48); font: 10px/1 var(--mono); letter-spacing: .04em; cursor: pointer; transition: color .18s, background .18s; white-space: nowrap; }
+.mode-button { min-width: 52px; height: 34px; margin-right: 0; padding: 0 9px; border: 1px solid rgba(255,93,49,.66); color: var(--paper); background: rgba(17,20,18,.48); font: 10px/1 var(--mono); letter-spacing: .04em; cursor: pointer; transition: color .18s, background .18s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .mode-button:hover, .mode-button[aria-pressed="true"] { color: #111412; background: var(--orange); }
+.btn-icon { display: inline-block; line-height: 1; font-size: 13px; }
+.btn-text { display: inline-block; }
 
 .wanted-panel, .mission-panel { position: absolute; z-index: 3; left: 4.1vw; width: 244px; padding: 15px 16px; border: 1px solid rgba(245,242,233,.18); background: rgba(17,20,18,.77); backdrop-filter: blur(12px); }
 .wanted-panel { top: 105px; }
@@ -1533,20 +1535,38 @@ button { font: inherit; }
   }
   .vehicle-button { z-index: 5; left: 15px; bottom: calc(215px + var(--safe-bottom, 0px)); min-height: 34px; padding: 0 9px; font-size: 8px; }
   .corner-label { max-width: 115px; text-align: right; }
+  #status-button .btn-text,
+  #garage-btn .btn-text,
+  #shop-btn .btn-text,
   #leaderboard-btn .btn-text,
-  #settings-button .btn-text {
+  #settings-button .btn-text,
+  #auth-button .btn-text {
     display: none !important;
   }
+  #status-button,
+  #garage-btn,
+  #shop-btn,
   #leaderboard-btn,
-  #settings-button {
-    min-width: 32px;
-    padding: 0 6px;
-    justify-content: center;
+  #settings-button,
+  #auth-button {
+    min-width: 32px !important;
+    padding: 0 6px !important;
+    justify-content: center !important;
   }
+  #status-button .btn-icon,
+  #garage-btn .btn-icon,
+  #shop-btn .btn-icon,
   #leaderboard-btn .btn-icon,
-  #settings-button .btn-icon {
-    font-size: 14px;
-    margin: 0;
+  #settings-button .btn-icon,
+  #auth-button .btn-icon {
+    font-size: 14px !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+  }
+  #camera-button {
+    min-width: 34px !important;
+    padding: 0 6px !important;
+    font-weight: 700 !important;
   }
 }
 
@@ -1555,20 +1575,38 @@ button { font: inherit; }
   .vehicle-button {
     bottom: calc(215px + var(--safe-bottom, 0px)) !important;
   }
+  #status-button .btn-text,
+  #garage-btn .btn-text,
+  #shop-btn .btn-text,
   #leaderboard-btn .btn-text,
-  #settings-button .btn-text {
+  #settings-button .btn-text,
+  #auth-button .btn-text {
     display: none !important;
   }
+  #status-button,
+  #garage-btn,
+  #shop-btn,
   #leaderboard-btn,
-  #settings-button {
+  #settings-button,
+  #auth-button {
     min-width: 34px !important;
     padding: 0 6px !important;
     justify-content: center !important;
   }
+  #status-button .btn-icon,
+  #garage-btn .btn-icon,
+  #shop-btn .btn-icon,
   #leaderboard-btn .btn-icon,
-  #settings-button .btn-icon {
+  #settings-button .btn-icon,
+  #auth-button .btn-icon {
     font-size: 15px !important;
     margin: 0 !important;
+    line-height: 1 !important;
+  }
+  #camera-button {
+    min-width: 36px !important;
+    padding: 0 6px !important;
+    font-weight: 700 !important;
   }
 }
 

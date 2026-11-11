@@ -88,6 +88,12 @@ export class Traffic {
     const explosions: THREE.Vector3[] = []
     const smokingPositions: THREE.Vector3[] = []
 
+    // Se o jogador estiver no deserto fora da cidade, limpa e suspende o tráfego urbano
+    if (Math.abs(playerPosition.x) > 420) {
+      if (this.units.length > 0) this.reset()
+      return { playerCollisions: 0, collisionPoints: [], explosions, smokingPositions }
+    }
+
     for (let index = this.units.length - 1; index >= 0; index -= 1) {
       const unit = this.units[index]
       const dx = unit.car.root.position.x - playerPosition.x
@@ -97,7 +103,11 @@ export class Traffic {
         this.units.splice(index, 1)
       }
     }
-    while (this.units.length < TRAFFIC_COUNT) this.spawn(playerPosition)
+    let spawnBudget = 2
+    while (this.units.length < TRAFFIC_COUNT && spawnBudget > 0) {
+      this.spawn(playerPosition)
+      spawnBudget--
+    }
 
     for (const unit of this.units) {
       if (!unit.car.exploded) {

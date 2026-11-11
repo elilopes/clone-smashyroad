@@ -967,8 +967,8 @@ export class City {
     // 4. Sand Dunes Fields (Dunas de Areia a Leste e Oeste)
     this.buildSandDuneFields(group, zStart, zMiddle, bounds, random, chunkDunes)
 
-    // 4.5. Arena de Sobrevivência (Zumbis & Monstros) no Deserto Oeste (fora da cidade, do outro lado do deserto do Rally)
-    if (Math.abs(zMiddle) < 100) {
+    // 4.5. Arena de Sobrevivência (Zumbis & Monstros) no Deserto Oeste (apenas no chunk central 0)
+    if (index === 0) {
       this.buildZombieArenaSite(group, group, -1100, 0, bounds, chunkCoins)
     }
 
@@ -2535,21 +2535,22 @@ export class City {
       this.desertGroundsCreated = true
     }
 
+    const isLow = this.graphicsMode === 'low'
+    const isUltra = this.graphicsMode === 'ultra'
+
     // Ocean Water Beyond Sand Dunes (x < -1540 and x > 1540)
     const oceanWest = new THREE.Mesh(new THREE.PlaneGeometry(1600, CHUNK_DEPTH), this.riverWaterMaterial)
     oceanWest.rotation.x = -Math.PI / 2
     oceanWest.position.set(-2340, -0.18, zStart + CHUNK_DEPTH / 2)
-    oceanWest.receiveShadow = true
+    oceanWest.receiveShadow = !isLow
     group.add(oceanWest)
 
     const oceanEast = new THREE.Mesh(new THREE.PlaneGeometry(1600, CHUNK_DEPTH), this.riverWaterMaterial)
     oceanEast.rotation.x = -Math.PI / 2
     oceanEast.position.set(2340, -0.18, zStart + CHUNK_DEPTH / 2)
-    oceanEast.receiveShadow = true
+    oceanEast.receiveShadow = !isLow
     group.add(oceanEast)
 
-    const isLow = this.graphicsMode === 'low'
-    const isUltra = this.graphicsMode === 'ultra'
     const duneCountPerSide = isLow ? 3 : (isUltra ? 16 : 14)
     const duneGeo = isUltra ? new THREE.SphereGeometry(1, 48, 36) : new THREE.SphereGeometry(1, 16, 12)
 
@@ -3349,11 +3350,11 @@ export class City {
       const isUltra = this.graphicsMode === 'ultra'
       const isHigh = this.graphicsMode === 'high' || isUltra
 
-      // Área da corrida das dunas (leste da ponte / rio: x > 620)
-      const inDunesRaceArea = actorPos.x > 620
+      // Área das dunas / desertos fora da cidade (leste x > 620 ou oeste x < -620)
+      const inDesertArea = Math.abs(actorPos.x) > 620
 
-      if (isLow && inDunesRaceArea) {
-        // No modo gráfico baixo nas dunas, oculta 100% dos edifícios e casas da cidade
+      if (isLow && inDesertArea) {
+        // No modo gráfico baixo nas dunas e deserto da arena, oculta 100% dos edifícios e casas da cidade
         for (const chunk of this.chunks.values()) {
           chunk.buildingsGroup.visible = false
           chunk.detailsGroup.visible = false

@@ -512,161 +512,119 @@ export class Minimap {
     const xMin = rx - rw / 2
     const xMax = rx + rw / 2
 
-    // If river is within/near canvas bounds
-    if (xMax > 0 && xMin < this.canvas.width) {
-      // Water body
-      ctx.fillStyle = '#207ca8'
-      ctx.fillRect(xMin, 0, rw, canvasHeight)
+    // Render Sand Dunes (Dunas de Areia) and Ocean on the radar map
+    if (label === 'OESTE') {
+      const oceanWestX = cx + (-1540 - player.x) * scale
+      const desertEndX = Math.min(this.canvas.width, Math.max(0, xMin))
 
-      // Embankment shoreline border lines
-      ctx.strokeStyle = '#5cb8df'
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(xMin, 0)
-      ctx.lineTo(xMin, canvasHeight)
-      ctx.moveTo(xMax, 0)
-      ctx.lineTo(xMax, canvasHeight)
-      ctx.stroke()
+      // Ocean water on far west
+      if (oceanWestX > 0) {
+        ctx.fillStyle = '#207ca8' // Vibrant river/ocean water blue
+        ctx.fillRect(0, 0, Math.min(this.canvas.width, oceanWestX), canvasHeight)
 
-      // River label
-      ctx.save()
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
-      ctx.font = '700 8px monospace'
-      ctx.textAlign = 'center'
-      ctx.translate(rx, cy)
-      ctx.rotate(-Math.PI / 2)
-      ctx.fillText(`RIO // LIMITE ${label}`, 0, 3)
-      ctx.restore()
-
-      // Render Sand Dunes (Dunas de Areia) and Ocean on the radar map
-      if (label === 'OESTE' && xMin > 0) {
-        const oceanWestX = cx + (-1540 - player.x) * scale
-        if (oceanWestX > 0) {
-          // Draw Ocean from left edge to shoreline
-          ctx.fillStyle = '#207ca8' // Vibrant river/ocean water blue
-          ctx.fillRect(0, 0, oceanWestX, canvasHeight)
-
-          // Draw Desert Dunes from shoreline to river's left bank
-          ctx.fillStyle = '#b45309'
-          ctx.fillRect(oceanWestX, 0, xMin - oceanWestX, canvasHeight)
-
-          // Glowing blue shoreline transition
+        if (oceanWestX < this.canvas.width) {
           ctx.strokeStyle = '#38bdf8'
           ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(oceanWestX, 0)
           ctx.lineTo(oceanWestX, canvasHeight)
           ctx.stroke()
-
-          // Draw dune ridges only in the actual desert width
-          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
-          ctx.lineWidth = 1.5
-          const desertW = xMin - oceanWestX
-          for (let y = 30; y < canvasHeight; y += 40) {
-            ctx.beginPath()
-            ctx.arc(oceanWestX + desertW * 0.5, y, Math.max(10, desertW * 0.4), -0.6, 0.6)
-            ctx.stroke()
-          }
-
-          ctx.save()
-          ctx.fillStyle = '#fef08a'
-          ctx.font = '700 9px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText('🏜️ DUNAS OESTE', Math.max(oceanWestX + 45, oceanWestX + desertW * 0.5), canvasHeight - 16)
-          ctx.restore()
-
-          ctx.save()
-          ctx.fillStyle = '#ffffff'
-          ctx.font = '700 9px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText('🌊 MAR OESTE', oceanWestX * 0.5, canvasHeight - 16)
-          ctx.restore()
-        } else {
-          // Entire area is sand desert
-          ctx.fillStyle = '#b45309'
-          ctx.fillRect(0, 0, xMin, canvasHeight)
-
-          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
-          ctx.lineWidth = 1.5
-          for (let y = 30; y < canvasHeight; y += 40) {
-            ctx.beginPath()
-            ctx.arc(xMin * 0.5, y, Math.max(10, xMin * 0.4), -0.6, 0.6)
-            ctx.stroke()
-          }
-
-          ctx.save()
-          ctx.fillStyle = '#fef08a'
-          ctx.font = '700 9px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText('🏜️ DUNAS DE AREIA OESTE', Math.max(40, xMin * 0.5), canvasHeight - 16)
-          ctx.restore()
         }
       }
 
-      if (label === 'LESTE' && xMax < this.canvas.width) {
-        const oceanEastX = cx + (1540 - player.x) * scale
-        if (oceanEastX < this.canvas.width) {
-          const desertW = oceanEastX - xMax
+      // West Desert Sand Ground (entre oceano e margem oeste do rio)
+      const desertStartX = Math.max(0, oceanWestX)
+      if (desertEndX > desertStartX) {
+        ctx.fillStyle = '#b45309'
+        ctx.fillRect(desertStartX, 0, desertEndX - desertStartX, canvasHeight)
 
-          // Draw Desert Dunes from river's right bank to shoreline
-          ctx.fillStyle = '#b45309'
-          ctx.fillRect(xMax, 0, desertW, canvasHeight)
+        ctx.save()
+        ctx.fillStyle = '#fef08a'
+        ctx.font = '700 9px monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('🏜️ DESERTO // ARENA OESTE', Math.max(50, Math.min(this.canvas.width - 50, (desertStartX + desertEndX) * 0.5)), canvasHeight - 16)
+        ctx.restore()
+      }
+    }
 
-          // Draw Ocean from shoreline to right edge
-          ctx.fillStyle = '#207ca8'
-          ctx.fillRect(oceanEastX, 0, this.canvas.width - oceanEastX, canvasHeight)
+    if (label === 'LESTE') {
+      const oceanEastX = cx + (1540 - player.x) * scale
+      const desertStartX = Math.max(0, Math.min(this.canvas.width, xMax))
 
-          // Glowing blue shoreline transition
+      // East Desert Sand Ground (entre margem leste do rio e oceano)
+      const desertEndX = Math.min(this.canvas.width, Math.max(0, oceanEastX))
+      if (desertEndX > desertStartX) {
+        ctx.fillStyle = '#b45309'
+        ctx.fillRect(desertStartX, 0, desertEndX - desertStartX, canvasHeight)
+
+        // Draw dune ridges only in the East Dunes / Rally area
+        ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
+        ctx.lineWidth = 1.5
+        for (let y = 30; y < canvasHeight; y += 40) {
+          ctx.beginPath()
+          ctx.arc(desertStartX + (desertEndX - desertStartX) * 0.5, y, Math.max(10, (desertEndX - desertStartX) * 0.4), -0.6, 0.6)
+          ctx.stroke()
+        }
+
+        ctx.save()
+        ctx.fillStyle = '#fef08a'
+        ctx.font = '700 9px monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('🏜️ DUNAS LESTE', Math.max(50, Math.min(this.canvas.width - 50, (desertStartX + desertEndX) * 0.5)), canvasHeight - 16)
+        ctx.restore()
+      }
+
+      // Ocean on far east
+      if (oceanEastX < this.canvas.width) {
+        const ocStart = Math.max(0, oceanEastX)
+        ctx.fillStyle = '#207ca8'
+        ctx.fillRect(ocStart, 0, this.canvas.width - ocStart, canvasHeight)
+
+        if (oceanEastX > 0) {
           ctx.strokeStyle = '#38bdf8'
           ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(oceanEastX, 0)
           ctx.lineTo(oceanEastX, canvasHeight)
           ctx.stroke()
-
-          // Draw dune ridges only in the actual desert width
-          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
-          ctx.lineWidth = 1.5
-          for (let y = 30; y < canvasHeight; y += 40) {
-            ctx.beginPath()
-            ctx.arc(xMax + desertW * 0.5, y, Math.max(10, desertW * 0.4), -0.6, 0.6)
-            ctx.stroke()
-          }
-
-          ctx.save()
-          ctx.fillStyle = '#fef08a'
-          ctx.font = '700 9px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText('🏜️ DUNAS LESTE', Math.min(oceanEastX - 45, xMax + desertW * 0.5), canvasHeight - 16)
-          ctx.restore()
-
-          ctx.save()
-          ctx.fillStyle = '#ffffff'
-          ctx.font = '700 9px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText('🌊 MAR LESTE', oceanEastX + (this.canvas.width - oceanEastX) * 0.5, canvasHeight - 16)
-          ctx.restore()
-        } else {
-          // Entire area is sand desert
-          const desertW = this.canvas.width - xMax
-          ctx.fillStyle = '#b45309'
-          ctx.fillRect(xMax, 0, desertW, canvasHeight)
-
-          ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)'
-          ctx.lineWidth = 1.5
-          for (let y = 30; y < canvasHeight; y += 40) {
-            ctx.beginPath()
-            ctx.arc(xMax + desertW * 0.5, y, Math.max(10, desertW * 0.4), -0.6, 0.6)
-            ctx.stroke()
-          }
-
-          ctx.save()
-          ctx.fillStyle = '#fef08a'
-          ctx.font = '700 9px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText('🏜️ DUNAS DE AREIA LESTE', Math.min(this.canvas.width - 40, xMax + desertW * 0.5), canvasHeight - 16)
-          ctx.restore()
         }
+      }
+    }
+
+    // River itself: If river is within/near canvas bounds
+    if (xMax > 0 && xMin < this.canvas.width) {
+      const riverDrawLeft = Math.max(0, xMin)
+      const riverDrawRight = Math.min(this.canvas.width, xMax)
+      const riverDrawWidth = riverDrawRight - riverDrawLeft
+
+      // Water body
+      ctx.fillStyle = '#207ca8'
+      ctx.fillRect(riverDrawLeft, 0, riverDrawWidth, canvasHeight)
+
+      // Embankment shoreline border lines
+      ctx.strokeStyle = '#5cb8df'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      if (xMin >= 0 && xMin <= this.canvas.width) {
+        ctx.moveTo(xMin, 0)
+        ctx.lineTo(xMin, canvasHeight)
+      }
+      if (xMax >= 0 && xMax <= this.canvas.width) {
+        ctx.moveTo(xMax, 0)
+        ctx.lineTo(xMax, canvasHeight)
+      }
+      ctx.stroke()
+
+      // River label
+      if (rx >= 0 && rx <= this.canvas.width) {
+        ctx.save()
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
+        ctx.font = '700 8px monospace'
+        ctx.textAlign = 'center'
+        ctx.translate(rx, cy)
+        ctx.rotate(-Math.PI / 2)
+        ctx.fillText(`RIO // LIMITE ${label}`, 0, 3)
+        ctx.restore()
       }
     }
   }
@@ -685,7 +643,7 @@ export class Minimap {
 
     ctx.fillStyle = '#2a3431'
 
-    // Longitudinal Avenues (X = road * block)
+    // Longitudinal Avenues (X = road * block) inside city
     for (let road = city.roadMin; road <= city.roadMax; road += 1) {
       const roadWorldX = road * block
       if (Math.abs(roadWorldX - player.x) <= viewRange + 20) {
@@ -704,24 +662,52 @@ export class Minimap {
       }
     }
 
-    // Cross Streets (Z = road * block)
+    // Cross Streets (Z = road * block) - limit to city bounds and bridge crossings (never cut through ocean/desert)
     const minZBlock = Math.floor((player.z - viewRange) / block)
     const maxZBlock = Math.ceil((player.z + viewRange) / block)
 
-    for (let roadZIndex = minZBlock; roadZIndex <= maxZBlock; roadZIndex += 1) {
-      const roadWorldZ = roadZIndex * block
-      const rz = cy + (roadWorldZ - player.z) * scale - roadWidth / 2
-      ctx.fillRect(0, rz, this.canvas.width, roadWidth)
+    const cityMinX = cx + (city.riverLeftX - player.x) * scale - 18 * scale
+    const cityMaxX = cx + (city.riverRightX - player.x) * scale + 18 * scale
+    const startX = Math.max(0, cityMinX)
+    const endX = Math.min(this.canvas.width, cityMaxX)
+    const spanW = endX - startX
 
-      // Center dash line
-      ctx.strokeStyle = 'rgba(230, 201, 120, 0.4)'
-      ctx.lineWidth = 1
-      ctx.setLineDash([4, 6])
-      ctx.beginPath()
-      ctx.moveTo(0, rz + roadWidth / 2)
-      ctx.lineTo(this.canvas.width, rz + roadWidth / 2)
-      ctx.stroke()
-      ctx.setLineDash([])
+    if (spanW > 0) {
+      for (let roadZIndex = minZBlock; roadZIndex <= maxZBlock; roadZIndex += 1) {
+        const roadWorldZ = roadZIndex * block
+        const rz = cy + (roadWorldZ - player.z) * scale - roadWidth / 2
+        ctx.fillRect(startX, rz, spanW, roadWidth)
+
+        // Center dash line
+        ctx.strokeStyle = 'rgba(230, 201, 120, 0.4)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 6])
+        ctx.beginPath()
+        ctx.moveTo(startX, rz + roadWidth / 2)
+        ctx.lineTo(endX, rz + roadWidth / 2)
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+    }
+
+    // Estrada de Acesso exclusiva no deserto Oeste conectando a ponte até a Arena de Sobrevivência (Z = 0)
+    const arenaRoadZ = cy + (0 - player.z) * scale - roadWidth / 2
+    if (arenaRoadZ + roadWidth > 0 && arenaRoadZ < this.canvas.height) {
+      const arenaRoadX1 = cx + (-1066.4 - player.x) * scale
+      const arenaRoadX2 = cx + (city.riverLeftX - player.x) * scale
+      const arMin = Math.max(0, Math.min(arenaRoadX1, arenaRoadX2))
+      const arMax = Math.min(this.canvas.width, Math.max(arenaRoadX1, arenaRoadX2))
+      if (arMax > arMin) {
+        ctx.fillRect(arMin, arenaRoadZ, arMax - arMin, roadWidth)
+        ctx.strokeStyle = 'rgba(230, 201, 120, 0.4)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 6])
+        ctx.beginPath()
+        ctx.moveTo(arMin, arenaRoadZ + roadWidth / 2)
+        ctx.lineTo(arMax, arenaRoadZ + roadWidth / 2)
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
     }
   }
 
