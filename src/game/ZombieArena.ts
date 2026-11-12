@@ -375,6 +375,7 @@ export class ZombieArena {
 
     // Position Stick Person inside the arena
     if (stickPerson) {
+      stickPerson.setArenaWeapon('revolver')
       stickPerson.root.visible = true
       stickPerson.setPosition(this.arenaBounds.centerX, this.arenaBounds.centerZ, 0)
       stickPerson.speedMultiplier = 1.0 + this.speedBonus
@@ -400,6 +401,7 @@ export class ZombieArena {
 
   stopMission(stickPerson?: StickPerson): void {
     if (stickPerson) {
+      stickPerson.setArenaWeapon('none')
       stickPerson.speedMultiplier = 1.0
       stickPerson.root.visible = true
     }
@@ -1793,16 +1795,19 @@ export class ZombieArena {
 
   applyUpgrade(cardId: string, stickPerson?: StickPerson): void {
     if (cardId === 'weapon_shotgun') {
+      stickPerson?.setArenaWeapon('shotgun')
       this.currentWeapon = 'shotgun'
       const disp = this.getWeaponDisplay(this.currentWeapon)
       this.onWeaponChanged?.(disp.name, disp.icon, this.currentWeapon)
       this.onToast?.('💥 ESCOPETA DE COMBATE EQUIPADA!')
     } else if (cardId === 'weapon_smg') {
+      stickPerson?.setArenaWeapon('smg')
       this.currentWeapon = 'smg'
       const disp = this.getWeaponDisplay(this.currentWeapon)
       this.onWeaponChanged?.(disp.name, disp.icon, this.currentWeapon)
       this.onToast?.('⚡ SUBMETRALHADORA UZI EQUIPADA!')
     } else if (cardId === 'weapon_plasma') {
+      stickPerson?.setArenaWeapon('plasma_rifle')
       this.currentWeapon = 'plasma_rifle'
       const disp = this.getWeaponDisplay(this.currentWeapon)
       this.onWeaponChanged?.(disp.name, disp.icon, this.currentWeapon)
@@ -2021,6 +2026,95 @@ export class ZombieArena {
     legR.castShadow = true
     group.add(legR)
     originalColors.set(legR, clothesMat.color.clone())
+
+    // Anatomia reforçada do monstro alto (Brute): volume muscular, articulações,
+    // mãos com garras e placas ósseas, mantendo o mesmo scale de colisão e gameplay.
+    if (type === 'brute') {
+      const muscleMat = new THREE.MeshStandardMaterial({ color: 0x6d28a0, roughness: 0.72 })
+      const boneMat = new THREE.MeshStandardMaterial({ color: 0x31243f, roughness: 0.62, metalness: 0.18 })
+      const clawMat = new THREE.MeshStandardMaterial({ color: 0xb8a6c8, roughness: 0.32, metalness: 0.35 })
+      const addBrutePart = (
+        geometry: THREE.BufferGeometry,
+        material: THREE.Material,
+        px: number, py: number, pz: number,
+        rx = 0, ry = 0, rz = 0,
+      ): THREE.Mesh => {
+        const part = new THREE.Mesh(geometry, material)
+        part.position.set(px * scale, py * scale, pz * scale)
+        part.rotation.set(rx, ry, rz)
+        part.castShadow = true
+        part.receiveShadow = true
+        group.add(part)
+        if (part.material instanceof THREE.MeshStandardMaterial) {
+          originalColors.set(part, part.material.color.clone())
+        }
+        return part
+      }
+
+      addBrutePart(new THREE.BoxGeometry(0.27, 0.25, 0.28), skinMat, 0, 1.22, 0.015)
+      addBrutePart(new THREE.SphereGeometry(0.23, 12, 10), muscleMat, -0.17, 1.02, 0.19)
+      addBrutePart(new THREE.SphereGeometry(0.23, 12, 10), muscleMat, 0.17, 1.02, 0.19)
+      for (let rib = 0; rib < 3; rib++) {
+        addBrutePart(new THREE.BoxGeometry(0.31, 0.055, 0.035), boneMat, 0, 0.79 - rib * 0.13, 0.19)
+      }
+
+      for (const side of [-1, 1]) {
+        addBrutePart(new THREE.SphereGeometry(0.19, 12, 10), muscleMat, side * 0.34, 1.12, 0.04)
+        addBrutePart(new THREE.SphereGeometry(0.145, 10, 8), skinMat, side * 0.43, 0.94, 0.22)
+        addBrutePart(new THREE.BoxGeometry(0.19, 0.3, 0.2), boneMat, side * 0.39, 0.72, 0.34, 0.12, 0, side * -0.12)
+        addBrutePart(new THREE.BoxGeometry(0.2, 0.17, 0.19), muscleMat, side * 0.39, 0.51, 0.36)
+        for (let claw = 0; claw < 3; claw++) {
+          const clawMesh = addBrutePart(
+            new THREE.ConeGeometry(0.035, 0.19, 5),
+            clawMat,
+            side * (0.31 + claw * 0.075), 0.43, 0.48,
+            Math.PI * 0.82, 0, side * 0.08,
+          )
+          clawMesh.scale.set(1, 1.15, 1)
+        }
+        addBrutePart(new THREE.SphereGeometry(0.13, 10, 8), boneMat, side * 0.16, 0.3, 0.12)
+        addBrutePart(new THREE.BoxGeometry(0.14, 0.28, 0.12), muscleMat, side * 0.16, 0.17, 0.1)
+        addBrutePart(new THREE.BoxGeometry(0.23, 0.12, 0.3), boneMat, side * 0.16, 0.055, 0.12)
+      }
+
+      addBrutePart(new THREE.BoxGeometry(0.25, 0.12, 0.12), boneMat, 0, 1.19, 0.19)
+      for (const side of [-1, 1]) {
+        addBrutePart(new THREE.ConeGeometry(0.045, 0.16, 5), clawMat, side * 0.09, 1.13, 0.24, Math.PI, 0, 0)
+        addBrutePart(new THREE.ConeGeometry(0.09, 0.22, 5), boneMat, side * 0.2, 1.24, -0.18, -0.35, 0, side * -0.55)
+      }
+
+      if (this.graphicsMode === 'high' || this.graphicsMode === 'ultra') {
+        const scarMat = new THREE.MeshStandardMaterial({
+          color: 0x9f1239,
+          emissive: 0x3b0718,
+          emissiveIntensity: this.graphicsMode === 'ultra' ? 0.8 : 0.25,
+          roughness: 0.48,
+        })
+        const plateMat = new THREE.MeshStandardMaterial({ color: 0x24152f, roughness: 0.38, metalness: 0.52 })
+        for (const side of [-1, 1]) {
+          addBrutePart(new THREE.SphereGeometry(0.22, 16, 12), plateMat, side * 0.37, 1.16, 0.02)
+          addBrutePart(new THREE.BoxGeometry(0.045, 0.24, 0.045), scarMat, side * 0.12, 0.91, 0.215, 0.2, 0, side * 0.35)
+          addBrutePart(new THREE.ConeGeometry(0.105, 0.32, 6), plateMat, side * 0.43, 1.27, -0.02, 0, 0, side * -0.5)
+        }
+        addBrutePart(new THREE.BoxGeometry(0.12, 0.34, 0.035), scarMat, 0, 0.94, -0.18, 0.1, 0, 0.12)
+
+        if (this.graphicsMode === 'ultra') {
+          const veinMat = new THREE.MeshStandardMaterial({
+            color: 0xc026d3,
+            emissive: 0x86198f,
+            emissiveIntensity: 1.35,
+            roughness: 0.28,
+          })
+          for (const side of [-1, 1]) {
+            addBrutePart(new THREE.BoxGeometry(0.035, 0.42, 0.035), veinMat, side * 0.25, 0.91, 0.225, 0, 0, side * 0.28)
+            for (let rivet = 0; rivet < 3; rivet++) {
+              addBrutePart(new THREE.SphereGeometry(0.035, 8, 6), clawMat, side * 0.37, 1.08 + rivet * 0.075, 0.205)
+            }
+          }
+          addBrutePart(new THREE.SphereGeometry(0.075, 12, 10), veinMat, 0, 1.49, 0.08)
+        }
+      }
+    }
 
     return {
       group,
