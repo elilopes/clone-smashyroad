@@ -372,7 +372,7 @@ export class Car {
                             : 2.075
 
     // Paint Style Material Configuration
-    let pColor = options.color ?? (this.kind === 'monster_truck' ? 0x0ea5e9 : this.kind === 'fuel_tanker' ? 0xf0f3f6 : this.kind === 'taxi' ? 0xfacc15 : this.kind === 'bomb_car' ? 0x18181b : this.kind === 'hyper_f1' ? 0xef4444 : this.kind === 'tactical_tanker' ? 0x272e38 : this.kind === 'rally_car' ? 0xef4444 : 0x2789d5)
+    let pColor = options.color ?? (this.playerControlled && this.kind === 'sedan' ? 0x16a34a : this.kind === 'monster_truck' ? 0x0ea5e9 : this.kind === 'fuel_tanker' ? 0xf0f3f6 : this.kind === 'taxi' ? 0xfacc15 : this.kind === 'bomb_car' ? 0x18181b : this.kind === 'hyper_f1' ? 0xef4444 : this.kind === 'tactical_tanker' ? 0x272e38 : this.kind === 'rally_car' ? 0xef4444 : 0x2789d5)
     let pRoughness = 0.45
     let pMetalness = 0.2
     let pEmissive: number | undefined
@@ -434,6 +434,8 @@ export class Car {
   }
 
   private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' = 'medium'
+  private voxelDetailGroup?: THREE.Group
+  private voxelUltraGroup?: THREE.Group
   private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
 
   private addBox(size: [number, number, number], y: number, material: THREE.Material, x = 0, z = 0, isDetail = false): THREE.Mesh {
@@ -450,6 +452,8 @@ export class Car {
   setGraphicsMode(mode: 'low' | 'medium' | 'high' | 'ultra'): void {
     this.graphicsMode = mode
     const isLow = mode === 'low'
+    if (this.voxelDetailGroup) this.voxelDetailGroup.visible = mode === 'high' || mode === 'ultra'
+    if (this.voxelUltraGroup) this.voxelUltraGroup.visible = mode === 'ultra'
     const isUltra = mode === 'ultra'
     const isHigh = mode === 'high' || isUltra
 
@@ -538,8 +542,16 @@ export class Car {
       for (const wheel of this.wheels) {
         if (wheel.geometry && !wheel.userData.isUltraWheel) {
           wheel.geometry.dispose()
-          wheel.geometry = new THREE.CylinderGeometry(0.38, 0.38, 0.25, 24)
+          wheel.geometry = new THREE.CylinderGeometry(0.38, 0.38, 0.25, this.playerControlled && this.kind === 'sedan' ? 48 : 24)
           wheel.userData.isUltraWheel = true
+          if (this.playerControlled && this.kind === 'sedan') {
+            for (const child of wheel.children) {
+              if (child instanceof THREE.Mesh && child.geometry instanceof THREE.CylinderGeometry) {
+                if (!child.userData.originalUltraRimGeometry) child.userData.originalUltraRimGeometry = child.geometry
+                child.geometry = new THREE.CylinderGeometry(0.24, 0.24, 0.26, 40)
+              }
+            }
+          }
         }
       }
     } else {
@@ -548,6 +560,15 @@ export class Car {
           wheel.geometry.dispose()
           wheel.geometry = wheelGeometry
           wheel.userData.isUltraWheel = false
+          if (this.playerControlled && this.kind === 'sedan') {
+            for (const child of wheel.children) {
+              if (child instanceof THREE.Mesh && child.userData.originalUltraRimGeometry) {
+                child.geometry.dispose()
+                child.geometry = child.userData.originalUltraRimGeometry as THREE.BufferGeometry
+                delete child.userData.originalUltraRimGeometry
+              }
+            }
+          }
         }
       }
     }
@@ -558,7 +579,11 @@ export class Car {
   }
 
   private buildBody(police: boolean): void {
-    if (this.kind === 'rally_car') {
+    // O veículo do jogador usa a carroceria esportiva voxel inspirada na referência.
+    // Tráfego, viaturas e veículos especiais preservam seus modelos existentes.
+    if (this.playerControlled && this.kind === 'sedan') {
+      this.buildPlayerVoxelSportsCar()
+    } else if (this.kind === 'rally_car') {
       this.buildRallyCar()
       return
     }
@@ -937,7 +962,7 @@ export class Car {
       spareRim.userData.isDetail = true
       this.root.add(spareRim)
       this.addBox([0.14, 0.95, 0.08], 1.45, rackMat, -0.75, 2.48, true) // Rear access ladder
-    } else {
+    } else if (!(this.playerControlled && this.kind === 'sedan')) {
       // SEDAN (Civilian & Police) with Tiberian Sun Greeble Voxel Aesthetic
       const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.75, metalness: 0.4 })
       const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.85 })
@@ -1053,6 +1078,170 @@ export class Car {
 
       this.buildGiroflexVBeams()
     }
+  }
+
+  private buildPlayerVoxelSportsCar(): void {
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x101513, roughness: 0.72, metalness: 0.12 })
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x182329, roughness: 0.16, metalness: 0.18, transparent: true, opacity: 0.88,
+      clearcoat: 0.8, clearcoatRoughness: 0.12,
+    })
+    const redMat = new THREE.MeshStandardMaterial({ color: 0xe52b2b, emissive: 0x5c0808, emissiveIntensity: 0.35 })
+    const amberMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x6b3500, emissiveIntensity: 0.2 })
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x64748b, emissiveIntensity: 0.35 })
+    const glazing = new THREE.Group()
+    const detail = new THREE.Group()
+    const ultra = new THREE.Group()
+    const add = (group: THREE.Group, size: [number, number, number], pos: [number, number, number], mat: THREE.Material, rot?: [number, number, number]) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mat)
+      mesh.position.set(...pos)
+      if (rot) mesh.rotation.set(...rot)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      mesh.userData.boxSize = size
+      mesh.userData.playerUltraDetail = true
+      group.add(mesh)
+      return mesh
+    }
+
+    // Silhueta principal: carroceria baixa, capô longo, cabine fastback e traseira curta.
+    this.addBox([2.16, 0.52, 4.25], 0.69, this.bodyMaterial)
+    this.addBox([2.06, 0.28, 1.34], 1.04, this.bodyMaterial, 0, -1.34)
+    this.addBox([2.02, 0.30, 0.96], 1.00, this.bodyMaterial, 0, 1.58)
+    this.addBox([1.82, 0.76, 1.98], 1.26, this.bodyMaterial, 0, 0.08)
+    this.addBox([1.86, 0.14, 1.82], 1.70, this.bodyMaterial, 0, 0.02)
+
+    // Elementos de alta fidelidade: vidros, pilares, retrovisores, saias e aerofólio.
+    add(glazing, [1.60, 0.56, 0.08], [0, 1.39, -0.99], glassMat, [-0.48, 0, 0])
+    add(glazing, [1.60, 0.52, 0.08], [0, 1.38, 1.08], glassMat, [0.42, 0, 0])
+    for (const side of [-1, 1]) {
+      add(glazing, [0.08, 0.48, 1.54], [side * 0.92, 1.39, 0.06], glassMat)
+      add(detail, [0.12, 0.76, 0.10], [side * 0.90, 1.28, -0.78], darkMat, [0, 0, side * -0.10])
+      add(detail, [0.12, 0.72, 0.10], [side * 0.90, 1.28, 0.86], darkMat)
+      add(detail, [0.18, 0.12, 0.24], [side * 1.08, 1.22, -0.82], this.bodyMaterial)
+      add(detail, [0.05, 0.08, 0.15], [side * 1.18, 1.22, -0.82], glassMat)
+      add(detail, [0.13, 0.12, 2.10], [side * 1.08, 0.48, 0.02], darkMat)
+      add(detail, [0.07, 0.06, 0.20], [side * 1.10, 0.96, -0.16], darkMat)
+      add(detail, [0.07, 0.06, 0.20], [side * 1.10, 0.96, 0.40], darkMat)
+      // Ombreiras e extensões quadradas dos para-lamas no estilo voxel.
+      add(detail, [0.16, 0.34, 0.92], [side * 1.10, 0.78, -1.28], this.bodyMaterial)
+      add(detail, [0.16, 0.34, 0.92], [side * 1.10, 0.78, 1.28], this.bodyMaterial)
+    }
+    add(detail, [2.18, 0.18, 0.22], [0, 0.58, -2.17], darkMat)
+    add(detail, [2.18, 0.18, 0.22], [0, 0.58, 2.17], darkMat)
+    add(detail, [1.92, 0.12, 0.28], [0, 1.20, 2.08], darkMat)
+    add(detail, [0.12, 0.44, 0.12], [-0.72, 1.00, 1.98], this.bodyMaterial)
+    add(detail, [0.12, 0.44, 0.12], [0.72, 1.00, 1.98], this.bodyMaterial)
+    add(detail, [1.66, 0.10, 0.18], [0, 1.46, 1.98], this.bodyMaterial)
+    // Lanternas traseiras segmentadas e faróis dianteiros.
+    for (const side of [-1, 1]) {
+      add(detail, [0.38, 0.20, 0.07], [side * 0.72, 0.86, 2.17], redMat)
+      add(detail, [0.34, 0.12, 0.07], [side * 0.72, 0.88, -2.17], whiteMat)
+      add(detail, [0.08, 0.14, 0.06], [side * 1.04, 0.92, -1.84], amberMat)
+      add(detail, [0.08, 0.14, 0.06], [side * 1.04, 0.92, 1.84], redMat)
+    }
+    add(detail, [1.18, 0.12, 0.06], [0, 0.72, -2.19], darkMat)
+    add(detail, [0.56, 0.10, 0.06], [0, 0.66, -2.20], darkMat)
+
+    // Ultra: filetes, entradas de ar, barras do teto e acabamento interno das rodas.
+    add(ultra, [0.06, 0.035, 1.42], [-0.46, 1.79, 0.02], darkMat)
+    add(ultra, [0.06, 0.035, 1.42], [0.46, 1.79, 0.02], darkMat)
+    add(ultra, [0.72, 0.06, 0.32], [0, 1.24, -1.40], darkMat)
+    add(ultra, [0.72, 0.06, 0.32], [0, 1.18, 1.68], darkMat)
+    for (const side of [-1, 1]) {
+      add(ultra, [0.06, 0.20, 0.62], [side * 1.13, 0.82, -1.28], darkMat)
+      add(ultra, [0.06, 0.20, 0.62], [side * 1.13, 0.82, 1.28], darkMat)
+    }
+
+    // Ultra: acabamento automotivo fino, sem alterar a silhueta ou as dimensões físicas.
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x17211d, roughness: 0.38, metalness: 0.42 })
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xb8c7c0, roughness: 0.22, metalness: 0.82 })
+    const lensMat = new THREE.MeshPhysicalMaterial({
+      color: 0xdceef0, roughness: 0.12, metalness: 0.08, transparent: true, opacity: 0.82,
+      clearcoat: 1, clearcoatRoughness: 0.04,
+    })
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc, emissive: 0xdbeafe, emissiveIntensity: 1.15, roughness: 0.18,
+    })
+    const addCylinder = (
+      group: THREE.Group, radiusTop: number, radiusBottom: number, height: number,
+      pos: [number, number, number], mat: THREE.Material, radialSegments = 32,
+      rot: [number, number, number] = [0, 0, 0],
+    ) => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments), mat)
+      mesh.position.set(...pos)
+      mesh.rotation.set(...rot)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      group.add(mesh)
+      return mesh
+    }
+
+    // Portas: vincos, maçanetas metálicas e frisos inferiores.
+    for (const side of [-1, 1]) {
+      add(ultra, [0.025, 0.018, 1.02], [side * 1.095, 0.86, 0.28], trimMat)
+      add(ultra, [0.035, 0.055, 0.20], [side * 1.105, 1.03, 0.72], chromeMat)
+      add(ultra, [0.035, 0.045, 0.34], [side * 1.105, 0.60, 0.02], trimMat)
+      add(ultra, [0.045, 0.22, 0.52], [side * 1.145, 0.78, -1.28], this.bodyMaterial)
+      add(ultra, [0.045, 0.22, 0.52], [side * 1.145, 0.78, 1.28], this.bodyMaterial)
+      // Calipers and wheel-arch trim are visual only and stay attached to the player car.
+      add(ultra, [0.07, 0.25, 0.12], [side * 1.235, 0.48, -1.08], redMat)
+      add(ultra, [0.07, 0.25, 0.12], [side * 1.235, 0.48, 1.08], redMat)
+    }
+
+    // Grade frontal com lâminas horizontais, moldura e emblema central.
+    add(ultra, [1.02, 0.22, 0.035], [0, 0.76, -2.205], trimMat)
+    for (let slat = 0; slat < 4; slat++) {
+      add(ultra, [0.88, 0.018, 0.045], [0, 0.69 + slat * 0.045, -2.232], chromeMat)
+    }
+    add(ultra, [0.14, 0.10, 0.035], [0, 0.88, -2.21], chromeMat)
+
+    // Faróis multicamada com lente transparente e assinatura LED.
+    for (const side of [-1, 1]) {
+      add(ultra, [0.46, 0.18, 0.035], [side * 0.70, 0.91, -2.205], trimMat)
+      add(ultra, [0.39, 0.12, 0.025], [side * 0.70, 0.92, -2.232], lensMat)
+      add(ultra, [0.30, 0.025, 0.018], [side * 0.70, 0.94, -2.25], ledMat)
+      add(ultra, [0.42, 0.07, 0.035], [side * 0.72, 0.73, -2.205], trimMat)
+      // Lanternas traseiras com segmentos internos e luz de freio.
+      add(ultra, [0.42, 0.18, 0.035], [side * 0.72, 0.88, 2.205], trimMat)
+      add(ultra, [0.34, 0.11, 0.025], [side * 0.72, 0.89, 2.232], redMat)
+      add(ultra, [0.035, 0.10, 0.018], [side * 0.72, 0.89, 2.25], lensMat)
+    }
+
+    // Difusor traseiro, aletas inferiores e ponteiras metálicas duplas.
+    add(ultra, [1.34, 0.16, 0.16], [0, 0.48, 2.20], trimMat)
+    for (let fin = -2; fin <= 2; fin++) {
+      add(ultra, [0.035, 0.13, 0.24], [fin * 0.25, 0.43, 2.27], darkMat)
+    }
+    for (const side of [-1, 1]) {
+      addCylinder(ultra, 0.085, 0.085, 0.16, [side * 0.68, 0.52, 2.28], chromeMat, 32, [Math.PI / 2, 0, 0])
+    }
+
+    // Entradas de ar laterais e pequenos refletores.
+    for (const side of [-1, 1]) {
+      add(ultra, [0.035, 0.16, 0.36], [side * 1.145, 0.91, -1.42], trimMat)
+      for (let vent = 0; vent < 3; vent++) {
+        add(ultra, [0.045, 0.018, 0.25], [side * 1.17, 0.86 - vent * 0.045, -1.42], chromeMat)
+      }
+      add(ultra, [0.035, 0.08, 0.12], [side * 1.12, 0.88, 1.84], amberMat)
+    }
+
+    // Rodas: pinças e cubos metálicos detalhados, sem modificar posição ou suspensão.
+    for (const side of [-1, 1]) {
+      for (const z of [-1.08, 1.08]) {
+        addCylinder(ultra, 0.105, 0.105, 0.035, [side * 1.245, 0.47, z], chromeMat, 32, [0, 0, Math.PI / 2])
+        addCylinder(ultra, 0.052, 0.052, 0.04, [side * 1.27, 0.47, z], trimMat, 24, [0, 0, Math.PI / 2])
+      }
+    }
+
+    glazing.visible = true // Para-brisa e vidros básicos permanecem visíveis em todos os níveis gráficos.
+    detail.visible = this.graphicsMode === 'high' || this.graphicsMode === 'ultra'
+    ultra.visible = this.graphicsMode === 'ultra'
+    this.root.add(glazing)
+    this.root.add(detail)
+    this.root.add(ultra)
+    this.voxelDetailGroup = detail
+    this.voxelUltraGroup = ultra
   }
 
   private buildGiroflexVBeams(): void {
