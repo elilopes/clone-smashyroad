@@ -434,6 +434,7 @@ export class Car {
   }
 
   private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' = 'medium'
+  private voxelGlazingGroup?: THREE.Group
   private voxelDetailGroup?: THREE.Group
   private voxelUltraGroup?: THREE.Group
   private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
@@ -1089,6 +1090,7 @@ export class Car {
     const redMat = new THREE.MeshStandardMaterial({ color: 0xe52b2b, emissive: 0x5c0808, emissiveIntensity: 0.35 })
     const amberMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x6b3500, emissiveIntensity: 0.2 })
     const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x64748b, emissiveIntensity: 0.35 })
+    const glazing = new THREE.Group()
     const detail = new THREE.Group()
     const ultra = new THREE.Group()
     const add = (group: THREE.Group, size: [number, number, number], pos: [number, number, number], mat: THREE.Material, rot?: [number, number, number]) => {
@@ -1111,10 +1113,10 @@ export class Car {
     this.addBox([1.86, 0.14, 1.82], 1.70, this.bodyMaterial, 0, 0.02)
 
     // Elementos de alta fidelidade: vidros, pilares, retrovisores, saias e aerofólio.
-    add(detail, [1.60, 0.56, 0.08], [0, 1.39, -0.99], glassMat, [-0.48, 0, 0])
-    add(detail, [1.60, 0.52, 0.08], [0, 1.38, 1.08], glassMat, [0.42, 0, 0])
+    add(glazing, [1.60, 0.56, 0.08], [0, 1.39, -0.99], glassMat, [-0.48, 0, 0])
+    add(glazing, [1.60, 0.52, 0.08], [0, 1.38, 1.08], glassMat, [0.42, 0, 0])
     for (const side of [-1, 1]) {
-      add(detail, [0.08, 0.48, 1.54], [side * 0.92, 1.39, 0.06], glassMat)
+      add(glazing, [0.08, 0.48, 1.54], [side * 0.92, 1.39, 0.06], glassMat)
       add(detail, [0.12, 0.76, 0.10], [side * 0.90, 1.28, -0.78], darkMat, [0, 0, side * -0.10])
       add(detail, [0.12, 0.72, 0.10], [side * 0.90, 1.28, 0.86], darkMat)
       add(detail, [0.18, 0.12, 0.24], [side * 1.08, 1.22, -0.82], this.bodyMaterial)
@@ -1233,10 +1235,13 @@ export class Car {
       }
     }
 
+    glazing.visible = true // Para-brisa e vidros básicos permanecem visíveis em todos os níveis gráficos.
     detail.visible = this.graphicsMode === 'high' || this.graphicsMode === 'ultra'
     ultra.visible = this.graphicsMode === 'ultra'
+    this.root.add(glazing)
     this.root.add(detail)
     this.root.add(ultra)
+    this.voxelGlazingGroup = glazing
     this.voxelDetailGroup = detail
     this.voxelUltraGroup = ultra
   }
