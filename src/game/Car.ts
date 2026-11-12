@@ -434,7 +434,6 @@ export class Car {
   }
 
   private graphicsMode: 'low' | 'medium' | 'high' | 'ultra' = 'medium'
-  private voxelGlazingGroup?: THREE.Group
   private voxelDetailGroup?: THREE.Group
   private voxelUltraGroup?: THREE.Group
   private readonly originalMaterials = new Map<THREE.Mesh, THREE.Material>()
@@ -1241,7 +1240,6 @@ export class Car {
     this.root.add(glazing)
     this.root.add(detail)
     this.root.add(ultra)
-    this.voxelGlazingGroup = glazing
     this.voxelDetailGroup = detail
     this.voxelUltraGroup = ultra
   }
