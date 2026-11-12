@@ -945,7 +945,7 @@ export class Car {
       spareRim.userData.isDetail = true
       this.root.add(spareRim)
       this.addBox([0.14, 0.95, 0.08], 1.45, rackMat, -0.75, 2.48, true) // Rear access ladder
-    } else {
+    } else if (!(this.playerControlled && this.kind === 'sedan')) {
       // SEDAN (Civilian & Police) with Tiberian Sun Greeble Voxel Aesthetic
       const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: 0.75, metalness: 0.4 })
       const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.85 })
