@@ -542,8 +542,16 @@ export class Car {
       for (const wheel of this.wheels) {
         if (wheel.geometry && !wheel.userData.isUltraWheel) {
           wheel.geometry.dispose()
-          wheel.geometry = new THREE.CylinderGeometry(0.38, 0.38, 0.25, 24)
+          wheel.geometry = new THREE.CylinderGeometry(0.38, 0.38, 0.25, this.playerControlled && this.kind === 'sedan' ? 48 : 24)
           wheel.userData.isUltraWheel = true
+          if (this.playerControlled && this.kind === 'sedan') {
+            for (const child of wheel.children) {
+              if (child instanceof THREE.Mesh && child.geometry instanceof THREE.CylinderGeometry) {
+                if (!child.userData.originalUltraRimGeometry) child.userData.originalUltraRimGeometry = child.geometry
+                child.geometry = new THREE.CylinderGeometry(0.24, 0.24, 0.26, 40)
+              }
+            }
+          }
         }
       }
     } else {
@@ -552,6 +560,15 @@ export class Car {
           wheel.geometry.dispose()
           wheel.geometry = wheelGeometry
           wheel.userData.isUltraWheel = false
+          if (this.playerControlled && this.kind === 'sedan') {
+            for (const child of wheel.children) {
+              if (child instanceof THREE.Mesh && child.userData.originalUltraRimGeometry) {
+                child.geometry.dispose()
+                child.geometry = child.userData.originalUltraRimGeometry as THREE.BufferGeometry
+                delete child.userData.originalUltraRimGeometry
+              }
+            }
+          }
         }
       }
     }
@@ -1080,6 +1097,8 @@ export class Car {
       if (rot) mesh.rotation.set(...rot)
       mesh.castShadow = true
       mesh.receiveShadow = true
+      mesh.userData.boxSize = size
+      mesh.userData.playerUltraDetail = true
       group.add(mesh)
       return mesh
     }
@@ -1132,6 +1151,88 @@ export class Car {
       add(ultra, [0.06, 0.20, 0.62], [side * 1.13, 0.82, -1.28], darkMat)
       add(ultra, [0.06, 0.20, 0.62], [side * 1.13, 0.82, 1.28], darkMat)
     }
+
+    // Ultra: acabamento automotivo fino, sem alterar a silhueta ou as dimensões físicas.
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x17211d, roughness: 0.38, metalness: 0.42 })
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xb8c7c0, roughness: 0.22, metalness: 0.82 })
+    const lensMat = new THREE.MeshPhysicalMaterial({
+      color: 0xdceef0, roughness: 0.12, metalness: 0.08, transparent: true, opacity: 0.82,
+      clearcoat: 1, clearcoatRoughness: 0.04,
+    })
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc, emissive: 0xdbeafe, emissiveIntensity: 1.15, roughness: 0.18,
+    })
+    const addCylinder = (
+      group: THREE.Group, radiusTop: number, radiusBottom: number, height: number,
+      pos: [number, number, number], mat: THREE.Material, radialSegments = 32,
+      rot: [number, number, number] = [0, 0, 0],
+    ) => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments), mat)
+      mesh.position.set(...pos)
+      mesh.rotation.set(...rot)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      group.add(mesh)
+      return mesh
+    }
+
+    // Portas: vincos, maçanetas metálicas e frisos inferiores.
+    for (const side of [-1, 1]) {
+      add(ultra, [0.025, 0.018, 1.02], [side * 1.095, 0.86, 0.28], trimMat)
+      add(ultra, [0.035, 0.055, 0.20], [side * 1.105, 1.03, 0.72], chromeMat)
+      add(ultra, [0.035, 0.045, 0.34], [side * 1.105, 0.60, 0.02], trimMat)
+      add(ultra, [0.045, 0.22, 0.52], [side * 1.145, 0.78, -1.28], this.bodyMaterial)
+      add(ultra, [0.045, 0.22, 0.52], [side * 1.145, 0.78, 1.28], this.bodyMaterial)
+      // Calipers and wheel-arch trim are visual only and stay attached to the player car.
+      add(ultra, [0.07, 0.25, 0.12], [side * 1.235, 0.48, -1.08], redMat)
+      add(ultra, [0.07, 0.25, 0.12], [side * 1.235, 0.48, 1.08], redMat)
+    }
+
+    // Grade frontal com lâminas horizontais, moldura e emblema central.
+    add(ultra, [1.02, 0.22, 0.035], [0, 0.76, -2.205], trimMat)
+    for (let slat = 0; slat < 4; slat++) {
+      add(ultra, [0.88, 0.018, 0.045], [0, 0.69 + slat * 0.045, -2.232], chromeMat)
+    }
+    add(ultra, [0.14, 0.10, 0.035], [0, 0.88, -2.21], chromeMat)
+
+    // Faróis multicamada com lente transparente e assinatura LED.
+    for (const side of [-1, 1]) {
+      add(ultra, [0.46, 0.18, 0.035], [side * 0.70, 0.91, -2.205], trimMat)
+      add(ultra, [0.39, 0.12, 0.025], [side * 0.70, 0.92, -2.232], lensMat)
+      add(ultra, [0.30, 0.025, 0.018], [side * 0.70, 0.94, -2.25], ledMat)
+      add(ultra, [0.42, 0.07, 0.035], [side * 0.72, 0.73, -2.205], trimMat)
+      // Lanternas traseiras com segmentos internos e luz de freio.
+      add(ultra, [0.42, 0.18, 0.035], [side * 0.72, 0.88, 2.205], trimMat)
+      add(ultra, [0.34, 0.11, 0.025], [side * 0.72, 0.89, 2.232], redMat)
+      add(ultra, [0.035, 0.10, 0.018], [side * 0.72, 0.89, 2.25], lensMat)
+    }
+
+    // Difusor traseiro, aletas inferiores e ponteiras metálicas duplas.
+    add(ultra, [1.34, 0.16, 0.16], [0, 0.48, 2.20], trimMat)
+    for (let fin = -2; fin <= 2; fin++) {
+      add(ultra, [0.035, 0.13, 0.24], [fin * 0.25, 0.43, 2.27], darkMat)
+    }
+    for (const side of [-1, 1]) {
+      addCylinder(ultra, 0.085, 0.085, 0.16, [side * 0.68, 0.52, 2.28], chromeMat, 32, [Math.PI / 2, 0, 0])
+    }
+
+    // Entradas de ar laterais e pequenos refletores.
+    for (const side of [-1, 1]) {
+      add(ultra, [0.035, 0.16, 0.36], [side * 1.145, 0.91, -1.42], trimMat)
+      for (let vent = 0; vent < 3; vent++) {
+        add(ultra, [0.045, 0.018, 0.25], [side * 1.17, 0.86 - vent * 0.045, -1.42], chromeMat)
+      }
+      add(ultra, [0.035, 0.08, 0.12], [side * 1.12, 0.88, 1.84], amberMat)
+    }
+
+    // Rodas: pinças e cubos metálicos detalhados, sem modificar posição ou suspensão.
+    for (const side of [-1, 1]) {
+      for (const z of [-1.08, 1.08]) {
+        addCylinder(ultra, 0.105, 0.105, 0.035, [side * 1.245, 0.47, z], chromeMat, 32, [0, 0, Math.PI / 2])
+        addCylinder(ultra, 0.052, 0.052, 0.04, [side * 1.27, 0.47, z], trimMat, 24, [0, 0, Math.PI / 2])
+      }
+    }
+
     detail.visible = this.graphicsMode === 'high' || this.graphicsMode === 'ultra'
     ultra.visible = this.graphicsMode === 'ultra'
     this.root.add(detail)
