@@ -2041,6 +2041,7 @@ export class ZombieArena {
       ): THREE.Mesh => {
         const part = new THREE.Mesh(geometry, material)
         part.position.set(px * scale, py * scale, pz * scale)
+        part.scale.setScalar(scale)
         part.rotation.set(rx, ry, rz)
         part.castShadow = true
         part.receiveShadow = true
@@ -2070,7 +2071,7 @@ export class ZombieArena {
             side * (0.31 + claw * 0.075), 0.43, 0.48,
             Math.PI * 0.82, 0, side * 0.08,
           )
-          clawMesh.scale.set(1, 1.15, 1)
+          clawMesh.scale.set(scale, 1.15 * scale, scale)
         }
         addBrutePart(new THREE.SphereGeometry(0.13, 10, 8), boneMat, side * 0.16, 0.3, 0.12)
         addBrutePart(new THREE.BoxGeometry(0.14, 0.28, 0.12), muscleMat, side * 0.16, 0.17, 0.1)
