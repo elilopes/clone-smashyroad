@@ -12,6 +12,8 @@ export class StickPerson {
   private walkPhase = 0
   private readonly torso: Segment
   private readonly limbs: Segment[]
+  private arenaWeapon: THREE.Group | null = null
+  private arenaWeaponType: 'none' | 'revolver' | 'shotgun' | 'smg' | 'plasma_rifle' = 'none'
 
   constructor(scene: THREE.Scene) {
     this.scene = scene
@@ -41,6 +43,81 @@ export class StickPerson {
     this.root.visible = false
     scene.add(this.root)
     this.animateLimbs(0)
+  }
+
+  setArenaWeapon(type: 'none' | 'revolver' | 'shotgun' | 'smg' | 'plasma_rifle'): void {
+    if (this.arenaWeapon) {
+      this.root.remove(this.arenaWeapon)
+      this.arenaWeapon.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+          if (Array.isArray(child.material)) child.material.forEach((material) => material.dispose())
+          else child.material.dispose()
+        }
+      })
+      this.arenaWeapon = null
+    }
+    this.arenaWeaponType = type
+    if (type === 'none') return
+
+    const weapon = new THREE.Group()
+    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x202a35, metalness: 0.82, roughness: 0.28 })
+    const gunmetal = new THREE.MeshStandardMaterial({ color: 0x526273, metalness: 0.9, roughness: 0.22 })
+    const gripMat = new THREE.MeshStandardMaterial({ color: 0x171b22, roughness: 0.92 })
+    const accent = new THREE.MeshStandardMaterial({
+      color: type === 'plasma_rifle' ? 0x06b6d4 : type === 'smg' ? 0x22c55e : 0xf59e0b,
+      emissive: type === 'plasma_rifle' ? 0x0284a8 : 0x000000,
+      emissiveIntensity: type === 'plasma_rifle' ? 2.1 : 0,
+      metalness: 0.55,
+      roughness: 0.3,
+    })
+    const addBox = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material)
+      mesh.position.set(x, y, z)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      weapon.add(mesh)
+      return mesh
+    }
+
+    // Armas em escala compatível com o personagem palito; o cano aponta para -Z.
+    if (type === 'revolver') {
+      addBox(0.105, 0.12, 0.29, gunmetal, 0, 0.015, -0.13)
+      addBox(0.075, 0.075, 0.22, darkMetal, 0, 0.025, -0.36)
+      addBox(0.075, 0.17, 0.09, gripMat, 0, -0.105, -0.035).rotation.x = -0.22
+      addBox(0.13, 0.09, 0.12, accent, 0, 0.015, -0.02)
+    } else if (type === 'shotgun') {
+      addBox(0.14, 0.13, 0.38, darkMetal, 0, 0.02, -0.15)
+      addBox(0.045, 0.045, 0.62, gunmetal, -0.035, 0.055, -0.56)
+      addBox(0.045, 0.045, 0.62, gunmetal, 0.035, 0.055, -0.56)
+      addBox(0.16, 0.08, 0.24, gripMat, 0, -0.075, -0.17)
+      addBox(0.13, 0.12, 0.16, gripMat, 0, -0.12, 0.015)
+    } else if (type === 'smg') {
+      addBox(0.15, 0.16, 0.34, darkMetal, 0, 0.025, -0.13)
+      addBox(0.07, 0.065, 0.36, gunmetal, 0, 0.045, -0.46)
+      addBox(0.085, 0.19, 0.11, gripMat, 0, -0.12, -0.015)
+      addBox(0.09, 0.18, 0.12, darkMetal, 0, -0.145, -0.18)
+      addBox(0.17, 0.035, 0.12, accent, 0, 0.12, -0.12)
+      addBox(0.12, 0.04, 0.12, gunmetal, 0, 0.12, -0.38)
+    } else {
+      addBox(0.19, 0.18, 0.42, darkMetal, 0, 0.025, -0.16)
+      addBox(0.105, 0.09, 0.5, gunmetal, 0, 0.055, -0.55)
+      addBox(0.12, 0.19, 0.13, gripMat, 0, -0.12, -0.015)
+      addBox(0.22, 0.055, 0.23, accent, 0, 0.14, -0.18)
+      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.025, 8, 20), accent)
+      coil.rotation.y = Math.PI / 2
+      coil.position.set(0, 0.045, -0.48)
+      weapon.add(coil)
+      const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), accent)
+      muzzle.position.set(0, 0.05, -0.82)
+      weapon.add(muzzle)
+    }
+
+    weapon.position.set(0.34, 0.91, 0)
+    weapon.rotation.x = -0.08
+    weapon.userData.weaponMaterials = [darkMetal, gunmetal, gripMat, accent]
+    this.root.add(weapon)
+    this.arenaWeapon = weapon
   }
 
   isSwimming = false
@@ -209,6 +286,12 @@ export class StickPerson {
       [leftKnee, leftFoot], [rightKnee, rightFoot],
     ]
     endpoints.forEach(([start, end], index) => this.setSegment(this.limbs[index], start, end))
+    if (this.arenaWeapon) {
+      this.arenaWeapon.position.set(rightHand.x, rightHand.y, rightHand.z)
+      this.arenaWeapon.rotation.x = -0.08 - armSwing * 0.18
+      this.arenaWeapon.rotation.y = 0
+      this.arenaWeapon.rotation.z = -0.08
+    }
   }
 
   private makeSegment(material: THREE.MeshStandardMaterial, radius: number): Segment {
